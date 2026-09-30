@@ -139,7 +139,7 @@ var doctorCmd = &cobra.Command{
 		if tavily.APIKey != "" {
 			fmt.Println("• Tavily Search API:  Configured (Online Grounding)")
 		} else {
-			fmt.Println("• Tavily Search API:  Simulated / Fallback Mode")
+			fmt.Println("• Tavily Search API:  Not configured (grounding disabled, no simulated results)")
 		}
 
 		// Toolchain checks

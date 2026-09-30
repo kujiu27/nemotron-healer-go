@@ -33,44 +33,23 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 	root := mcts.NewNode("root", nil, "", "", "Initial Failing State")
 	evaluator := mcts.DefaultRewardEvaluator()
 
-	codeCtx := a.collectSourceContext()
-	targetHint := "engine.py"
-	for path := range a.CodeGraph.FileSymbols {
-		if !strings.HasPrefix(path, "test_") && !strings.Contains(path, "test") {
-			targetHint = path
-			break
-		}
-	}
-	blastReport := a.CodeGraph.AnalyzeBlastRadius(targetHint)
+	loc := ResolveTargetLocation(a.WorkDir, initialFailingOutput, a.CodeGraph)
+	targetHint := loc.FilePath
+	targetSym := loc.Symbol
+	codeCtx := a.collectSourceContext(targetHint)
+	blastReport := a.CodeGraph.AnalyzeBlastRadius(targetHint, targetSym)
 	archetype := ClassifyDefect(initialFailingOutput, codeCtx)
 
-	query := fmt.Sprintf("how to fix %s %s", targetHint, archetype.Archetype)
+	query := BuildGroundingQuery(a.WorkDir, targetHint, archetype, initialFailingOutput)
 	tavilyResp, _ := a.Tavily.Search(ctx, query, 3)
 	docsCtx := a.Tavily.FormatContext(tavilyResp)
 
 	nodesCreated := 0
 
-	// Step 1: Expansion of Root into K=3 distinct architectural hypotheses
-	hypotheses := []struct {
-		Name     string
-		Guidance string
-	}{
-		{
-			Name:     "Hypothesis A: Re-entrant Task-Aware Synchronization",
-			Guidance: "Implement an asyncio task-aware re-entrant lock subclassing the existing lock to prevent deadlocks in nested calls.",
-		},
-		{
-			Name:     "Hypothesis B: Decoupled Critical Scope Isolation",
-			Guidance: "Decouple the audit logging and release the lock before executing external I/O operations.",
-		},
-		{
-			Name:     "Hypothesis C: Surgical Invariant Guard with Mutex",
-			Guidance: "Guard the mutable balance attribute strictly with atomic compare-and-swap or standard context lock.",
-		},
-	}
+	// Step 1: Dynamic expansion of Root into archetype-guided architectural hypotheses
+	hypotheses := GenerateMCTSHypotheses(archetype, targetHint, targetSym, initialFailingOutput)
 
-	a.notify(StateSynthesizingPatch, fmt.Sprintf("MCTS Tree Expansion: Generating %d divergent patch branches...", len(hypotheses)), nil)
-
+	a.notify(StateSynthesizingPatch, fmt.Sprintf("MCTS Tree Expansion: Generating %d divergent patch branches for [%s]...", len(hypotheses), archetype.Archetype), nil)
 	for i, hyp := range hypotheses {
 		select {
 		case <-ctx.Done():

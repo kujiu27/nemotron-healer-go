@@ -189,13 +189,41 @@ func (g *CodeGraph) resolveSymbol(calledName, currentFile string) string {
 }
 
 // AnalyzeBlastRadius calculates the impact of changing a symbol or file.
-func (g *CodeGraph) AnalyzeBlastRadius(targetFile string) *BlastRadiusReport {
+func (g *CodeGraph) AnalyzeBlastRadius(targetFile string, targetSymbolHint ...string) *BlastRadiusReport {
 	symbolsInFile := g.FileSymbols[targetFile]
 	targetSym := "<file_scope>"
 	if len(symbolsInFile) > 0 {
 		targetSym = symbolsInFile[0]
 	}
 
+	// If explicit symbol hint provided, locate exact matching symbol
+	if len(targetSymbolHint) > 0 && targetSymbolHint[0] != "" {
+		hint := targetSymbolHint[0]
+		expectedKey := targetFile + "::" + hint
+		found := false
+		for _, sym := range symbolsInFile {
+			if sym == expectedKey || strings.HasSuffix(sym, "::"+hint) {
+				targetSym = sym
+				found = true
+				break
+			}
+		}
+		if !found {
+			if _, ok := g.Symbols[hint]; ok {
+				targetSym = hint
+			} else {
+				targetSym = expectedKey
+			}
+		}
+	} else if len(symbolsInFile) > 1 {
+		// Prefer symbol with existing callers if none explicitly specified
+		for _, s := range symbolsInFile {
+			if len(g.CallGraph[s]) > 0 {
+				targetSym = s
+				break
+			}
+		}
+	}
 	direct := g.CallGraph[targetSym]
 	transitiveMap := make(map[string]bool)
 	queue := append([]string{}, direct...)

@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -77,51 +76,23 @@ type PatchSuggestion struct {
 	DiffPatch    string `json:"diff_patch"`
 }
 
+// NewNebiusClient builds the inference client.
+// Defaults comply with the Nebius x NVIDIA hackathon rules:
+// Nebius Token Factory endpoint + NVIDIA Nemotron open models.
+// Local/self-hosted gateways are opt-in via NEBIUS_BASE_URL (+ NEBIUS_MODEL, optional NEBIUS_API_KEY).
 func NewNebiusClient() *NebiusClient {
 	apiKey := os.Getenv("NEBIUS_API_KEY")
+
 	baseURL := os.Getenv("NEBIUS_BASE_URL")
-	model := os.Getenv("NEBIUS_MODEL")
-
 	if baseURL == "" {
-		if apiKey != "" {
-			baseURL = "https://api.tokenfactory.nebius.com/v1"
-		} else {
-			baseURL = "http://192.168.2.115:8317/v1"
-		}
+		baseURL = "https://api.tokenfactory.nebius.com/v1"
 	}
 
-	if model == "" {
-		if apiKey != "" {
-			model = "nvidia/nemotron-3-ultra"
-		} else {
-			model = "gemini-3.8-flash-high"
-		}
-	}
-
-	if apiKey == "" {
-		// Try reading local api_key from ~/.hermes/config.yaml
-		home, _ := os.UserHomeDir()
-		configPath := filepath.Join(home, ".hermes", "config.yaml")
-		if data, err := os.ReadFile(configPath); err == nil {
-			re := regexp.MustCompile(`api_key:\s*([^\s\n]+)`)
-			if m := re.FindStringSubmatch(string(data)); len(m) > 1 {
-				apiKey = strings.TrimSpace(m[1])
-			}
-		}
-	}
-
-	fastModel := "glm-5.3-flash"
-	reasoningModel := "gemini-3.8-flash-high"
-
-	// If connecting to actual Nebius Token Factory, use official NVIDIA Nemotron models
-	if strings.Contains(baseURL, "nebius.com") {
-		fastModel = "nvidia/nemotron-mini-4b"
-		reasoningModel = "nvidia/nemotron-3-ultra"
-	}
-
-	// Environment variable override
+	fastModel := "nvidia/nemotron-mini-4b"
+	reasoningModel := "nvidia/nemotron-3-ultra"
 	if envModel := os.Getenv("NEBIUS_MODEL"); envModel != "" {
 		reasoningModel = envModel
+		fastModel = envModel
 	}
 
 	return &NebiusClient{
@@ -234,7 +205,19 @@ func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMess
 }
 
 // DiagnoseAndPatch asks Nemotron to analyze the failure and output a surgical unified diff.
-func (c *NebiusClient) DiagnoseAndPatch(ctx context.Context, testCmd, stdout, stderr, codeContext, docsContext, archetypeContext string, onToken func(string)) (*PatchSuggestion, int, int, error) {
+func (c *NebiusClient) DiagnoseAndPatch(ctx context.Context, testCmd, stdout, stderr, codeContext, docsContext, archetypeContext string, failedHistory []string, onToken func(string)) (*PatchSuggestion, int, int, error) {
+	var failureFeedback string
+	if len(failedHistory) > 0 {
+		var fb strings.Builder
+		fb.WriteString("\n[PREVIOUS FAILED ATTEMPTS & NEGATIVE CONSTRAINTS (DO NOT REPEAT)]\n")
+		fb.WriteString("The following patch attempts previously failed verification or introduced regressions. You MUST NOT repeat these mistakes:\n")
+		for i, fh := range failedHistory {
+			fb.WriteString(fmt.Sprintf("--- Failed Attempt #%d ---\n%s\n", i+1, fh))
+		}
+		fb.WriteString("INSTRUCTION: Analyze why the previous attempts failed. Formulate a fundamentally different, sound architectural repair.\n")
+		failureFeedback = fb.String()
+	}
+
 	prompt := fmt.Sprintf(`You are an autonomous senior Principal Engineer on Nebius Token Factory.
 Fix the broken codebase by generating a surgical Unified Diff patch.
 
@@ -246,7 +229,7 @@ Fix the broken codebase by generating a surgical Unified Diff patch.
 
 [DETERMINISTIC DEFECT CLASSIFICATION & CONSTRAINTS (ALIBABA OCR HYBRID)]
 %s
-
+%s
 [SOURCE CODE CONTEXT]
 %s
 
@@ -260,7 +243,7 @@ INSTRUCTIONS:
 --- a/path/to/file
 +++ b/path/to/file
 @@ ... @@
-Do NOT omit the unified diff block.`, testCmd, stderr+"\n"+stdout, archetypeContext, codeContext, docsContext)
+Do NOT omit the unified diff block.`, testCmd, stderr+"\n"+stdout, archetypeContext, failureFeedback, codeContext, docsContext)
 
 	messages := []ChatMessage{
 		{Role: "system", Content: "You are an autonomous software repair agent. You generate precise unified diff patches that compile and pass tests."},

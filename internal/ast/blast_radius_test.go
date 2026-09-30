@@ -1,7 +1,6 @@
 package ast
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,13 +41,15 @@ def transfer_money():
 }
 
 func TestFastAPISample(t *testing.T) {
-	sampleDir := "/Users/fas/develop/pythonprojects/nemotron-healer/samples/fastapi_async_deadlock"
+	sampleDir := filepath.Join("..", "..", "samples", "fastapi_async_deadlock")
+	if _, err := os.Stat(sampleDir); err != nil {
+		t.Skip("sample directory not found, skipping sample test")
+	}
 	graph := NewCodeGraph(sampleDir)
 	if err := graph.BuildGraph(); err != nil {
 		t.Fatal(err)
 	}
-	fmt.Printf("Symbols found in sample: %d\n", len(graph.Symbols))
-	for k := range graph.Symbols {
-		fmt.Println("Symbol:", k)
+	if len(graph.Symbols) == 0 {
+		t.Fatalf("expected symbols found in sample, got 0")
 	}
 }

@@ -58,19 +58,9 @@ func (t *TavilyClient) Search(ctx context.Context, query string, maxResults int)
 	}
 	t.Mu.RUnlock()
 	if t.APIKey == "" {
-		// Simulation / Local Fallback when API key is missing
-		return &TavilySearchResponse{
-			Query:  query,
-			Answer: "Simulated Tavily knowledge retrieval for: " + query,
-			Results: []TavilySearchResultItem{
-				{
-					Title:   "Official Migration Guide & Reference",
-					URL:     "https://docs.official.org/migration",
-					Content: "Breaking change: in modern versions, replace deprecated configurations with modern idioms. Ensure correct parameters.",
-					Score:   0.95,
-				},
-			},
-		}, nil
+		// No fabrication: without an API key, grounding is skipped entirely.
+		fmt.Fprintln(os.Stderr, "[nemotron-healer] TAVILY_API_KEY not set — knowledge grounding disabled (no simulated results).")
+		return nil, nil
 	}
 
 	reqBody := TavilySearchRequest{

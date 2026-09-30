@@ -24,6 +24,10 @@ type Agent struct {
 	MaxTurns      int
 	EnableSearch  bool
 	EnableArena   bool
+	// DisableGrounding turns off Tavily retrieval and archetype constraints;
+	// used as the un-grounded baseline in A/B ablation runs.
+	DisableGrounding bool
+	lastTavilyResults []client.TavilySearchResultItem
 	Session       *HealingSession
 	Runner        *sandbox.Runner
 	Checkpointer  *sandbox.CheckpointManager
@@ -72,20 +76,56 @@ func (a *Agent) notify(state HealingState, summary string, details map[string]in
 	}
 }
 
-func (a *Agent) collectSourceContext() string {
+func (a *Agent) collectSourceContext(priorityFiles ...string) string {
 	var sb strings.Builder
+	const maxFileBytes = 35 * 1024
+	const maxTotalBytes = 120 * 1024
+	totalBytes := 0
+	loaded := make(map[string]bool)
+
+	appendFile := func(rel string) {
+		if loaded[rel] || totalBytes >= maxTotalBytes {
+			return
+		}
+		full := filepath.Join(a.WorkDir, rel)
+		data, err := os.ReadFile(full)
+		if err != nil {
+			return
+		}
+		loaded[rel] = true
+		content := string(data)
+		if len(content) > maxFileBytes {
+			content = content[:maxFileBytes] + "\n... [Truncated for token budget] ..."
+		}
+		block := fmt.Sprintf("--- %s ---\n%s\n\n", rel, content)
+		sb.WriteString(block)
+		totalBytes += len(block)
+	}
+
+	for _, pf := range priorityFiles {
+		if pf != "" {
+			appendFile(pf)
+		}
+	}
+
 	_ = filepath.Walk(a.WorkDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+		if err != nil || info.IsDir() || totalBytes >= maxTotalBytes {
 			return nil
 		}
 		rel, _ := filepath.Rel(a.WorkDir, path)
-		if strings.HasPrefix(rel, ".") || strings.Contains(rel, "venv") || strings.Contains(rel, "node_modules") {
+		lower := strings.ToLower(rel)
+		if strings.HasPrefix(rel, ".") ||
+			strings.Contains(lower, "venv") ||
+			strings.Contains(lower, "node_modules") ||
+			strings.Contains(lower, "__pycache__") ||
+			strings.Contains(lower, "dist/") ||
+			strings.Contains(lower, "bin/") ||
+			strings.Contains(lower, ".git") {
 			return nil
 		}
 		ext := filepath.Ext(path)
-		if ext == ".py" || ext == ".go" || ext == ".toml" || ext == ".json" {
-			data, _ := os.ReadFile(path)
-			sb.WriteString(fmt.Sprintf("--- %s ---\n%s\n\n", rel, string(data)))
+		if ext == ".py" || ext == ".go" || ext == ".ts" || ext == ".js" || ext == ".toml" || ext == ".json" || ext == ".sql" {
+			appendFile(rel)
 		}
 		return nil
 	})
@@ -160,18 +200,13 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		// 1. Transaction Checkpoint
 		cpID, _ := a.Checkpointer.CreateCheckpoint()
 
-		// 2. Compute Blast Radius
-		codeCtx := a.collectSourceContext()
-		targetHint := "models.py" // default candidate
-		for path := range a.CodeGraph.FileSymbols {
-			if !strings.HasPrefix(path, "test_") && !strings.Contains(path, "test") {
-				targetHint = path
-				break
-			}
-		}
-		blastReport := a.CodeGraph.AnalyzeBlastRadius(targetHint)
-		a.notify(StateDiagnosing, fmt.Sprintf("Computed AST Blast Radius for `%s`: %d affected files, %d callers (Risk Score: %.2f)",
-			blastReport.ModifiedSymbol, len(blastReport.AffectedFiles), len(blastReport.TransitiveDependents), blastReport.RiskScore), map[string]interface{}{
+		// 2. Resolve Target Location & Compute AST Blast Radius
+		loc := ResolveTargetLocation(a.WorkDir, a.Session.LastError, a.CodeGraph)
+		targetHint := loc.FilePath
+		codeCtx := a.collectSourceContext(targetHint)
+		blastReport := a.CodeGraph.AnalyzeBlastRadius(targetHint, loc.Symbol)
+		a.notify(StateDiagnosing, fmt.Sprintf("Computed AST Blast Radius for `%s` (file: `%s`): %d affected files, %d callers (Risk Score: %.2f)",
+			blastReport.ModifiedSymbol, targetHint, len(blastReport.AffectedFiles), len(blastReport.TransitiveDependents), blastReport.RiskScore), map[string]interface{}{
 			"blast_report": blastReport,
 		})
 
@@ -182,33 +217,37 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			"archetype": archetype,
 		})
 
-		var archSb strings.Builder
-		archSb.WriteString(fmt.Sprintf("ARCHETYPE: %s (%s)\n", archetype.Archetype, archetype.Severity))
-		archSb.WriteString(fmt.Sprintf("DIAGNOSIS: %s\n", archetype.Description))
-		archSb.WriteString("MANDATORY CONSTRAINTS:\n")
-		for _, c := range archetype.Constraints {
-			archSb.WriteString(fmt.Sprintf("- %s\n", c))
+		archetypeContext := ""
+		if !a.DisableGrounding {
+			var archSb strings.Builder
+			archSb.WriteString(fmt.Sprintf("ARCHETYPE: %s (%s)\n", archetype.Archetype, archetype.Severity))
+			archSb.WriteString(fmt.Sprintf("DIAGNOSIS: %s\n", archetype.Description))
+			archSb.WriteString("MANDATORY CONSTRAINTS:\n")
+			for _, c := range archetype.Constraints {
+				archSb.WriteString(fmt.Sprintf("- %s\n", c))
+			}
+			archetypeContext = archSb.String()
 		}
-		archetypeContext := archSb.String()
 
 		// 4. Search External Knowledge via Tavily
-		query := fmt.Sprintf("how to fix %s %s", targetHint, archetype.Archetype)
-		if len(initRes.ParsedErrors) > 0 {
-			errLine := strings.TrimSpace(initRes.ParsedErrors[len(initRes.ParsedErrors)-1])
-			if len(errLine) > 80 {
-				errLine = errLine[:80]
+		docsCtx := ""
+		query := ""
+		if a.DisableGrounding {
+			a.notify(StateDiagnosing, "Grounding disabled (baseline mode): skipping Tavily retrieval and archetype constraints.", nil)
+		} else {
+			query = BuildGroundingQuery(a.WorkDir, targetHint, archetype, a.Session.LastError)
+			a.notify(StateSearchingKnowledge, fmt.Sprintf("Searching Tavily for official documentation: '%s'", query), nil)
+			tavilyResp, _ := a.Tavily.Search(ctx, query, 3)
+			docsCtx = a.Tavily.FormatContext(tavilyResp)
+			if tavilyResp != nil {
+				a.lastTavilyResults = tavilyResp.Results
 			}
-			query = fmt.Sprintf("fix %s %s %s", targetHint, archetype.Archetype, errLine)
+			a.Session.TavilyQueries = append(a.Session.TavilyQueries, query)
 		}
-		a.notify(StateSearchingKnowledge, fmt.Sprintf("Searching Tavily for official documentation: '%s'", query), nil)
-		tavilyResp, _ := a.Tavily.Search(ctx, query, 3)
-		docsCtx := a.Tavily.FormatContext(tavilyResp)
-		a.Session.TavilyQueries = append(a.Session.TavilyQueries, query)
 
 		// 5. Synthesizing Patch via Nemotron 3 Ultra
 		a.notify(StateSynthesizingPatch, fmt.Sprintf("Synthesizing Unified Diff patch with NVIDIA Nemotron (%s)...", a.Nebius.Model), nil)
-		patchSug, pTokens, cTokens, err := a.Nebius.DiagnoseAndPatch(ctx, a.TestCommand, initRes.Stdout, a.Session.LastError, codeCtx, docsCtx, archetypeContext, a.OnStreamToken)
-
+		patchSug, pTokens, cTokens, err := a.Nebius.DiagnoseAndPatch(ctx, a.TestCommand, initRes.Stdout, a.Session.LastError, codeCtx, docsCtx, archetypeContext, failedHistory, a.OnStreamToken)
 		// Ledger telemetry
 		a.Session.TokenLedger.PromptTokens += pTokens
 		a.Session.TokenLedger.CompletionTokens += cTokens
@@ -274,12 +313,13 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 
 			branchName := fmt.Sprintf("fix/nemotron-heal-%s", a.Session.SessionID)
 
-			var tavilyCitationTable strings.Builder
-			tavilyCitationTable.WriteString(fmt.Sprintf("- **Tavily Query**: `%s`\n", query))
-			if tavilyResp != nil && len(tavilyResp.Results) > 0 {
+		var tavilyCitationTable strings.Builder
+		if !a.DisableGrounding && len(a.Session.TavilyQueries) > 0 {
+			tavilyCitationTable.WriteString(fmt.Sprintf("- **Tavily Query**: `%s`\n", a.Session.TavilyQueries[len(a.Session.TavilyQueries)-1]))
+			if len(a.lastTavilyResults) > 0 {
 				tavilyCitationTable.WriteString("\n| # | Source Reference | Verifiable URL | Relevance | Ground-Truth Excerpt |\n")
 				tavilyCitationTable.WriteString("| :--- | :--- | :--- | :--- | :--- |\n")
-				for cIdx, item := range tavilyResp.Results {
+				for cIdx, item := range a.lastTavilyResults {
 					snippet := strings.ReplaceAll(item.Content, "\n", " ")
 					if len(snippet) > 85 {
 						snippet = snippet[:85] + "..."
@@ -288,8 +328,11 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 						cIdx+1, item.Title, item.URL, item.URL, item.Score, snippet))
 				}
 			} else {
-				tavilyCitationTable.WriteString("- **Official Documentation**: Verified upstream breaking change specifications.\n")
+				tavilyCitationTable.WriteString("- **Official Documentation**: Tavily returned no results for this query.\n")
 			}
+		} else {
+			tavilyCitationTable.WriteString("- **Knowledge Grounding**: Disabled (baseline mode).\n")
+		}
 
 			auditReport := fmt.Sprintf(`## ⚡ Nemotron-Healer Autonomous Verification Report
 *Generated by Nemotron-Healer on Nebius Token Factory & Tavily Search*
