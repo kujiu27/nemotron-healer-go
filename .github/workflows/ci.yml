@@ -1,0 +1,42 @@
+name: CI & Cross-Platform Release Matrix
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-build:
+    name: Build & Race Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: true
+
+      - name: Verify Dependencies
+        run: go mod verify
+
+      - name: Run Unit Tests with Race Detector
+        run: go test -v -race ./...
+
+      - name: Compile Cross-Platform Binaries
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/nemotron-healer_linux_amd64 ./cmd/nemotron-healer
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/nemotron-healer_darwin_arm64 ./cmd/nemotron-healer
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/nemotron-healer_darwin_amd64 ./cmd/nemotron-healer
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/nemotron-healer_windows_amd64.exe ./cmd/nemotron-healer
+          ls -lh dist/

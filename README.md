@@ -7,6 +7,7 @@
 [![Go Version](https://img.shields.io/badge/go-1.26+-00ADD8.svg)](https://golang.org)
 [![Nebius Token Factory](https://img.shields.io/badge/Inference-Nebius%20Token%20Factory-7D56F4.svg)](https://tokenfactory.nebius.com)
 [![Tavily Search](https://img.shields.io/badge/Grounding-Tavily%20Search%20API-00E599.svg)](https://tavily.com)
+[![CI](https://github.com/kujiu27/nemotron-healer-go/actions/workflows/ci.yml/badge.svg)](https://github.com/kujiu27/nemotron-healer-go/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
