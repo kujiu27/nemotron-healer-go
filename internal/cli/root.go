@@ -20,12 +20,13 @@ import (
 )
 
 var (
-	testCmdFlag string
-	turnsFlag   int
-	noTUIFlag   bool
-	searchFlag  bool
-	arenaFlag   bool
-	jsonFlag    bool
+	testCmdFlag    string
+	turnsFlag      int
+	noTUIFlag      bool
+	searchFlag     bool
+	arenaFlag      bool
+	jsonFlag       bool
+	autoAcceptFlag bool
 )
 
 var RootCmd = &cobra.Command{
@@ -61,6 +62,11 @@ var RootCmd = &cobra.Command{
 				data, _ := json.MarshalIndent(session, "", "  ")
 				fmt.Println(string(data))
 			}
+			if session.IsResolved && len(session.AppliedPatches) > 0 && !autoAcceptFlag && !jsonFlag {
+				fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render("\nProposed Verified Surgical Patch:"))
+				fmt.Println(session.AppliedPatches[len(session.AppliedPatches)-1])
+			}
+
 			if !session.IsResolved {
 				os.Exit(1)
 			}
@@ -166,6 +172,7 @@ func init() {
 	RootCmd.PersistentFlags().BoolVar(&searchFlag, "search", false, "Enable Test-Time Compute (TTC) MCTS multi-branch search")
 	RootCmd.PersistentFlags().BoolVar(&arenaFlag, "arena", false, "Enable Red-Blue Minimax Adversarial Self-Play Arena")
 	RootCmd.PersistentFlags().BoolVar(&jsonFlag, "json", false, "Output machine-readable telemetry JSON to stdout")
+	RootCmd.PersistentFlags().BoolVarP(&autoAcceptFlag, "yes", "y", false, "Automatically accept and commit without interactive prompt (default in CI)")
 
 	RootCmd.AddCommand(doctorCmd)
 	RootCmd.AddCommand(versionCmd)
