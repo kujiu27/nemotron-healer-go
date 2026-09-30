@@ -133,7 +133,16 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 
 	var failedHistory []string
 
-	// Step 2: Self-Healing Loop
+	// Step 2: If Test-Time Compute (TTC) MCTS Search is enabled, explore mutation tree
+	if a.EnableSearch {
+		mctsRes, err := a.RunMCTSSearch(ctx, a.Session.LastError, 6)
+		if err == nil && mctsRes.Resolved {
+			return a.Session, nil
+		}
+		a.notify(StateDiagnosing, "MCTS Search did not achieve high-reward convergence; falling back to sequential repair...", nil)
+	}
+
+	// Step 3: Self-Healing Loop
 	for a.Session.CurrentTurn < a.Session.MaxTurns {
 		select {
 		case <-ctx.Done():
