@@ -95,6 +95,9 @@ func (a *Agent) collectSourceContext() string {
 func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 	startTime := time.Now()
 
+	// Ensure repository is safely Git-tracked for atomic transactions
+	_ = a.Checkpointer.EnsureGitContext()
+
 	// Step 0: Build AST Code Graph
 	a.notify(StateDiagnosing, "Building AST symbol dependency graph across repository...", nil)
 	_ = a.CodeGraph.BuildGraph()

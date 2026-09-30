@@ -88,6 +88,43 @@ func (c *CheckpointManager) Rollback(checkpointID string) error {
 	return err
 }
 
+// EnsureGitContext guarantees that the working directory is inside a valid git repository.
+// If the target directory is a bare folder without .git, it auto-initializes a clean local tracking baseline.
+func (c *CheckpointManager) EnsureGitContext() error {
+	checkCmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	checkCmd.Dir = c.WorkDir
+	if err := checkCmd.Run(); err == nil {
+		return nil // Already a valid git repository
+	}
+
+	// Auto-scaffold local git repository
+	initCmd := exec.Command("git", "init")
+	initCmd.Dir = c.WorkDir
+	if err := initCmd.Run(); err != nil {
+		return err
+	}
+
+	// Set local author config so commits never fail on missing user.email
+	cmdName := exec.Command("git", "config", "user.name", "Nemotron-Healer Bot")
+	cmdName.Dir = c.WorkDir
+	_ = cmdName.Run()
+
+	cmdEmail := exec.Command("git", "config", "user.email", "bot@nemotron-healer.ai")
+	cmdEmail.Dir = c.WorkDir
+	_ = cmdEmail.Run()
+
+	// Initial baseline snapshot commit
+	cmdAdd := exec.Command("git", "add", "-A")
+	cmdAdd.Dir = c.WorkDir
+	_ = cmdAdd.Run()
+
+	cmdCommit := exec.Command("git", "commit", "--allow-empty", "-m", "chore(init): snapshot baseline state prior to autonomous repair")
+	cmdCommit.Dir = c.WorkDir
+	_ = cmdCommit.Run()
+
+	return nil
+}
+
 // CreateGitPRBranch commits the verified fix and creates a dedicated PR branch.
 func (c *CheckpointManager) CreateGitPRBranch(branchName, commitMsg string) error {
 	return c.CreateGitPRBranchWithAudit(branchName, commitMsg, "")
@@ -95,6 +132,8 @@ func (c *CheckpointManager) CreateGitPRBranch(branchName, commitMsg string) erro
 
 // CreateGitPRBranchWithAudit writes an Alibaba OCR-style Audit Card into the PR branch before committing.
 func (c *CheckpointManager) CreateGitPRBranchWithAudit(branchName, commitMsg, auditReport string) error {
+	_ = c.EnsureGitContext()
+
 	cmd1 := exec.Command("git", "checkout", "-b", branchName)
 	cmd1.Dir = c.WorkDir
 	_ = cmd1.Run()
@@ -108,7 +147,7 @@ func (c *CheckpointManager) CreateGitPRBranchWithAudit(branchName, commitMsg, au
 	cmd2.Dir = c.WorkDir
 	_ = cmd2.Run()
 
-	cmd3 := exec.Command("git", "commit", "-m", commitMsg)
+	cmd3 := exec.Command("git", "commit", "--allow-empty", "-m", commitMsg)
 	cmd3.Dir = c.WorkDir
 	return cmd3.Run()
 }
