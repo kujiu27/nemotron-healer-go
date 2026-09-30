@@ -100,9 +100,16 @@ func NewNebiusClient() *NebiusClient {
 
 	fastModel := "glm-5.3-flash"
 	reasoningModel := "gemini-3.8-flash-high"
-	if apiKey != "" {
+
+	// If connecting to actual Nebius Token Factory, use official NVIDIA Nemotron models
+	if strings.Contains(baseURL, "nebius.com") {
 		fastModel = "nvidia/nemotron-mini-4b"
 		reasoningModel = "nvidia/nemotron-3-ultra"
+	}
+
+	// Environment variable override
+	if envModel := os.Getenv("NEBIUS_MODEL"); envModel != "" {
+		reasoningModel = envModel
 	}
 
 	return &NebiusClient{
