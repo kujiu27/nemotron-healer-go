@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -105,10 +108,25 @@ var doctorCmd = &cobra.Command{
 		fmt.Printf("• Inference Endpoint: %s\n", nebius.BaseURL)
 		fmt.Printf("• Fast Triage Model:  %s\n", nebius.FastModel)
 		fmt.Printf("• Reasoning Brain:    %s\n", nebius.ReasoningModel)
+
+		// Active Network RTT Probe against Inference Endpoint
+		nebiusStart := time.Now()
+		modelsURL := strings.TrimRight(nebius.BaseURL, "/") + "/models"
+		req, _ := http.NewRequest("GET", modelsURL, nil)
 		if nebius.APIKey != "" {
-			fmt.Printf("• Nebius API Key:     Configured (%s...)\n", nebius.APIKey[:8])
+			req.Header.Set("Authorization", "Bearer "+nebius.APIKey)
+		}
+		probeClient := &http.Client{Timeout: 4 * time.Second}
+		resp, err := probeClient.Do(req)
+		nebiusRTT := time.Since(nebiusStart).Milliseconds()
+		if err == nil && resp.StatusCode == http.StatusOK {
+			fmt.Printf("• Endpoint Probe:     [ONLINE] Authenticated (RTT: %dms)\n", nebiusRTT)
+			resp.Body.Close()
+		} else if err == nil {
+			fmt.Printf("• Endpoint Probe:     [HTTP %d] %s (RTT: %dms)\n", resp.StatusCode, resp.Status, nebiusRTT)
+			resp.Body.Close()
 		} else {
-			fmt.Println("• Nebius API Key:     [Using Local / Fallback Inference]")
+			fmt.Printf("• Endpoint Probe:     [UNREACHABLE] (Error: %v)\n", err)
 		}
 
 		tavily := client.NewTavilyClient()
