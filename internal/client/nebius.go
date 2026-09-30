@@ -16,12 +16,14 @@ import (
 )
 
 type NebiusClient struct {
-	APIKey   string
-	BaseURL  string
-	Model    string
-	HTTP     *http.Client
-	LastTTFT float64
-	LastTPS  float64
+	APIKey         string
+	BaseURL        string
+	Model          string
+	FastModel      string
+	ReasoningModel string
+	HTTP           *http.Client
+	LastTTFT       float64
+	LastTPS        float64
 }
 
 type ChatMessage struct {
@@ -96,11 +98,20 @@ func NewNebiusClient() *NebiusClient {
 		}
 	}
 
+	fastModel := "glm-5.3-flash"
+	reasoningModel := "gemini-3.8-flash-high"
+	if apiKey != "" {
+		fastModel = "nvidia/nemotron-mini-4b"
+		reasoningModel = "nvidia/nemotron-3-ultra"
+	}
+
 	return &NebiusClient{
-		APIKey:  apiKey,
-		BaseURL: baseURL,
-		Model:   model,
-		HTTP:    &http.Client{Timeout: 120 * time.Second},
+		APIKey:         apiKey,
+		BaseURL:        baseURL,
+		Model:          reasoningModel,
+		FastModel:      fastModel,
+		ReasoningModel: reasoningModel,
+		HTTP:           &http.Client{Timeout: 120 * time.Second},
 	}
 }
 

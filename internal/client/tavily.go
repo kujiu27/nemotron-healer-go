@@ -8,12 +8,15 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
 type TavilyClient struct {
 	APIKey string
 	HTTP   *http.Client
+	Cache  map[string]*TavilySearchResponse
+	Mu     sync.RWMutex
 }
 
 type TavilySearchRequest struct {
@@ -43,10 +46,17 @@ func NewTavilyClient() *TavilyClient {
 	return &TavilyClient{
 		APIKey: os.Getenv("TAVILY_API_KEY"),
 		HTTP:   &http.Client{Timeout: 30 * time.Second},
+		Cache:  make(map[string]*TavilySearchResponse),
 	}
 }
 
 func (t *TavilyClient) Search(ctx context.Context, query string, maxResults int) (*TavilySearchResponse, error) {
+	t.Mu.RLock()
+	if cached, ok := t.Cache[query]; ok {
+		t.Mu.RUnlock()
+		return cached, nil
+	}
+	t.Mu.RUnlock()
 	if t.APIKey == "" {
 		// Simulation / Local Fallback when API key is missing
 		return &TavilySearchResponse{
@@ -97,6 +107,10 @@ func (t *TavilyClient) Search(ctx context.Context, query string, maxResults int)
 	if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
 		return nil, err
 	}
+
+	t.Mu.Lock()
+	t.Cache[query] = &searchResp
+	t.Mu.Unlock()
 
 	return &searchResp, nil
 }

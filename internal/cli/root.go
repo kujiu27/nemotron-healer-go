@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,6 +22,7 @@ var (
 	noTUIFlag   bool
 	searchFlag  bool
 	arenaFlag   bool
+	jsonFlag    bool
 )
 
 var RootCmd = &cobra.Command{
@@ -51,6 +53,10 @@ var RootCmd = &cobra.Command{
 			session, err := agent.Run(context.Background())
 			if err != nil {
 				return err
+			}
+			if jsonFlag {
+				data, _ := json.MarshalIndent(session, "", "  ")
+				fmt.Println(string(data))
 			}
 			if !session.IsResolved {
 				os.Exit(1)
@@ -97,7 +103,8 @@ var doctorCmd = &cobra.Command{
 
 		nebius := client.NewNebiusClient()
 		fmt.Printf("• Inference Endpoint: %s\n", nebius.BaseURL)
-		fmt.Printf("• Active Model:       %s\n", nebius.Model)
+		fmt.Printf("• Fast Triage Model:  %s\n", nebius.FastModel)
+		fmt.Printf("• Reasoning Brain:    %s\n", nebius.ReasoningModel)
 		if nebius.APIKey != "" {
 			fmt.Printf("• Nebius API Key:     Configured (%s...)\n", nebius.APIKey[:8])
 		} else {
@@ -106,16 +113,19 @@ var doctorCmd = &cobra.Command{
 
 		tavily := client.NewTavilyClient()
 		if tavily.APIKey != "" {
-			fmt.Println("• Tavily Search API:  Configured (Online)")
+			fmt.Println("• Tavily Search API:  Configured (Online Grounding)")
 		} else {
 			fmt.Println("• Tavily Search API:  Simulated / Fallback Mode")
 		}
 
-		// Git binary check
-		if _, err := exec.LookPath("git"); err == nil {
-			fmt.Println("• Git CLI:            Available")
-		} else {
-			fmt.Println("• Git CLI:            NOT FOUND (Required for patch/checkpoint)")
+		// Toolchain checks
+		toolchains := []string{"git", "python3", "pytest", "go"}
+		for _, tc := range toolchains {
+			if path, err := exec.LookPath(tc); err == nil {
+				fmt.Printf("• Toolchain %-8s: Available (%s)\n", tc, path)
+			} else {
+				fmt.Printf("• Toolchain %-8s: Not found in PATH\n", tc)
+			}
 		}
 
 		fmt.Println("--------------------------------------------------")
@@ -137,6 +147,7 @@ func init() {
 	RootCmd.PersistentFlags().BoolVar(&noTUIFlag, "no-tui", false, "Disable TUI and output plain text (for CI / GitHub Actions)")
 	RootCmd.PersistentFlags().BoolVar(&searchFlag, "search", false, "Enable Test-Time Compute (TTC) MCTS multi-branch search")
 	RootCmd.PersistentFlags().BoolVar(&arenaFlag, "arena", false, "Enable Red-Blue Minimax Adversarial Self-Play Arena")
+	RootCmd.PersistentFlags().BoolVar(&jsonFlag, "json", false, "Output machine-readable telemetry JSON to stdout")
 
 	RootCmd.AddCommand(doctorCmd)
 	RootCmd.AddCommand(versionCmd)

@@ -52,6 +52,9 @@ func (g *CodeGraph) BuildGraph() error {
 	pyFuncRegex := regexp.MustCompile(`^(?:async\s+)?def\s+([a-zA-Z0-9_]+)\s*\(`)
 	pyClassRegex := regexp.MustCompile(`^class\s+([a-zA-Z0-9_]+)\b`)
 	goFuncRegex := regexp.MustCompile(`^func\s+(?:\([^\)]+\)\s*)?([a-zA-Z0-9_]+)\s*\(`)
+	tsFuncRegex := regexp.MustCompile(`^(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z0-9_]+)\s*\(`)
+	tsClassRegex := regexp.MustCompile(`^(?:export\s+)?class\s+([a-zA-Z0-9_]+)\b`)
+	tsArrowRegex := regexp.MustCompile(`^(?:export\s+)?const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(`)
 
 	callRegex := regexp.MustCompile(`\b([a-zA-Z0-9_]+)\s*\(`)
 
@@ -76,7 +79,7 @@ func (g *CodeGraph) BuildGraph() error {
 		}
 
 		ext := filepath.Ext(path)
-		if ext != ".py" && ext != ".go" {
+		if ext != ".py" && ext != ".go" && ext != ".ts" && ext != ".js" {
 			return nil
 		}
 
@@ -108,6 +111,17 @@ func (g *CodeGraph) BuildGraph() error {
 				}
 			} else if ext == ".go" {
 				if m := goFuncRegex.FindStringSubmatch(trimmed); len(m) > 1 {
+					name = m[1]
+					kind = "function"
+				}
+			} else if ext == ".ts" || ext == ".js" {
+				if m := tsFuncRegex.FindStringSubmatch(trimmed); len(m) > 1 {
+					name = m[1]
+					kind = "function"
+				} else if m := tsClassRegex.FindStringSubmatch(trimmed); len(m) > 1 {
+					name = m[1]
+					kind = "class"
+				} else if m := tsArrowRegex.FindStringSubmatch(trimmed); len(m) > 1 {
 					name = m[1]
 					kind = "function"
 				}

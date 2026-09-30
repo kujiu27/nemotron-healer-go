@@ -1,0 +1,54 @@
+name: "Nemotron-Healer Autonomous Self-Healing CI"
+description: "Zero-dependency autonomous code self-healing action powered by NVIDIA Nemotron on Nebius Token Factory & Tavily Search"
+author: "kujiu27"
+inputs:
+  command:
+    description: "The test command to execute and verify (e.g. 'pytest', 'go test ./...')"
+    required: true
+    default: "pytest"
+  turns:
+    description: "Maximum self-healing attempts"
+    required: false
+    default: "5"
+  enable_arena:
+    description: "Enable Red-Blue Minimax Adversarial Self-Play Arena"
+    required: false
+    default: "true"
+  github_token:
+    description: "GitHub token for creating PR comments"
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Download Nemotron-Healer Binary
+      shell: bash
+      run: |
+        OS_TYPE="linux_amd64"
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          OS_TYPE="darwin_arm64"
+        fi
+        echo "Installing Nemotron-Healer for $OS_TYPE..."
+        curl -fsSL "https://github.com/kujiu27/nemotron-healer-go/releases/download/v0.2.0/nemotron-healer_${OS_TYPE}" -o /usr/local/bin/nemotron-healer
+        chmod +x /usr/local/bin/nemotron-healer
+        nemotron-healer version
+
+    - name: Run Autonomous Self-Healing Pipeline
+      shell: bash
+      run: |
+        ARENA_FLAG=""
+        if [[ "${{ inputs.enable_arena }}" == "true" ]]; then
+          ARENA_FLAG="--arena"
+        fi
+        nemotron-healer . --command "${{ inputs.command }}" --turns "${{ inputs.turns }}" $ARENA_FLAG --no-tui
+
+    - name: Publish PR Audit Report Comment
+      if: always() && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        if [[ -f "HEAL_AUDIT_REPORT.md" ]]; then
+          gh pr comment ${{ github.event.pull_request.number }} --body-file HEAL_AUDIT_REPORT.md || true
+        fi
