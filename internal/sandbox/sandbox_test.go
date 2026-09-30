@@ -3,6 +3,7 @@ package sandbox
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -82,5 +83,33 @@ func TestEnsureGitContextBareDirectory(t *testing.T) {
 	// Verify PR branch creation works in this auto-scaffolded repository
 	if err := cm.CreateGitPRBranch("fix/test-branch", "test commit"); err != nil {
 		t.Fatalf("CreateGitPRBranch failed in auto-scaffolded repo: %v", err)
+	}
+}
+
+func TestPatcherSecurityPathTraversalAndSecrets(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sec_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	patcher := NewPatcher(tmpDir)
+
+	// 1. Path traversal attack attempt
+	applied, msg := patcher.ApplyPatch("diff content", "../../.ssh/authorized_keys")
+	if applied {
+		t.Fatalf("expected path traversal patch to be BLOCKED, but it was applied!")
+	}
+	if !strings.Contains(msg, "Security Sandbox Blocked") && !strings.Contains(msg, "security violation") {
+		t.Fatalf("expected security error message, got: %s", msg)
+	}
+
+	// 2. Secret file tampering attempt (.env)
+	appliedEnv, msgEnv := patcher.ApplyPatch("diff content", ".env")
+	if appliedEnv {
+		t.Fatalf("expected .env modification to be BLOCKED, but it was applied!")
+	}
+	if !strings.Contains(msgEnv, "Security Sandbox Blocked") {
+		t.Fatalf("expected security blocked message for .env, got: %s", msgEnv)
 	}
 }

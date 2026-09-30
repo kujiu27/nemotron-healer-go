@@ -17,10 +17,47 @@ func NewPatcher(workDir string) *Patcher {
 	return &Patcher{WorkDir: workDir}
 }
 
+// ValidateSafePath enforces strict sandbox containment, preventing Path Traversal (CWE-23)
+// and blocking tampering with sensitive files (.env, .git, credentials, private keys).
+func ValidateSafePath(workDir, relPath string) (string, error) {
+	cleanRel := filepath.Clean(relPath)
+	if strings.HasPrefix(cleanRel, "..") || filepath.IsAbs(relPath) {
+		return "", fmt.Errorf("security violation: path traversal detected (%s escapes workspace)", relPath)
+	}
+
+	lower := strings.ToLower(cleanRel)
+	if strings.Contains(lower, ".env") ||
+		strings.HasPrefix(lower, ".git") ||
+		strings.Contains(lower, "id_rsa") ||
+		strings.Contains(lower, "id_ed25519") ||
+		strings.Contains(lower, ".ssh") ||
+		strings.Contains(lower, "credentials") {
+		return "", fmt.Errorf("security violation: modification of protected file forbidden (%s)", relPath)
+	}
+
+	absWorkDir, err := filepath.Abs(workDir)
+	if err != nil {
+		return "", err
+	}
+	fullPath := filepath.Join(absWorkDir, cleanRel)
+	if !strings.HasPrefix(fullPath, absWorkDir) {
+		return "", fmt.Errorf("security violation: path traversal out of bounds")
+	}
+
+	return fullPath, nil
+}
+
 // ApplyPatch tries git apply, patch command, and fallback hunk replacer.
 func (p *Patcher) ApplyPatch(diffPatch string, targetFileHint string) (bool, string) {
 	if strings.TrimSpace(diffPatch) == "" {
 		return false, "empty patch provided"
+	}
+
+	// Security Sanitization Gate
+	if targetFileHint != "" {
+		if _, err := ValidateSafePath(p.WorkDir, targetFileHint); err != nil {
+			return false, fmt.Sprintf("Security Sandbox Blocked: %v", err)
+		}
 	}
 
 	// Clean up markdown fences if any
@@ -79,7 +116,10 @@ func (p *Patcher) ApplyPatch(diffPatch string, targetFileHint string) (bool, str
 }
 
 func (p *Patcher) applyFuzzyHunk(targetRelFile string, diffPatch string) (bool, string) {
-	fullPath := filepath.Join(p.WorkDir, targetRelFile)
+	fullPath, err := ValidateSafePath(p.WorkDir, targetRelFile)
+	if err != nil {
+		return false, fmt.Sprintf("security violation: %v", err)
+	}
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return false, fmt.Sprintf("could not read file %s: %v", targetRelFile, err)
