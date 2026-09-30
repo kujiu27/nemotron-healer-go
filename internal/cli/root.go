@@ -19,6 +19,8 @@ var (
 	testCmdFlag string
 	turnsFlag   int
 	noTUIFlag   bool
+	searchFlag  bool
+	arenaFlag   bool
 )
 
 var RootCmd = &cobra.Command{
@@ -43,6 +45,8 @@ var RootCmd = &cobra.Command{
 			agent := engine.NewAgent(absDir, testCmdFlag, turnsFlag, func(event engine.HealingStepEvent) {
 				fmt.Printf("[%s] %s\n", event.State, event.Summary)
 			}, nil)
+			agent.EnableSearch = searchFlag
+			agent.EnableArena = arenaFlag
 
 			session, err := agent.Run(context.Background())
 			if err != nil {
@@ -65,6 +69,8 @@ var RootCmd = &cobra.Command{
 				p.Send(tui.TokenMsg(token))
 			}
 		})
+		agent.EnableSearch = searchFlag
+		agent.EnableArena = arenaFlag
 
 		m := tui.NewModel(agent.Session)
 		p = tea.NewProgram(m)
@@ -129,6 +135,8 @@ func init() {
 	RootCmd.PersistentFlags().StringVarP(&testCmdFlag, "command", "c", "pytest", "Test command to run for reproduction and verification")
 	RootCmd.PersistentFlags().IntVarP(&turnsFlag, "turns", "t", 5, "Maximum healing attempts")
 	RootCmd.PersistentFlags().BoolVar(&noTUIFlag, "no-tui", false, "Disable TUI and output plain text (for CI / GitHub Actions)")
+	RootCmd.PersistentFlags().BoolVar(&searchFlag, "search", false, "Enable Test-Time Compute (TTC) MCTS multi-branch search")
+	RootCmd.PersistentFlags().BoolVar(&arenaFlag, "arena", false, "Enable Red-Blue Minimax Adversarial Self-Play Arena")
 
 	RootCmd.AddCommand(doctorCmd)
 	RootCmd.AddCommand(versionCmd)

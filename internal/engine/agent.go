@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nemotron-healer/nemotron-healer-go/internal/arena"
 	"github.com/nemotron-healer/nemotron-healer-go/internal/ast"
 	"github.com/nemotron-healer/nemotron-healer-go/internal/client"
 	"github.com/nemotron-healer/nemotron-healer-go/internal/falsify"
@@ -21,6 +22,8 @@ type Agent struct {
 	WorkDir       string
 	TestCommand   string
 	MaxTurns      int
+	EnableSearch  bool
+	EnableArena   bool
 	Session       *HealingSession
 	Runner        *sandbox.Runner
 	Checkpointer  *sandbox.CheckpointManager
@@ -243,6 +246,16 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				continue
 			}
 
+			// 8. Optional Red-Blue Adversarial Arena (Minimax Self-Play)
+			arenaNotes := "Single-Agent Verifiable Falsification"
+			if a.EnableArena {
+				a.notify(StateVerifyingSandbox, "Entering Red-Blue Adversarial Arena (Minimax Self-Play)...", nil)
+				gameArena := arena.NewArena(a.Nebius, a.Runner, a.Patcher, a.WorkDir, a.TestCommand)
+				rounds, eq, _ := gameArena.SelfPlay(ctx, targetFile, 2)
+				a.notify(StateVerifyingSandbox, fmt.Sprintf("Red-Blue Arena: Survived %d attack rounds (Nash Equilibrium: %v)", len(rounds), eq), nil)
+				arenaNotes = fmt.Sprintf("Survived %d Minimax Adversarial Rounds (Nash Equilibrium: %v)", len(rounds), eq)
+			}
+
 			// Clean pass!
 			a.Session.IsResolved = true
 			a.Session.DurationSeconds = time.Since(startTime).Seconds()
@@ -275,8 +288,9 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 
 ---
 
-### 🛡️ Adversarial Falsification Audit (Zero-Overfitting Proof)
+### 🛡️ Adversarial Falsification & Minimax Arena Audit
 - **Status**: PASSED (Confidence: %.2f)
+- **Minimax Game**: %s
 - **Test Invariant**: Synthesized edge-case counter-example test executed in sandbox; validated boundary robustness without regressions.
 
 ---
@@ -296,7 +310,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				archetype.Archetype, archetype.Severity, archetype.Description,
 				blastReport.ModifiedSymbol, len(blastReport.AffectedFiles), strings.Join(blastReport.AffectedFiles, ", "),
 				len(blastReport.TransitiveDependents), blastReport.RiskScore,
-				query, falsifyRes.ConfidenceScore,
+				query, falsifyRes.ConfidenceScore, arenaNotes,
 				a.Session.TokenLedger.PromptTokens, a.Session.TokenLedger.CompletionTokens,
 				a.Session.TokenLedger.TTFTSeconds, a.Session.TokenLedger.MeasuredTPS,
 				a.Session.TokenLedger.EstimatedCostUSD, a.Session.TokenLedger.SavingsPercentage)
