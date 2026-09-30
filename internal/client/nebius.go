@@ -184,7 +184,7 @@ func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMess
 }
 
 // DiagnoseAndPatch asks Nemotron to analyze the failure and output a surgical unified diff.
-func (c *NebiusClient) DiagnoseAndPatch(ctx context.Context, testCmd, stdout, stderr, codeContext, docsContext string, onToken func(string)) (*PatchSuggestion, int, int, error) {
+func (c *NebiusClient) DiagnoseAndPatch(ctx context.Context, testCmd, stdout, stderr, codeContext, docsContext, archetypeContext string, onToken func(string)) (*PatchSuggestion, int, int, error) {
 	prompt := fmt.Sprintf(`You are an autonomous senior Principal Engineer on Nebius Token Factory.
 Fix the broken codebase by generating a surgical Unified Diff patch.
 
@@ -194,6 +194,9 @@ Fix the broken codebase by generating a surgical Unified Diff patch.
 [FAILING OUTPUT]
 %s
 
+[DETERMINISTIC DEFECT CLASSIFICATION & CONSTRAINTS (ALIBABA OCR HYBRID)]
+%s
+
 [SOURCE CODE CONTEXT]
 %s
 
@@ -201,13 +204,13 @@ Fix the broken codebase by generating a surgical Unified Diff patch.
 %s
 
 INSTRUCTIONS:
-1. Provide a concise root cause analysis.
+1. Provide a concise root cause analysis matching the defect archetype.
 2. Output the exact relative target file path in [TARGET_FILE]path/to/file[/TARGET_FILE].
 3. Output the exact, valid unified diff patch in a `+"```diff"+` block starting with:
 --- a/path/to/file
 +++ b/path/to/file
 @@ ... @@
-Do NOT omit the unified diff block.`, testCmd, stderr+"\n"+stdout, codeContext, docsContext)
+Do NOT omit the unified diff block.`, testCmd, stderr+"\n"+stdout, archetypeContext, codeContext, docsContext)
 
 	messages := []ChatMessage{
 		{Role: "system", Content: "You are an autonomous software repair agent. You generate precise unified diff patches that compile and pass tests."},

@@ -90,9 +90,19 @@ func (c *CheckpointManager) Rollback(checkpointID string) error {
 
 // CreateGitPRBranch commits the verified fix and creates a dedicated PR branch.
 func (c *CheckpointManager) CreateGitPRBranch(branchName, commitMsg string) error {
+	return c.CreateGitPRBranchWithAudit(branchName, commitMsg, "")
+}
+
+// CreateGitPRBranchWithAudit writes an Alibaba OCR-style Audit Card into the PR branch before committing.
+func (c *CheckpointManager) CreateGitPRBranchWithAudit(branchName, commitMsg, auditReport string) error {
 	cmd1 := exec.Command("git", "checkout", "-b", branchName)
 	cmd1.Dir = c.WorkDir
 	_ = cmd1.Run()
+
+	if auditReport != "" {
+		auditPath := filepath.Join(c.WorkDir, "HEAL_AUDIT_REPORT.md")
+		_ = os.WriteFile(auditPath, []byte(auditReport), 0644)
+	}
 
 	cmd2 := exec.Command("git", "add", "-A")
 	cmd2.Dir = c.WorkDir
