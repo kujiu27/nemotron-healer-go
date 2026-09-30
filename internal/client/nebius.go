@@ -31,11 +31,16 @@ type ChatMessage struct {
 	Content string `json:"content"`
 }
 
+type StreamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
+}
+
 type ChatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []ChatMessage `json:"messages"`
-	Temperature float64       `json:"temperature"`
-	Stream      bool          `json:"stream"`
+	Model         string         `json:"model"`
+	Messages      []ChatMessage  `json:"messages"`
+	Temperature   float64        `json:"temperature"`
+	Stream        bool           `json:"stream"`
+	StreamOptions *StreamOptions `json:"stream_options,omitempty"`
 }
 
 type ChatResponse struct {
@@ -54,15 +59,22 @@ type ChatResponse struct {
 type StreamChunk struct {
 	Choices []struct {
 		Delta struct {
-			Content string `json:"content"`
+			Content          string `json:"content"`
+			ReasoningContent string `json:"reasoning_content,omitempty"`
 		} `json:"delta"`
 	} `json:"choices"`
+	Usage *struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage,omitempty"`
 }
 
 type PatchSuggestion struct {
-	Analysis   string `json:"analysis"`
-	TargetFile string `json:"target_file"`
-	DiffPatch  string `json:"diff_patch"`
+	Analysis     string `json:"analysis"`
+	ThoughtChain string `json:"thought_chain,omitempty"`
+	TargetFile   string `json:"target_file"`
+	DiffPatch    string `json:"diff_patch"`
 }
 
 func NewNebiusClient() *NebiusClient {
@@ -125,10 +137,11 @@ func NewNebiusClient() *NebiusClient {
 // StreamCompletion sends a chat request and calls onToken for each incoming streaming token.
 func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMessage, onToken func(string)) (string, int, int, error) {
 	reqBody := ChatRequest{
-		Model:       c.Model,
-		Messages:    messages,
-		Temperature: 0.1,
-		Stream:      true,
+		Model:         c.Model,
+		Messages:      messages,
+		Temperature:   0.1,
+		Stream:        true,
+		StreamOptions: &StreamOptions{IncludeUsage: true},
 	}
 
 	data, err := json.Marshal(reqBody)
@@ -151,6 +164,8 @@ func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMess
 	var firstTokenTime time.Time
 	tokenCount := 0
 	var fullText strings.Builder
+	serverPromptTokens := 0
+	serverCompletionTokens := 0
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
@@ -176,16 +191,26 @@ func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMess
 
 		var chunk StreamChunk
 		if err := json.Unmarshal([]byte(raw), &chunk); err == nil {
-			if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
-				if firstTokenTime.IsZero() {
-					firstTokenTime = time.Now()
-					c.LastTTFT = time.Since(startTime).Seconds()
+			if chunk.Usage != nil {
+				serverPromptTokens = chunk.Usage.PromptTokens
+				serverCompletionTokens = chunk.Usage.CompletionTokens
+			}
+			if len(chunk.Choices) > 0 {
+				delta := chunk.Choices[0].Delta
+				content := delta.Content
+				if content == "" && delta.ReasoningContent != "" {
+					content = delta.ReasoningContent
 				}
-				token := chunk.Choices[0].Delta.Content
-				fullText.WriteString(token)
-				tokenCount++
-				if onToken != nil {
-					onToken(token)
+				if content != "" {
+					if firstTokenTime.IsZero() {
+						firstTokenTime = time.Now()
+						c.LastTTFT = time.Since(startTime).Seconds()
+					}
+					fullText.WriteString(content)
+					tokenCount++
+					if onToken != nil {
+						onToken(content)
+					}
 				}
 			}
 		}
@@ -196,9 +221,16 @@ func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMess
 		c.LastTPS = float64(tokenCount) / totalDuration
 	}
 
-	// Approximate token counts
-	promptTokens := len(fmt.Sprintf("%v", messages)) / 4
-	return fullText.String(), promptTokens, tokenCount, nil
+	promptTokens := serverPromptTokens
+	if promptTokens == 0 {
+		promptTokens = len(fmt.Sprintf("%v", messages)) / 4
+	}
+	completionTokens := serverCompletionTokens
+	if completionTokens == 0 {
+		completionTokens = tokenCount
+	}
+
+	return fullText.String(), promptTokens, completionTokens, nil
 }
 
 // DiagnoseAndPatch asks Nemotron to analyze the failure and output a surgical unified diff.
