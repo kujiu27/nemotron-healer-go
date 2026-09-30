@@ -1,0 +1,16 @@
+# Build artifacts
+bin/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Generated reports
+HEAL_AUDIT_REPORT.md
+
+# OS
+.DS_Store

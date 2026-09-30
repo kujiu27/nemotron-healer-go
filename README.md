@@ -41,15 +41,15 @@ When CI tests fail or breaking changes break your codebase, developers waste hou
 ## 🚀 Quick Start
 
 ### 1. Download Binary
-Download the pre-compiled binary for your architecture from [Releases](https://github.com/nemotron-healer/nemotron-healer-go/releases):
+Download the pre-compiled binary for your architecture from [Releases](https://github.com/kujiu27/nemotron-healer-go/releases):
 
 ```bash
 # macOS Apple Silicon (M1/M2/M3/M4)
-curl -fsSL https://github.com/nemotron-healer/nemotron-healer-go/releases/download/v0.2.0/nemotron-healer_darwin_arm64 -o /usr/local/bin/nemotron-healer
+curl -fsSL https://github.com/kujiu27/nemotron-healer-go/releases/download/v0.2.0/nemotron-healer_darwin_arm64 -o /usr/local/bin/nemotron-healer
 chmod +x /usr/local/bin/nemotron-healer
 
 # Linux x86_64
-curl -fsSL https://github.com/nemotron-healer/nemotron-healer-go/releases/download/v0.2.0/nemotron-healer_linux_amd64 -o /usr/local/bin/nemotron-healer
+curl -fsSL https://github.com/kujiu27/nemotron-healer-go/releases/download/v0.2.0/nemotron-healer_linux_amd64 -o /usr/local/bin/nemotron-healer
 chmod +x /usr/local/bin/nemotron-healer
 ```
 
