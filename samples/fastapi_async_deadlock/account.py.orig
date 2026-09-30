@@ -1,0 +1,21 @@
+"""Concurrent banking transaction service suffering from an async race condition."""
+
+import asyncio
+from typing import Dict
+
+
+class BankLedger:
+    def __init__(self, initial_balance: float = 1000.0):
+        self.balance = initial_balance
+
+    async def transfer(self, amount: float):
+        """Simulate async transfer with non-atomic state mutation (Race Condition)."""
+        current = self.balance
+        # Simulate I/O latency exposing race condition
+        await asyncio.sleep(0.001)
+        self.balance = current - amount
+
+    async def deposit(self, amount: float):
+        current = self.balance
+        await asyncio.sleep(0.001)
+        self.balance = current + amount

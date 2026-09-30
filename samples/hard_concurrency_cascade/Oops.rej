@@ -1,0 +1,17 @@
+@@ -14,8 +14,9 @@
+     async def mutate_balance(self, account_id: str, delta: float):
+-        """Mutate balance without proper re-entrant synchronization (RACE CONDITION!)."""
+-        curr = self.balance
+-        # Simulate asynchronous I/O context switch
+-        await asyncio.sleep(0.002)
+-        self.balance = curr + delta
+-        self.auditor.record(account_id, delta, self.balance)
+-        return self.balance
++        """Mutate balance with proper re-entrant synchronization."""
++        async with self.lock:
++            curr = self.balance
++            # Simulate asynchronous I/O context switch
++            await asyncio.sleep(0.002)
++            self.balance = curr + delta
++            self.auditor.record(account_id, delta, self.balance)
++            return self.balance
