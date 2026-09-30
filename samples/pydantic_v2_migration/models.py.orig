@@ -1,0 +1,30 @@
+"""Sample application models written with legacy Pydantic v1 syntax."""
+
+from typing import List, Optional
+from pydantic import BaseModel, validator
+
+
+class Item(BaseModel):
+    id: int
+    name: str
+    price: float
+    tags: List[str] = []
+
+    class Config:
+        orm_mode = True
+
+    @validator("price")
+    def check_price(cls, v):
+        if v <= 0:
+            raise ValueError("Price must be positive")
+        return v
+
+
+class Order(BaseModel):
+    order_id: str
+    items: List[Item]
+    total: float = 0.0
+
+    @classmethod
+    def from_raw(cls, data: dict):
+        return cls.parse_obj(data)
