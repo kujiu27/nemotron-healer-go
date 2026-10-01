@@ -44,6 +44,18 @@ var RootCmd = &cobra.Command{
 		}
 
 		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ Nemotron-Healer (Go Edition)"))
+
+		// Zero-Config Ecosystem Sniffer: Auto-detect test runner if not specified
+		if testCmdFlag == "" {
+			detectedCmd, ecosystem, err := engine.DetectTestCommand(absDir)
+			if err != nil {
+				return fmt.Errorf("no test command specified and could not auto-detect ecosystem: %w (please specify with -c or --command)", err)
+			}
+			testCmdFlag = detectedCmd
+			fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render(
+				fmt.Sprintf("🔍 Zero-Config Ecosystem Sniffer: Auto-detected %s -> `%s`", ecosystem, testCmdFlag)))
+		}
+
 		fmt.Printf("Target: %s\nCommand: `%s`\nMax Turns: %d\n\n", absDir, testCmdFlag, turnsFlag)
 
 		if noTUIFlag {
@@ -167,7 +179,7 @@ var versionCmd = &cobra.Command{
 }
 
 func init() {
-	RootCmd.PersistentFlags().StringVarP(&testCmdFlag, "command", "c", "pytest", "Test command to run for reproduction and verification")
+	RootCmd.PersistentFlags().StringVarP(&testCmdFlag, "command", "c", "", "Test command to run (default: auto-detected from ecosystem: go test, pytest, npm test, cargo test, make test)")
 	RootCmd.PersistentFlags().IntVarP(&turnsFlag, "turns", "t", 5, "Maximum healing attempts")
 	RootCmd.PersistentFlags().BoolVar(&noTUIFlag, "no-tui", false, "Disable TUI and output plain text (for CI / GitHub Actions)")
 	RootCmd.PersistentFlags().BoolVar(&searchFlag, "search", false, "Enable Test-Time Compute (TTC) MCTS multi-branch search")

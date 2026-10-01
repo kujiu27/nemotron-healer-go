@@ -68,6 +68,10 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 		var wg sync.WaitGroup
 		var mu sync.Mutex
 
+		// Concurrency semaphore: cap concurrent in-flight Nebius inference requests
+		maxConcurrency := 3
+		sem := make(chan struct{}, maxConcurrency)
+
 		type branchResult struct {
 			childID     string
 			childNode   *mcts.Node
@@ -88,6 +92,10 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 
 			go func(idx int, h MCTSHypothesis, cID string) {
 				defer wg.Done()
+
+				// Acquire inference semaphore
+				sem <- struct{}{}
+				defer func() { <-sem }()
 
 				promptMessages := []client.ChatMessage{
 					{Role: "system", Content: "You are an autonomous MCTS code synthesis engine exploring a specific hypothesis branch. Output exact, surgical unified diff patches."},
