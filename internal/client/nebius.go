@@ -7,11 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/nemotron-healer/nemotron-healer-go/internal/sandbox"
 )
 
 type NebiusClient struct {
@@ -70,10 +73,11 @@ type StreamChunk struct {
 }
 
 type PatchSuggestion struct {
-	Analysis     string `json:"analysis"`
-	ThoughtChain string `json:"thought_chain,omitempty"`
-	TargetFile   string `json:"target_file"`
-	DiffPatch    string `json:"diff_patch"`
+	Analysis     string   `json:"analysis"`
+	ThoughtChain string   `json:"thought_chain,omitempty"`
+	TargetFile   string   `json:"target_file"`
+	TargetFiles  []string `json:"target_files,omitempty"`
+	DiffPatch    string   `json:"diff_patch"`
 }
 
 // NewNebiusClient builds the inference client.
@@ -110,6 +114,68 @@ func NewNebiusClient() *NebiusClient {
 	}
 }
 
+// executeWithRetry wraps HTTP requests with exponential backoff and jitter for transient errors (429, 5xx)
+func (c *NebiusClient) executeWithRetry(ctx context.Context, createReq func() (*http.Request, error)) (*http.Response, error) {
+	maxRetries := 3
+	baseDelay := 500 * time.Millisecond
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		req, err := createReq()
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := c.HTTP.Do(req)
+		if err != nil {
+			if attempt == maxRetries || ctx.Err() != nil {
+				return nil, err
+			}
+		} else if resp.StatusCode == http.StatusOK {
+			return resp, nil
+		} else if resp.StatusCode == http.StatusTooManyRequests ||
+			resp.StatusCode == http.StatusBadGateway ||
+			resp.StatusCode == http.StatusServiceUnavailable ||
+			resp.StatusCode == http.StatusGatewayTimeout ||
+			resp.StatusCode == http.StatusInternalServerError {
+
+			if attempt == maxRetries || ctx.Err() != nil {
+				return resp, nil
+			}
+
+			retrySec := 0
+			if ra := resp.Header.Get("Retry-After"); ra != "" {
+				fmt.Sscanf(ra, "%d", &retrySec)
+			}
+			resp.Body.Close()
+
+			var backoff time.Duration
+			if retrySec > 0 {
+				backoff = time.Duration(retrySec) * time.Second
+			} else {
+				multiplier := 1 << attempt
+				jitter := time.Duration(rand.Intn(250)) * time.Millisecond
+				backoff = time.Duration(multiplier)*baseDelay + jitter
+			}
+
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+			}
+			continue
+		} else {
+			return resp, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(baseDelay * time.Duration(1<<attempt)):
+		}
+	}
+	return nil, fmt.Errorf("exceeded max retries")
+}
+
 // StreamCompletion sends a chat request and calls onToken for each incoming streaming token.
 func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMessage, onToken func(string)) (string, int, int, error) {
 	reqBody := ChatRequest{
@@ -126,14 +192,16 @@ func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMess
 	}
 
 	url := strings.TrimRight(c.BaseURL, "/") + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))
-	if err != nil {
-		return "", 0, 0, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	newReq := func() (*http.Request, error) {
+		r, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		r.Header.Set("Content-Type", "application/json")
+		if c.APIKey != "" {
+			r.Header.Set("Authorization", "Bearer "+c.APIKey)
+		}
+		return r, nil
 	}
 
 	startTime := time.Now()
@@ -143,7 +211,7 @@ func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMess
 	serverPromptTokens := 0
 	serverCompletionTokens := 0
 
-	resp, err := c.HTTP.Do(req)
+	resp, err := c.executeWithRetry(ctx, newReq)
 	if err != nil {
 		return "", 0, 0, err
 	}
@@ -243,8 +311,8 @@ Fix the broken codebase by generating a surgical Unified Diff patch.
 
 INSTRUCTIONS:
 1. Provide a concise root cause analysis matching the defect archetype.
-2. Output the exact relative target file path in [TARGET_FILE]path/to/file[/TARGET_FILE].
-3. Output the exact, valid unified diff patch in a `+"```diff"+` block starting with:
+2. Output the exact relative target file path in [TARGET_FILE]path/to/file[/TARGET_FILE]. If modifying multiple files, output multiple [TARGET_FILE]path[/TARGET_FILE] tags or specify them directly in the multi-file unified diff headers.
+3. Output the exact, valid atomic unified diff patch in a `+"```diff"+` block starting with:
 --- a/path/to/file
 +++ b/path/to/file
 @@ ... @@
@@ -260,12 +328,6 @@ Do NOT omit the unified diff block.`, testCmd, stderr+"\n"+stdout, archetypeCont
 		return nil, 0, 0, err
 	}
 
-	targetFile := ""
-	reTarget := regexp.MustCompile(`\[TARGET_FILE\](.*?)\[/TARGET_FILE\]`)
-	if m := reTarget.FindStringSubmatch(fullText); len(m) > 1 {
-		targetFile = strings.TrimSpace(m[1])
-	}
-
 	diffPatch := ""
 	reDiff := regexp.MustCompile("(?s)```(?:diff|patch)?\r?\n(.*?)```")
 	if m := reDiff.FindStringSubmatch(fullText); len(m) > 1 {
@@ -279,10 +341,36 @@ Do NOT omit the unified diff block.`, testCmd, stderr+"\n"+stdout, archetypeCont
 		fmt.Printf("[DEBUG RAW LLM RESPONSE]\n%s\n[/DEBUG RAW LLM RESPONSE]\n", fullText)
 	}
 
+	targetFiles := sandbox.ExtractModifiedFiles(diffPatch)
+	reTarget := regexp.MustCompile(`\[TARGET_FILE\](.*?)\[/TARGET_FILE\]`)
+	for _, m := range reTarget.FindAllStringSubmatch(fullText, -1) {
+		if len(m) > 1 {
+			f := strings.TrimSpace(m[1])
+			if f != "" {
+				found := false
+				for _, tf := range targetFiles {
+					if tf == f {
+						found = true
+						break
+					}
+				}
+				if !found {
+					targetFiles = append([]string{f}, targetFiles...)
+				}
+			}
+		}
+	}
+
+	targetFile := ""
+	if len(targetFiles) > 0 {
+		targetFile = targetFiles[0]
+	}
+
 	return &PatchSuggestion{
-		Analysis:   fullText,
-		TargetFile: targetFile,
-		DiffPatch:  diffPatch,
+		Analysis:    fullText,
+		TargetFile:  targetFile,
+		TargetFiles: targetFiles,
+		DiffPatch:   diffPatch,
 	}, pTokens, cTokens, nil
 }
 
@@ -325,16 +413,19 @@ QUERY: <query>
 	}
 
 	url := strings.TrimRight(c.BaseURL, "/") + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	newReq := func() (*http.Request, error) {
+		r, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		r.Header.Set("Content-Type", "application/json")
+		if c.APIKey != "" {
+			r.Header.Set("Authorization", "Bearer "+c.APIKey)
+		}
+		return r, nil
 	}
 
-	resp, err := c.HTTP.Do(req)
+	resp, err := c.executeWithRetry(ctx, newReq)
 	if err != nil {
 		return nil, 0, 0, err
 	}

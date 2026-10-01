@@ -284,9 +284,13 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			targetFile = targetHint
 		}
 
-		// 5. Apply Patch in Sandbox
-		a.notify(StateVerifyingSandbox, fmt.Sprintf("Applying patch to `%s`...", targetFile), nil)
-		applied, applyMsg := a.Patcher.ApplyPatch(patchSug.DiffPatch, targetFile)
+		// 5. Apply Atomic Patch in Sandbox
+		targetSummary := fmt.Sprintf("`%s`", targetFile)
+		if len(patchSug.TargetFiles) > 1 {
+			targetSummary = fmt.Sprintf("%d files (`%s`)", len(patchSug.TargetFiles), strings.Join(patchSug.TargetFiles, "`, `"))
+		}
+		a.notify(StateVerifyingSandbox, fmt.Sprintf("Applying atomic patch across %s...", targetSummary), nil)
+		applied, applyMsg := a.Patcher.ApplyPatch(patchSug.DiffPatch, patchSug.TargetFiles...)
 		a.notify(StateVerifyingSandbox, fmt.Sprintf("Patch strategy: %s", applyMsg), nil)
 
 		if !applied {

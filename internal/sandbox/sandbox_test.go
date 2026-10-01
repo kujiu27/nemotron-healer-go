@@ -190,3 +190,110 @@ func TestRollbackRemovesFilesCreatedAfterCheckpoint(t *testing.T) {
 		t.Fatal("pre-existing untracked file deleted by rollback")
 	}
 }
+
+func TestExtractModifiedFiles(t *testing.T) {
+	diff := `--- a/pkg/client.go	2026-10-01 10:00:00
++++ b/pkg/client.go	2026-10-01 10:05:00
+@@ -10,2 +10,2 @@
+--- a/internal/engine/agent.go
++++ b/internal/engine/agent.go
+@@ -50,3 +50,3 @@
+--- /dev/null
++++ b/pkg/newfile.go
+`
+	files := ExtractModifiedFiles(diff)
+	if len(files) != 3 {
+		t.Fatalf("expected 3 files, got %d: %v", len(files), files)
+	}
+	expected := map[string]bool{"pkg/client.go": true, "internal/engine/agent.go": true, "pkg/newfile.go": true}
+	for _, f := range files {
+		if !expected[f] {
+			t.Errorf("unexpected file in diff: %s", f)
+		}
+	}
+}
+
+func TestMultiFileAtomicPatching(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "multifile_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	file1 := filepath.Join(tmpDir, "file1.txt")
+	file2 := filepath.Join(tmpDir, "file2.txt")
+	if err := os.WriteFile(file1, []byte("Hello Alice\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file2, []byte("Hello Bob\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	diff := `--- a/file1.txt
++++ b/file1.txt
+@@ -1 +1 @@
+-Hello Alice
++Hello Carol
+--- a/file2.txt
++++ b/file2.txt
+@@ -1 +1 @@
+-Hello Bob
++Hello Dave
+`
+
+	patcher := NewPatcher(tmpDir)
+	applied, msg := patcher.ApplyPatch(diff)
+	if !applied {
+		t.Fatalf("multi-file patch application failed: %s", msg)
+	}
+
+	b1, _ := os.ReadFile(file1)
+	b2, _ := os.ReadFile(file2)
+	if string(b1) != "Hello Carol\n" {
+		t.Fatalf("file1 not updated correctly: %q", string(b1))
+	}
+	if string(b2) != "Hello Dave\n" {
+		t.Fatalf("file2 not updated correctly: %q", string(b2))
+	}
+}
+
+func TestMultiFileSecurityViolationBlocksAll(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sec_multi_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	validFile := filepath.Join(tmpDir, "valid.txt")
+	if err := os.WriteFile(validFile, []byte("original\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Diff attempts to patch a valid file AND tamper with .env or escape workspace
+	diff := `--- a/valid.txt
++++ b/valid.txt
+@@ -1 +1 @@
+-original
++tampered
+--- a/.env
++++ b/.env
+@@ -1 +1 @@
+-KEY=old
++KEY=leaked
+`
+
+	patcher := NewPatcher(tmpDir)
+	applied, msg := patcher.ApplyPatch(diff)
+	if applied {
+		t.Fatalf("expected multi-file security violation to be blocked, but patch was applied!")
+	}
+	if !strings.Contains(msg, "Security Sandbox Blocked") {
+		t.Fatalf("expected security sandbox blocked message, got: %s", msg)
+	}
+
+	// Ensure the valid file was NOT modified (strict transaction atomicity)
+	b1, _ := os.ReadFile(validFile)
+	if string(b1) != "original\n" {
+		t.Fatalf("valid file was partially modified despite security block: %q", string(b1))
+	}
+}
