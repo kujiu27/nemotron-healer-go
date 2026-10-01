@@ -18,11 +18,16 @@ When CI tests fail or breaking changes break your codebase, developers waste hou
 **Nemotron-Healer** is an in-situ autonomous agent that runs directly in your terminal or GitHub Actions:
 
 1. **Reproduction (Red State)**: Executes the failing test command and isolates the precise execution trace.
-2. **AST Blast Radius Analysis**: Statically maps the codebase symbol graph and evaluates the downstream blast radius across files.
+2. **Symbol Graph Blast Radius Analysis**: Maps the codebase symbol graph (Go via `go/parser` AST; Python/TS/JS via line grammars) and scores downstream blast radius across files.
 3. **Dynamic Knowledge Grounding**: Queries **Tavily Search API** for up-to-the-minute official migration guides and documentation, bypassing LLM knowledge cutoffs.
 4. **Surgical Patch Synthesis**: Prompts **NVIDIA Nemotron 3 Ultra** on **Nebius Token Factory** for minimal, atomic Unified Diff patches.
 5. **Transactional Sandbox & Adversarial Falsification**: Applies patches with atomic rollback safeguards, verifies test passes, and generates adversarial edge-case tests to eliminate AI patch overfitting.
 6. **Git PR Automation**: Commits verified patches directly into a dedicated fix branch (`fix/nemotron-heal-xxx`).
+
+> **Execution model & trust boundary:** the agent runs your test command as-is inside the workspace
+> (plain `sh -c`, no container isolation) and executes model-generated patches and adversarial tests.
+> Rollback uses file snapshots plus a manifest so created files are removed exactly. Run it on CI
+> runners or disposable worktrees — not on machines holding production secrets.
 
 ---
 
@@ -30,9 +35,9 @@ When CI tests fail or breaking changes break your codebase, developers waste hou
 
 | Metric | Legacy Python Approach | **Nemotron-Healer (Go)** |
 | :--- | :--- | :--- |
-| **Cold Start Latency** | ~450ms (interpreter + imports) | **< 5ms (Instant native wake)** |
-| **Memory Footprint** | ~65MB | **~14MB** |
-| **Distribution** | Requires Python 3.11+, pip, venv | **Single Static Binary (6.9MB)** |
+| **Hot Start Latency** | ~450ms (interpreter + imports) | **< 10ms measured** (`/usr/bin/time`, darwin/arm64) |
+| **Memory Footprint** | ~65MB | **~12.3MB RSS measured** |
+| **Distribution** | Requires Python 3.11+, pip, venv | **Single Static Binary (~7.3MB, `-s -w`)** |
 | **CI Setup Time** | 30s ~ 60s (`setup-python`, `pip install`) | **< 1s (`wget` release binary)** |
 | **Terminal UX** | Basic text logs | **Cyberpunk TUI (`bubbletea` + `lipgloss`)** |
 

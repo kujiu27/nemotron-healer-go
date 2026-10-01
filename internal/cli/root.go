@@ -112,8 +112,8 @@ var doctorCmd = &cobra.Command{
 
 		nebius := client.NewNebiusClient()
 		fmt.Printf("• Inference Endpoint: %s\n", nebius.BaseURL)
-		fmt.Printf("• Fast Triage Model:  %s\n", nebius.FastModel)
-		fmt.Printf("• Reasoning Brain:    %s\n", nebius.ReasoningModel)
+		fmt.Printf("• Reasoning Model:    %s\n", nebius.ReasoningModel)
+		fmt.Printf("• Catalog Pricing:    $1.00/1M in, $3.00/1M out\n")
 
 		// Active Network RTT Probe against Inference Endpoint
 		nebiusStart := time.Now()
@@ -170,7 +170,7 @@ func init() {
 	RootCmd.PersistentFlags().IntVarP(&turnsFlag, "turns", "t", 5, "Maximum healing attempts")
 	RootCmd.PersistentFlags().BoolVar(&noTUIFlag, "no-tui", false, "Disable TUI and output plain text (for CI / GitHub Actions)")
 	RootCmd.PersistentFlags().BoolVar(&searchFlag, "search", false, "Enable Test-Time Compute (TTC) MCTS multi-branch search")
-	RootCmd.PersistentFlags().BoolVar(&arenaFlag, "arena", false, "Enable Red-Blue Minimax Adversarial Self-Play Arena")
+	RootCmd.PersistentFlags().BoolVar(&arenaFlag, "arena", false, "Enable Red-Blue Adversarial Self-Play Arena (attack/defend rounds)")
 	RootCmd.PersistentFlags().BoolVar(&jsonFlag, "json", false, "Output machine-readable telemetry JSON to stdout")
 	RootCmd.PersistentFlags().BoolVarP(&autoAcceptFlag, "yes", "y", false, "Automatically accept and commit without interactive prompt (default in CI)")
 

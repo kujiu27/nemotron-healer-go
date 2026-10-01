@@ -20,14 +20,16 @@ type MCTSSearchResult struct {
 	DurationSeconds float64
 }
 
-// RunMCTSSearch executes Test-Time Compute (TTC) Monte Carlo Tree Search across code mutation hypotheses.
+// RunMCTSSearch executes Test-Time Compute (TTC) search across code mutation hypotheses:
+// breadth-first archetype-guided expansion with sandbox rollouts, UCB1 selection, and
+// feedback-guided depth-2 refinement of candidates that pass base tests but fail adversarial ones.
 func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, budgetNodes int) (*MCTSSearchResult, error) {
 	if budgetNodes <= 0 {
 		budgetNodes = 6
 	}
 
 	start := time.Now()
-	a.notify(StateDiagnosing, fmt.Sprintf("⚡ Launching Test-Time Compute (TTC) MCTS Search Engine (Node Budget: %d)...", budgetNodes), nil)
+	a.notify(StateDiagnosing, fmt.Sprintf("⚡ Launching Test-Time Compute search: hypothesis tree, UCB1 selection, depth-2 refinement (node budget: %d)...", budgetNodes), nil)
 
 	// Step 0: Root node represents initial broken state
 	root := mcts.NewNode("root", nil, "", "", "Initial Failing State")

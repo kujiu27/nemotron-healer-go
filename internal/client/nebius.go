@@ -18,7 +18,6 @@ type NebiusClient struct {
 	APIKey         string
 	BaseURL        string
 	Model          string
-	FastModel      string
 	ReasoningModel string
 	HTTP           *http.Client
 	LastTTFT       float64
@@ -79,6 +78,8 @@ type PatchSuggestion struct {
 // NewNebiusClient builds the inference client.
 // Defaults comply with the Nebius x NVIDIA hackathon rules:
 // Nebius Token Factory endpoint + NVIDIA Nemotron open models.
+// Model ID verified against the official catalog (tokenfactory.nebius.com/model-catalog.md):
+// nvidia/Nemotron-3-Ultra-550b-a55b — $1.00/1M input, $3.00/1M output.
 // Local/self-hosted gateways are opt-in via NEBIUS_BASE_URL (+ NEBIUS_MODEL, optional NEBIUS_API_KEY).
 func NewNebiusClient() *NebiusClient {
 	apiKey := os.Getenv("NEBIUS_API_KEY")
@@ -88,18 +89,15 @@ func NewNebiusClient() *NebiusClient {
 		baseURL = "https://api.tokenfactory.nebius.com/v1"
 	}
 
-	fastModel := "nvidia/nemotron-mini-4b"
-	reasoningModel := "nvidia/nemotron-3-ultra"
+	reasoningModel := "nvidia/Nemotron-3-Ultra-550b-a55b"
 	if envModel := os.Getenv("NEBIUS_MODEL"); envModel != "" {
 		reasoningModel = envModel
-		fastModel = envModel
 	}
 
 	return &NebiusClient{
 		APIKey:         apiKey,
 		BaseURL:        baseURL,
 		Model:          reasoningModel,
-		FastModel:      fastModel,
 		ReasoningModel: reasoningModel,
 		HTTP:           &http.Client{Timeout: 120 * time.Second},
 	}

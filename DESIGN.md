@@ -42,8 +42,8 @@ Standard Large Language Model (LLM) coding assistants operate in an **unverified
                  ┌──────────────────────────────┴──────────────────────────────┐
                  ▼                                                             ▼
      ┌───────────────────────┐                                     ┌───────────────────────┐
-     │ AST CodeGraph Engine  │                                     │ Sandboxed Test Runner │
-     │ - Symbol Extraction   │                                     │ - In-situ Execution   │
+     │ Symbol Graph Engine   │                                     │ Test Runner (in-situ) │
+     │ - Symbol Extraction   │                                     │ - Workspace Execution │
      │ - Call Graph Inversion│                                     │ - Output / Trace Parse│
      │ - Blast Radius Calc   │                                     │ - Exit Code Isolation │
      └───────────┬───────────┘                                     └───────────┬───────────┘
@@ -108,14 +108,18 @@ Rather than passing raw, unstructured error traces to the model, the hybrid clas
 | **`ResourceLeak`** | `ResourceWarning`, `unclosed`, `connection pool exhausted` | • MUST enforce context managers or defer cleanup blocks. |
 | **`NullTypeError`** | `NoneType`, `nil pointer dereference`, `AttributeError` | • MUST introduce defensive guard clauses with safe defaults. |
 
-### 3.2 AST CodeGraph & Quantitative Blast Radius
-The AST engine (`internal/ast/blast_radius.go`) builds a directed symbol dependency graph $G = (V, E)$ across the workspace where:
-- $V$: Extracted class definitions, methods, and functions.
+### 3.2 Symbol Graph & Quantitative Blast Radius
+The graph engine (`internal/ast/blast_radius.go`) scans workspace source files (`.py`, `.go`, `.ts`, `.js`)
+to extract symbols and caller→callee reference edges: Go files are parsed with the standard `go/parser`
+AST; Python/TS/JS use per-language line grammars. It builds a directed graph $G = (V, E)$ where:
+- $V$: Extracted class definitions and functions.
 - $E$: Caller $\to$ Callee dependency edges.
 
 The **Blast Radius Risk Score ($R$)** is formulated as:
 $$R = \min\left(1.0, \; \frac{|\text{TransitiveDependents}(s)| + |\text{AffectedFiles}(s)|}{0.5 \times |V|}\right)$$
-Where $s$ is the target symbol undergoing mutation. If $R > 0.7$, the agent flags high architectural sensitivity and restricts unified diffs to non-signature-breaking internal optimizations.
+Where $s$ is the target symbol undergoing mutation. When $R > 0.7$, a `CRITICAL BLAST CONSTRAINT`
+is injected into the patch-synthesis prompt demanding non-signature-breaking repairs; $R$ is also
+penalized in the search reward function (weight 0.10), biasing selection toward smaller-blast-radius fixes.
 
 ### 3.3 Dynamic Knowledge Grounding (Tavily API)
 When dealing with `InterfaceBreaking` or external library failures, relying on static LLM weights guarantees hallucinations. The agent:

@@ -29,12 +29,17 @@ type TokenLedger struct {
 	SavingsPercentage float64 `json:"savings_percentage"`
 }
 
+// Nemotron-3-Ultra-550b-a55b Token Factory catalog prices (USD per 1M tokens).
+const (
+	PricePromptPerMillion     = 1.00
+	PriceCompletionPerMillion = 3.00
+)
+
 func (l *TokenLedger) CalculateCost() {
 	l.TotalTokens = l.PromptTokens + l.CompletionTokens
-	// Nebius pricing ~$0.20 per 1M tokens
-	cost := (float64(l.PromptTokens)*0.10 + float64(l.CompletionTokens)*0.30) / 1_000_000.0
+	cost := (float64(l.PromptTokens)*PricePromptPerMillion + float64(l.CompletionTokens)*PriceCompletionPerMillion) / 1_000_000.0
 	l.EstimatedCostUSD = cost
-	// Benchmark vs Human Developer (30min @ $50/hr = $25.00)
+	// Reference point only: 30min engineer triage @ $50/hr.
 	humanCost := 25.0
 	if cost < humanCost {
 		l.SavingsPercentage = ((humanCost - cost) / humanCost) * 100.0

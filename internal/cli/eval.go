@@ -25,12 +25,13 @@ type BenchmarkCase struct {
 }
 
 var ablationFlag bool
+var repeatFlag int
 
 var evalCmd = &cobra.Command{
-	Use:   "eval",
-	Short: "Run the official Autonomous Healer Benchmark (AHB-4) with sandboxed isolation and A/B ablation",
+	Short: "Run the in-repo Autonomous Healer Benchmark (AHB-4) with sandboxed isolation, A/B ablation, and repeat runs",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ Official AHB-4 Scientific Benchmark & Ablation Engine"))
+		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ AHB-4 In-Repo Benchmark & Ablation Engine"))
+		fmt.Printf("Repeats per case: %d\n\n", max(1, repeatFlag))
 		fmt.Println("Grounded against Concurrency, API Breaking Migrations, and Re-entrancy Traps")
 		fmt.Println()
 
@@ -107,8 +108,13 @@ var evalCmd = &cobra.Command{
 
 		results := make([]EvalRunResult, 0)
 
-		for idx, c := range cases {
-			fmt.Printf("[%d/%d] Sandboxing & Evaluating %s (%s)...\n", idx+1, len(cases), c.ID, c.Name)
+		totalRuns := max(1, repeatFlag)
+		for rep := 1; rep <= totalRuns; rep++ {
+			if totalRuns > 1 {
+				fmt.Printf("— Repeat %d/%d —\n", rep, totalRuns)
+			}
+			for idx, c := range cases {
+				fmt.Printf("[%d/%d] Sandboxing & Evaluating %s (%s)...\n", idx+1, len(cases), c.ID, c.Name)
 
 		// Step 1: Create clean isolated temporary sandboxes (one per arm)
 		tmpDir, err := createIsolatedSandbox(c.Path)
@@ -149,10 +155,11 @@ var evalCmd = &cobra.Command{
 				DurationS:    dur,
 				CostUSD:      session.TokenLedger.EstimatedCostUSD,
 			})
+			}
 		}
 
 		// Print Comparative A/B Ablation Scorecard Table
-		fmt.Println("\n" + lipgloss.NewStyle().Bold(true).Render("📊 Official AHB-4 Ablation Scorecard (NVIDIA x Nebius x Tavily)"))
+		fmt.Println("\n" + lipgloss.NewStyle().Bold(true).Render("📊 AHB-4 Ablation Scorecard (NVIDIA x Nebius x Tavily)"))
 		fmt.Println("=====================================================================================================")
 		fmt.Printf("%-8s | %-24s | %-16s | %-12s | %-12s | %-6s | %-8s\n",
 			"Case ID", "Benchmark Scenario", "Defect Archetype", "Baseline LLM", "Full System", "Turns", "Cost ($)")
@@ -261,5 +268,6 @@ func max(a, b int) int {
 
 func init() {
 	evalCmd.Flags().BoolVar(&ablationFlag, "ablation", true, "Perform side-by-side A/B ablation against baseline ungrounded model")
+	evalCmd.Flags().IntVar(&repeatFlag, "repeat", 1, "Repeat each benchmark case N times to expose variance")
 	RootCmd.AddCommand(evalCmd)
 }
