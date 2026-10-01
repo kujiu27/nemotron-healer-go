@@ -2,12 +2,33 @@ package ast
 
 import (
 	"bufio"
+	goast "go/ast"
+	"go/parser"
+	"go/token"
 	"math"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 )
+
+var reservedKeywords = map[string]bool{
+	"if": true, "else": true, "elif": true, "for": true, "while": true, "switch": true,
+	"case": true, "default": true, "break": true, "continue": true, "return": true,
+	"with": true, "as": true, "try": true, "except": true, "finally": true, "catch": true,
+	"throw": true, "raise": true, "assert": true, "import": true, "from": true, "class": true,
+	"def": true, "func": true, "function": true, "var": true, "let": true, "const": true,
+	"package": true, "type": true, "struct": true, "interface": true, "select": true,
+	"go": true, "defer": true, "make": true, "new": true, "len": true, "cap": true,
+	"append": true, "print": true, "println": true, "range": true, "yield": true,
+	"async": true, "await": true, "lambda": true, "pass": true, "in": true, "is": true,
+	"not": true, "and": true, "or": true, "true": true, "false": true, "none": true,
+	"nil": true, "null": true, "self": true, "this": true, "super": true,
+}
+
+func isBuiltinKeyword(name string) bool {
+	return reservedKeywords[strings.ToLower(name)]
+}
 
 type SymbolNode struct {
 	Name      string   `json:"name"`
@@ -51,7 +72,6 @@ func (g *CodeGraph) BuildGraph() error {
 
 	pyFuncRegex := regexp.MustCompile(`^(?:async\s+)?def\s+([a-zA-Z0-9_]+)\s*\(`)
 	pyClassRegex := regexp.MustCompile(`^class\s+([a-zA-Z0-9_]+)\b`)
-	goFuncRegex := regexp.MustCompile(`^func\s+(?:\([^\)]+\)\s*)?([a-zA-Z0-9_]+)\s*\(`)
 	tsFuncRegex := regexp.MustCompile(`^(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z0-9_]+)\s*\(`)
 	tsClassRegex := regexp.MustCompile(`^(?:export\s+)?class\s+([a-zA-Z0-9_]+)\b`)
 	tsArrowRegex := regexp.MustCompile(`^(?:export\s+)?const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(`)
@@ -83,6 +103,11 @@ func (g *CodeGraph) BuildGraph() error {
 			return nil
 		}
 
+		// Use Go standard library AST parser for Go files
+		if ext == ".go" {
+			return g.parseGoAST(path, rel)
+		}
+
 		file, err := os.Open(path)
 		if err != nil {
 			return nil
@@ -93,6 +118,7 @@ func (g *CodeGraph) BuildGraph() error {
 		lineNum := 0
 
 		var currentSym *SymbolNode
+		var currentClass string
 
 		for scanner.Scan() {
 			lineNum++
@@ -102,25 +128,27 @@ func (g *CodeGraph) BuildGraph() error {
 			// Function or class match
 			var name, kind string
 			if ext == ".py" {
-				if m := pyFuncRegex.FindStringSubmatch(trimmed); len(m) > 1 {
-					name = m[1]
-					kind = "function"
-				} else if m := pyClassRegex.FindStringSubmatch(trimmed); len(m) > 1 {
+				if m := pyClassRegex.FindStringSubmatch(trimmed); len(m) > 1 {
 					name = m[1]
 					kind = "class"
-				}
-			} else if ext == ".go" {
-				if m := goFuncRegex.FindStringSubmatch(trimmed); len(m) > 1 {
-					name = m[1]
+					currentClass = name
+				} else if m := pyFuncRegex.FindStringSubmatch(trimmed); len(m) > 1 {
+					if currentClass != "" && strings.HasPrefix(line, "    ") {
+						name = currentClass + "." + m[1]
+					} else {
+						name = m[1]
+						currentClass = ""
+					}
 					kind = "function"
 				}
 			} else if ext == ".ts" || ext == ".js" {
-				if m := tsFuncRegex.FindStringSubmatch(trimmed); len(m) > 1 {
-					name = m[1]
-					kind = "function"
-				} else if m := tsClassRegex.FindStringSubmatch(trimmed); len(m) > 1 {
+				if m := tsClassRegex.FindStringSubmatch(trimmed); len(m) > 1 {
 					name = m[1]
 					kind = "class"
+					currentClass = name
+				} else if m := tsFuncRegex.FindStringSubmatch(trimmed); len(m) > 1 {
+					name = m[1]
+					kind = "function"
 				} else if m := tsArrowRegex.FindStringSubmatch(trimmed); len(m) > 1 {
 					name = m[1]
 					kind = "function"
@@ -144,11 +172,11 @@ func (g *CodeGraph) BuildGraph() error {
 				g.FileSymbols[rel] = append(g.FileSymbols[rel], key)
 			}
 
-			// Capture calls
+			// Capture calls with keyword filtering
 			if currentSym != nil {
 				matches := callRegex.FindAllStringSubmatch(trimmed, -1)
 				for _, match := range matches {
-					if len(match) > 1 && match[1] != currentSym.Name {
+					if len(match) > 1 && match[1] != currentSym.Name && !isBuiltinKeyword(match[1]) {
 						currentSym.Calls = append(currentSym.Calls, match[1])
 					}
 				}
@@ -173,6 +201,76 @@ func (g *CodeGraph) BuildGraph() error {
 	}
 
 	return err
+}
+
+func (g *CodeGraph) parseGoAST(path, rel string) error {
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+	if err != nil {
+		return err
+	}
+
+	goast.Inspect(node, func(n goast.Node) bool {
+		funcDecl, ok := n.(*goast.FuncDecl)
+		if !ok {
+			return true
+		}
+
+		symName := funcDecl.Name.Name
+		if funcDecl.Recv != nil && len(funcDecl.Recv.List) > 0 {
+			recvType := ""
+			switch t := funcDecl.Recv.List[0].Type.(type) {
+			case *goast.StarExpr:
+				if ident, ok := t.X.(*goast.Ident); ok {
+					recvType = ident.Name
+				}
+			case *goast.Ident:
+				recvType = t.Name
+			}
+			if recvType != "" {
+				symName = recvType + "." + symName
+			}
+		}
+
+		startPos := fset.Position(funcDecl.Pos())
+		endPos := fset.Position(funcDecl.End())
+
+		key := rel + "::" + symName
+		symNode := &SymbolNode{
+			Name:      symName,
+			Kind:      "function",
+			FilePath:  rel,
+			LineStart: startPos.Line,
+			LineEnd:   endPos.Line,
+			Calls:     make([]string, 0),
+		}
+
+		if funcDecl.Body != nil {
+			goast.Inspect(funcDecl.Body, func(bodyNode goast.Node) bool {
+				call, ok := bodyNode.(*goast.CallExpr)
+				if !ok {
+					return true
+				}
+				switch fun := call.Fun.(type) {
+				case *goast.Ident:
+					if !isBuiltinKeyword(fun.Name) {
+						symNode.Calls = append(symNode.Calls, fun.Name)
+					}
+				case *goast.SelectorExpr:
+					if !isBuiltinKeyword(fun.Sel.Name) {
+						symNode.Calls = append(symNode.Calls, fun.Sel.Name)
+					}
+				}
+				return true
+			})
+		}
+
+		g.Symbols[key] = symNode
+		g.FileSymbols[rel] = append(g.FileSymbols[rel], key)
+		return true
+	})
+
+	return nil
 }
 
 func (g *CodeGraph) resolveSymbol(calledName, currentFile string) string {

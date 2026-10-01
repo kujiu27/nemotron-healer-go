@@ -113,3 +113,80 @@ func TestPatcherSecurityPathTraversalAndSecrets(t *testing.T) {
 		t.Fatalf("expected security blocked message for .env, got: %s", msgEnv)
 	}
 }
+
+func TestWorktreeSandbox(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "wt_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cm := NewCheckpointManager(tmpDir)
+	if err := cm.EnsureGitContext(); err != nil {
+		t.Fatalf("failed to init git: %v", err)
+	}
+
+	wt, err := NewWorktreeSandbox(tmpDir, "test_mcts")
+	if err != nil {
+		t.Fatalf("failed to create worktree: %v", err)
+	}
+	defer wt.Cleanup()
+
+	if _, err := os.Stat(wt.WorkDir); os.IsNotExist(err) {
+		t.Fatalf("worktree directory was not created: %s", wt.WorkDir)
+	}
+
+	if err := wt.Cleanup(); err != nil {
+		t.Fatalf("cleanup failed: %v", err)
+	}
+	if _, err := os.Stat(wt.WorkDir); !os.IsNotExist(err) {
+		t.Fatalf("worktree directory still exists after cleanup: %s", wt.WorkDir)
+	}
+}
+
+func TestRollbackRemovesFilesCreatedAfterCheckpoint(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "rollback_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	orig := filepath.Join(tmpDir, "engine.py")
+	notes := filepath.Join(tmpDir, "user_notes.txt") // pre-existing untracked file
+	if err := os.WriteFile(orig, []byte("def run():\n    return 1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(notes, []byte("user data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cm := NewCheckpointManager(tmpDir)
+	cpID, err := cm.CreateCheckpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate a patch: modify tracked-ish file and create a new file
+	if err := os.WriteFile(orig, []byte("PATCHED"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	created := filepath.Join(tmpDir, "generated_helper.py")
+	if err := os.WriteFile(created, []byte("x = 1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cm.Rollback(cpID); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(orig)
+	if err != nil || string(data) != "def run():\n    return 1\n" {
+		t.Fatalf("modified file not restored: %q, err=%v", string(data), err)
+	}
+	if _, err := os.Stat(created); !os.IsNotExist(err) {
+		t.Fatal("file created after checkpoint survived rollback")
+	}
+	if _, err := os.Stat(notes); err != nil {
+		t.Fatal("pre-existing untracked file deleted by rollback")
+	}
+}
