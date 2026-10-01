@@ -3,6 +3,7 @@ package sandbox
 import (
 	"bytes"
 	"context"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -38,9 +39,10 @@ func (r *Runner) Run(cmdStr string) (*ExecutionResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), r.Timeout)
 	defer cancel()
 
-	// Use shell execution
+	// Use shell execution with sanitized environment to prevent credential exfiltration
 	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
 	cmd.Dir = r.WorkDir
+	cmd.Env = sanitizeEnvironment()
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
@@ -111,4 +113,41 @@ func parseTracebacks(stdout, stderr string) []string {
 	}
 
 	return traces
+}
+
+// sanitizeEnvironment filters out secrets and API credentials before spawning sub-processes.
+func sanitizeEnvironment() []string {
+	var safeEnv []string
+	sensitiveKeywords := []string{
+		"KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL", "AUTH", "PRIVATE",
+	}
+
+	for _, entry := range os.Environ() {
+		parts := strings.SplitN(entry, "=", 2)
+		if len(parts) == 0 {
+			continue
+		}
+		key := strings.ToUpper(parts[0])
+
+		// Always keep fundamental runtime variables
+		if key == "PATH" || key == "HOME" || key == "USER" || key == "SHELL" ||
+			key == "LANG" || key == "LC_ALL" || key == "TERM" || key == "VIRTUAL_ENV" ||
+			key == "PYTHONPATH" || key == "GOPATH" || key == "GOROOT" || key == "TMPDIR" {
+			safeEnv = append(safeEnv, entry)
+			continue
+		}
+
+		isSensitive := false
+		for _, kw := range sensitiveKeywords {
+			if strings.Contains(key, kw) {
+				isSensitive = true
+				break
+			}
+		}
+
+		if !isSensitive {
+			safeEnv = append(safeEnv, entry)
+		}
+	}
+	return safeEnv
 }

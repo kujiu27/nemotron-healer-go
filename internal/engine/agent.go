@@ -226,6 +226,12 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			for _, c := range archetype.Constraints {
 				archSb.WriteString(fmt.Sprintf("- %s\n", c))
 			}
+			if blastReport.RiskScore > 0.70 {
+				archSb.WriteString(fmt.Sprintf("\nCRITICAL AST BLAST CONSTRAINT (Risk Score: %.2f > 0.70):\n", blastReport.RiskScore))
+				archSb.WriteString(fmt.Sprintf("- Target symbol `%s` has %d callers across %d files.\n", blastReport.ModifiedSymbol, len(blastReport.TransitiveDependents), len(blastReport.AffectedFiles)))
+				archSb.WriteString("- DO NOT alter public signatures, function parameters, or return types.\n")
+				archSb.WriteString("- MUST restrict patch strictly to internal logic to avoid cascading downstream regressions.\n")
+			}
 			archetypeContext = archSb.String()
 		}
 
@@ -373,7 +379,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 | **Completion Tokens** | %d | Surgical Unified Diff |
 | **Time To First Token** | %.2fs | Sub-second streaming |
 | **Measured Throughput** | %.1f T/s | High-throughput streaming |
-| **Estimated Compute Cost** | $%.6f USD | At $0.20/1M tokens |
+| **Estimated Compute Cost** | $%.6f USD | Nebius Token Factory ($0.10/1M in, $0.30/1M out) |
 | **Human Baseline Cost** | $25.00 USD | 30min engineer triage ($50/hr) |
 | **Net Cost Savings** | **%.1f%%%%** | Zero developer friction |
 `,

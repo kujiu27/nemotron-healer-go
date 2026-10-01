@@ -14,6 +14,9 @@ import (
 
 type FalsificationResult struct {
 	Passed          bool    `json:"passed"`
+	Skipped         bool    `json:"skipped,omitempty"`
+	Reason          string  `json:"reason,omitempty"`
+	IsMalformedTest bool    `json:"is_malformed_test,omitempty"`
 	GeneratedTest   string  `json:"generated_test"`
 	FailureOutput   string  `json:"failure_output,omitempty"`
 	ConfidenceScore float64 `json:"confidence_score"`
@@ -39,7 +42,11 @@ func (f *Falsifier) StressTest(ctx context.Context, targetFile, patchDiff string
 	fullPath := filepath.Join(f.WorkDir, targetFile)
 	contentBytes, err := os.ReadFile(fullPath)
 	if err != nil {
-		return &FalsificationResult{Passed: true, ConfidenceScore: 0.8}, nil
+		return &FalsificationResult{
+			Passed:          false,
+			Reason:          fmt.Sprintf("target file unreadable: %v", err),
+			ConfidenceScore: 0.0,
+		}, err
 	}
 
 	lang := detectLanguage(targetFile, f.TestCommand)
@@ -65,19 +72,33 @@ RULES:
 
 	resp, _, _, err := f.Nebius.StreamCompletion(ctx, messages, nil)
 	if err != nil {
-		return &FalsificationResult{Passed: true, ConfidenceScore: 0.8}, nil
+		return &FalsificationResult{
+			Passed:          true,
+			Skipped:         true,
+			Reason:          fmt.Sprintf("adversarial generator unavailable: %v", err),
+			ConfidenceScore: 0.50,
+		}, nil
 	}
 
 	testCode := extractTestCode(resp, lang)
 	if testCode == "" {
-		return &FalsificationResult{Passed: true, ConfidenceScore: 0.85}, nil
+		return &FalsificationResult{
+			Passed:          true,
+			Skipped:         true,
+			Reason:          "model did not produce extractable test block",
+			ConfidenceScore: 0.50,
+		}, nil
 	}
 
 	// Write temp test file in workspace
 	testFileName := lang.TestFileName
 	testFilePath := filepath.Join(f.WorkDir, testFileName)
 	if err := os.WriteFile(testFilePath, []byte(testCode), 0644); err != nil {
-		return &FalsificationResult{Passed: true, ConfidenceScore: 0.8}, nil
+		return &FalsificationResult{
+			Passed:          false,
+			Reason:          fmt.Sprintf("failed writing test file: %v", err),
+			ConfidenceScore: 0.0,
+		}, err
 	}
 	defer os.Remove(testFilePath)
 
@@ -85,19 +106,57 @@ RULES:
 	testCmd := f.buildTestCmd(lang, testFileName)
 	res, err := f.Sandbox.Run(testCmd)
 	if err != nil || !res.IsSuccess {
+		output := res.Stdout + "\n" + res.Stderr
+		isMalformed := isTestSyntaxOrImportError(output, lang.Name)
+
+		if isMalformed {
+			return &FalsificationResult{
+				Passed:          true,
+				Skipped:         true,
+				IsMalformedTest: true,
+				Reason:          "synthesized test had invalid syntax/imports; skipped to prevent false-negative rollback",
+				GeneratedTest:   testCode,
+				FailureOutput:   output,
+				ConfidenceScore: 0.60,
+			}, nil
+		}
+
 		return &FalsificationResult{
 			Passed:          false,
 			GeneratedTest:   testCode,
-			FailureOutput:   res.Stdout + "\n" + res.Stderr,
-			ConfidenceScore: 0.3,
+			FailureOutput:   output,
+			ConfidenceScore: 0.10,
 		}, nil
 	}
 
 	return &FalsificationResult{
 		Passed:          true,
 		GeneratedTest:   testCode,
-		ConfidenceScore: 0.99,
+		ConfidenceScore: 0.98,
 	}, nil
+}
+
+func isTestSyntaxOrImportError(output, lang string) bool {
+	lower := strings.ToLower(output)
+	if lang == "Python" {
+		return strings.Contains(lower, "syntaxerror") ||
+			strings.Contains(lower, "indentationerror") ||
+			strings.Contains(lower, "modulenotfounderror") ||
+			strings.Contains(lower, "import error") ||
+			strings.Contains(lower, "importerror") ||
+			strings.Contains(lower, "fixture") && strings.Contains(lower, "not found")
+	}
+	if lang == "Go" {
+		return strings.Contains(lower, "[build failed]") ||
+			strings.Contains(lower, "syntax error") ||
+			strings.Contains(lower, "undefined:") ||
+			strings.Contains(lower, "cannot find package")
+	}
+	if lang == "TypeScript/JavaScript" {
+		return strings.Contains(lower, "syntaxerror") ||
+			strings.Contains(lower, "cannot find module")
+	}
+	return false
 }
 
 type LangConfig struct {

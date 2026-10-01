@@ -131,11 +131,15 @@ INSTRUCTIONS:
 		// Rollout: Run verification test in sandbox
 		verifyRes, _ := a.Runner.Run(a.TestCommand)
 		advPass := false
+		falsifyFailureOutput := ""
 
 		if verifyRes.IsSuccess {
 			// Run Adversarial Falsification stress test
 			falsifyRes, _ := a.Falsifier.StressTest(ctx, targetHint, diffPatch)
 			advPass = falsifyRes.Passed
+			if !advPass {
+				falsifyFailureOutput = falsifyRes.FailureOutput
+			}
 		}
 
 		// Calculate Grounded Verifiable Reward
@@ -170,6 +174,87 @@ INSTRUCTIONS:
 				BestReward:      reward,
 				DurationSeconds: a.Session.DurationSeconds,
 			}, nil
+		}
+
+		// Depth-2 Iterative Expansion: If base test passed but failed adversarial edge cases,
+		// expand child node into refined sub-hypothesis guided by execution feedback (AlphaCode 2 / Snell et al.).
+		if verifyRes.IsSuccess && !advPass && nodesCreated < budgetNodes {
+			depth2ID := fmt.Sprintf("%s.1", childID)
+			a.notify(StateSynthesizingPatch, fmt.Sprintf("MCTS Depth-2 Deepening [%s]: Refining candidate based on adversarial feedback...", depth2ID), nil)
+
+			refinePrompt := []client.ChatMessage{
+				{Role: "system", Content: "You are an autonomous MCTS code synthesis engine in Depth-2 tree search. Harden the previous candidate patch against the adversarial counter-example."},
+				{
+					Role: "user",
+					Content: fmt.Sprintf(`[PREVIOUS CANDIDATE PATCH]
+%s
+
+[BASE VERIFICATION]
+Passed base test suite successfully.
+
+[ADVERSARIAL COUNTER-EXAMPLE FAILURE]
+%s
+
+[TASK]
+Refine the patch to defend against this boundary counter-example while preserving base test correctness. Output the unified diff inside a `+"```diff"+` block.
+Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, targetFile),
+				},
+			}
+
+			refineResp, rpTok, rcTok, rErr := a.Nebius.StreamCompletion(ctx, refinePrompt, a.OnStreamToken)
+			a.Session.TokenLedger.PromptTokens += rpTok
+			a.Session.TokenLedger.CompletionTokens += rcTok
+			a.Session.TokenLedger.CalculateCost()
+
+			if rErr == nil {
+				refineDiff := extractDiffBlock(refineResp)
+				if refineDiff != "" {
+					child2 := mcts.NewNode(depth2ID, child, refineDiff, targetFile, hyp.Name+" (Hardened)")
+					child.Children = append(child.Children, child2)
+					nodesCreated++
+
+					_ = a.Checkpointer.Rollback(cpID)
+					applied2, _ := a.Patcher.ApplyPatch(refineDiff, targetFile)
+					if applied2 {
+						verifyRes2, _ := a.Runner.Run(a.TestCommand)
+						advPass2 := false
+						if verifyRes2.IsSuccess {
+							f2, _ := a.Falsifier.StressTest(ctx, targetHint, refineDiff)
+							advPass2 = f2.Passed
+						}
+
+						reward2 := evaluator.ComputeReward(verifyRes2.IsSuccess, advPass2, blastReport.RiskScore, refineDiff)
+						child2.Backpropagate(reward2)
+
+						a.notify(StateVerifyingSandbox, fmt.Sprintf("MCTS Depth-2 Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f",
+							depth2ID, verifyRes2.IsSuccess, advPass2, reward2), map[string]interface{}{
+							"node_id":   depth2ID,
+							"reward":    reward2,
+							"base_pass": verifyRes2.IsSuccess,
+							"adv_pass":  advPass2,
+						})
+
+						if reward2 >= 0.70 {
+							a.notify(StateSucceeded, fmt.Sprintf("🎉 MCTS Depth-2 converged on optimal hardened branch [%s] with Reward: %.3f!", depth2ID, reward2), nil)
+							a.Session.IsResolved = true
+							a.Session.DurationSeconds = time.Since(start).Seconds()
+							a.Session.AppliedPatches = append(a.Session.AppliedPatches, refineDiff)
+
+							branchName := fmt.Sprintf("fix/nemotron-mcts-%s", a.Session.SessionID)
+							_ = a.Checkpointer.CreateGitPRBranch(branchName, fmt.Sprintf("fix(mcts): verified depth-2 repair [%s] (Reward: %.3f)", depth2ID, reward2))
+
+							return &MCTSSearchResult{
+								Resolved:        true,
+								SelectedNode:    child2,
+								NodesExplored:   nodesCreated,
+								SearchDepth:     2,
+								BestReward:      reward2,
+								DurationSeconds: a.Session.DurationSeconds,
+							}, nil
+						}
+					}
+				}
+			}
 		}
 
 		// Rollback sandbox to explore next branch

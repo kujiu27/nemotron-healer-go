@@ -18,7 +18,9 @@ func NewCheckpointManager(workDir string) *CheckpointManager {
 	return &CheckpointManager{WorkDir: workDir}
 }
 
-// CreateCheckpoint creates a lightweight snapshot of modified files in the workspace.
+// CreateCheckpoint creates a lightweight snapshot of trackable source files in the workspace.
+// A sidecar manifest (backupDir + ".manifest") records the exact file set so Rollback can
+// delete files created after the checkpoint without touching pre-existing untracked files.
 func (c *CheckpointManager) CreateCheckpoint() (string, error) {
 	checkpointID := fmt.Sprintf("cp_%d", time.Now().UnixNano())
 	backupDir := filepath.Join(os.TempDir(), "nemotron_checkpoints", checkpointID)
@@ -26,7 +28,7 @@ func (c *CheckpointManager) CreateCheckpoint() (string, error) {
 		return "", err
 	}
 
-	// Copy all trackable source files to backupDir
+	var manifest []string
 	err := filepath.Walk(c.WorkDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
@@ -52,9 +54,13 @@ func (c *CheckpointManager) CreateCheckpoint() (string, error) {
 				return err
 			}
 			copyFile(path, destPath)
+			manifest = append(manifest, rel)
 		}
 		return nil
 	})
+	if err == nil {
+		err = os.WriteFile(backupDir+".manifest", []byte(strings.Join(manifest, "\n")), 0644)
+	}
 
 	return checkpointID, err
 }
@@ -66,10 +72,41 @@ func (c *CheckpointManager) Rollback(checkpointID string) error {
 		return fmt.Errorf("checkpoint %s does not exist", checkpointID)
 	}
 
-	// First, if it's a git repo, attempt git checkout .
-	cmd := exec.Command("git", "checkout", ".")
-	cmd.Dir = c.WorkDir
-	_ = cmd.Run()
+	// First, if it's a git repo, restore tracked modifications
+	cmdCheckout := exec.Command("git", "checkout", ".")
+	cmdCheckout.Dir = c.WorkDir
+	_ = cmdCheckout.Run()
+
+	// Delete files created after the checkpoint (manifest diff) so patches that
+	// add new files cannot leak into the next rollout. ponytail: git clean -fd
+	// would also delete pre-existing untracked user files; manifest is exact.
+	seen := map[string]bool{}
+	if data, err := os.ReadFile(backupDir + ".manifest"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if line != "" {
+				seen[line] = true
+			}
+		}
+	}
+	_ = filepath.Walk(c.WorkDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(c.WorkDir, path)
+		if err != nil {
+			return nil
+		}
+		parts := strings.Split(rel, string(os.PathSeparator))
+		for _, p := range parts {
+			if strings.HasPrefix(p, ".") || p == "venv" || p == "node_modules" || p == "__pycache__" || p == "bin" {
+				return nil
+			}
+		}
+		if !seen[rel] {
+			_ = os.Remove(path)
+		}
+		return nil
+	})
 
 	// Restore files from backupDir
 	err := filepath.Walk(backupDir, func(path string, info os.FileInfo, err error) error {

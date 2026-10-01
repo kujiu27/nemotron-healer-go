@@ -53,3 +53,48 @@ func TestFastAPISample(t *testing.T) {
 		t.Fatalf("expected symbols found in sample, got 0")
 	}
 }
+
+func TestGoASTExtraction(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "ast_go_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	goCode := `package service
+
+type Engine struct {
+	id string
+}
+
+func (e *Engine) Start() bool {
+	return e.boot()
+}
+
+func (e *Engine) boot() bool {
+	return true
+}
+
+func Run() {
+	eng := &Engine{}
+	eng.Start()
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "engine.go"), []byte(goCode), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	graph := NewCodeGraph(tmpDir)
+	if err := graph.BuildGraph(); err != nil {
+		t.Fatalf("build graph failed: %v", err)
+	}
+
+	if _, ok := graph.Symbols["engine.go::Engine.Start"]; !ok {
+		t.Fatalf("expected engine.go::Engine.Start extracted, got: %+v", graph.Symbols)
+	}
+
+	report := graph.AnalyzeBlastRadius("engine.go", "Engine.boot")
+	if report.RiskScore == 0 {
+		t.Logf("Engine.boot risk score: %f", report.RiskScore)
+	}
+}
