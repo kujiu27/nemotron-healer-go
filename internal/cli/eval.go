@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -24,8 +25,12 @@ type BenchmarkCase struct {
 	Description string
 }
 
-var ablationFlag bool
-var repeatFlag int
+var (
+	ablationFlag   bool
+	repeatFlag     int
+	exportJSONFlag string
+	exportMDFlag   string
+)
 
 var evalCmd = &cobra.Command{
 	Short: "Run the in-repo Autonomous Healer Benchmark (AHB-6) with sandboxed isolation, A/B ablation, and repeat runs",
@@ -213,6 +218,47 @@ var evalCmd = &cobra.Command{
 			fmt.Sprintf("• Empirical Grounding Delta (Tavily + AST) : +%.1f%% Accuracy Lift\n", delta),
 		))
 
+		if exportJSONFlag != "" {
+			payload := map[string]interface{}{
+				"timestamp":           time.Now().UTC().Format(time.RFC3339),
+				"benchmark":           "AHB-6",
+				"total_runs":          len(results),
+				"baseline_solve_rate": baseRate,
+				"full_solve_rate":     fullRate,
+				"empirical_lift":      delta,
+				"results":             results,
+			}
+			if d, err := json.MarshalIndent(payload, "", "  "); err == nil {
+				_ = os.WriteFile(exportJSONFlag, d, 0644)
+				fmt.Printf("📄 Exported benchmark ablation JSON to `%s`\n", exportJSONFlag)
+			}
+		}
+
+		if exportMDFlag != "" {
+			var mdSb strings.Builder
+			mdSb.WriteString("## 📊 AHB-6 Benchmark & Ablation Scorecard\n\n")
+			mdSb.WriteString(fmt.Sprintf("*Evaluated on %s against NVIDIA Nemotron & Nebius Token Factory*\n\n", time.Now().Format("2006-01-02 15:04:05")))
+			mdSb.WriteString("| Case ID | Benchmark Scenario | Defect Archetype | Baseline LLM | Nemotron-Healer | Turns | Run Cost |\n")
+			mdSb.WriteString("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
+			for _, r := range results {
+				bStr := "❌ FAIL"
+				if r.BaselinePass {
+					bStr = "✅ PASS"
+				}
+				fStr := "❌ FAIL"
+				if r.FullPass {
+					fStr = "✅ PASS"
+				}
+				mdSb.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %s | %d | $%.5f |\n",
+					r.CaseID, r.Name, r.Archetype, bStr, fStr, r.TurnsTaken, r.CostUSD))
+			}
+			mdSb.WriteString(fmt.Sprintf("\n- **Baseline Solve Rate**: %.1f%%\n", baseRate))
+			mdSb.WriteString(fmt.Sprintf("- **Nemotron-Healer Solve Rate**: **%.1f%%**\n", fullRate))
+			mdSb.WriteString(fmt.Sprintf("- **Empirical Grounding Delta**: **+%.1f%% Accuracy Lift**\n", delta))
+			_ = os.WriteFile(exportMDFlag, []byte(mdSb.String()), 0644)
+			fmt.Printf("📝 Exported benchmark ablation Markdown scorecard to `%s`\n", exportMDFlag)
+		}
+
 		return nil
 	},
 }
@@ -285,5 +331,7 @@ func max(a, b int) int {
 func init() {
 	evalCmd.Flags().BoolVar(&ablationFlag, "ablation", true, "Perform side-by-side A/B ablation against baseline ungrounded model")
 	evalCmd.Flags().IntVar(&repeatFlag, "repeat", 1, "Repeat each benchmark case N times to expose variance")
+	evalCmd.Flags().StringVar(&exportJSONFlag, "export-json", "", "Export benchmark ablation results to JSON file")
+	evalCmd.Flags().StringVar(&exportMDFlag, "export-md", "", "Export benchmark ablation scorecard to Markdown file")
 	RootCmd.AddCommand(evalCmd)
 }

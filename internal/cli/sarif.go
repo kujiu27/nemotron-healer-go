@@ -1,0 +1,127 @@
+package cli
+
+import (
+	"encoding/json"
+	"os"
+
+	"github.com/nemotron-healer/nemotron-healer-go/internal/engine"
+)
+
+type SarifLocation struct {
+	PhysicalLocation struct {
+		ArtifactLocation struct {
+			URI string `json:"uri"`
+		} `json:"artifactLocation"`
+		Region struct {
+			StartLine int `json:"startLine"`
+		} `json:"region"`
+	} `json:"physicalLocation"`
+}
+
+type SarifResult struct {
+	RuleID    string `json:"ruleId"`
+	Level     string `json:"level"`
+	Message   struct {
+		Text string `json:"text"`
+	} `json:"message"`
+	Locations []SarifLocation `json:"locations,omitempty"`
+}
+
+type SarifRule struct {
+	ID               string `json:"id"`
+	ShortDescription struct {
+		Text string `json:"text"`
+	} `json:"shortDescription"`
+}
+
+type SarifReport struct {
+	Schema  string `json:"$schema"`
+	Version string `json:"version"`
+	Runs    []struct {
+		Tool struct {
+			Driver struct {
+				Name           string      `json:"name"`
+				Version        string      `json:"version"`
+				InformationURI string      `json:"informationUri"`
+				Rules          []SarifRule `json:"rules"`
+			} `json:"driver"`
+		} `json:"tool"`
+		Results []SarifResult `json:"results"`
+	} `json:"runs"`
+}
+
+// ExportSarif serializes the healing session defect & outcome to standard SARIF 2.1.0 JSON
+func ExportSarif(session *engine.HealingSession, outputPath string) error {
+	ruleID := "NH-DEFECT"
+	level := "warning"
+	msgText := "Defect identified and resolved autonomously by Nemotron-Healer"
+	if !session.IsResolved {
+		level = "error"
+		msgText = "Defect unresolved: " + session.LastError
+	}
+
+	report := SarifReport{
+		Schema:  "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+		Version: "2.1.0",
+		Runs: []struct {
+			Tool struct {
+				Driver struct {
+					Name           string      `json:"name"`
+					Version        string      `json:"version"`
+					InformationURI string      `json:"informationUri"`
+					Rules          []SarifRule `json:"rules"`
+				} `json:"driver"`
+			} `json:"tool"`
+			Results []SarifResult `json:"results"`
+		}{
+			{
+				Tool: struct {
+					Driver struct {
+						Name           string      `json:"name"`
+						Version        string      `json:"version"`
+						InformationURI string      `json:"informationUri"`
+						Rules          []SarifRule `json:"rules"`
+					} `json:"driver"`
+				}{
+					Driver: struct {
+						Name           string      `json:"name"`
+						Version        string      `json:"version"`
+						InformationURI string      `json:"informationUri"`
+						Rules          []SarifRule `json:"rules"`
+					}{
+						Name:           "Nemotron-Healer",
+						Version:        "0.2.0",
+						InformationURI: "https://github.com/nemotron-healer/nemotron-healer-go",
+						Rules: []SarifRule{
+							{
+								ID: ruleID,
+								ShortDescription: struct {
+									Text string `json:"text"`
+								}{
+									Text: "Autonomous Code Self-Healing Defect Diagnostic",
+								},
+							},
+						},
+					},
+				},
+				Results: []SarifResult{
+					{
+						RuleID: ruleID,
+						Level:  level,
+						Message: struct {
+							Text string `json:"text"`
+						}{
+							Text: msgText,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(outputPath, data, 0644)
+}

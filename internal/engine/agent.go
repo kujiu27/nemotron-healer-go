@@ -332,33 +332,65 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			// Clean pass!
 			a.Session.IsResolved = true
 			a.Session.DurationSeconds = time.Since(startTime).Seconds()
+			a.Session.ThoughtChain = patchSug.ThoughtChain
+
+			// 7.5 Synthesize and Persist Permanent Regression Test Guard
+			if falsifyRes.Passed && falsifyRes.GeneratedTest != "" && !falsifyRes.Skipped {
+				regRelFile, regErr := a.Falsifier.PersistRegressionTest(targetFile, falsifyRes.GeneratedTest)
+				if regErr == nil {
+					a.Session.RegressionTestFile = regRelFile
+					a.notify(StateVerifyingSandbox, fmt.Sprintf("🛡️ Synthesized permanent regression test artifact: `%s`", regRelFile), map[string]interface{}{
+						"regression_file": regRelFile,
+					})
+				}
+			}
 
 			branchName := fmt.Sprintf("fix/nemotron-heal-%s", a.Session.SessionID)
 
-		var tavilyCitationTable strings.Builder
-		if !a.DisableGrounding && len(a.Session.TavilyQueries) > 0 {
-			tavilyCitationTable.WriteString(fmt.Sprintf("- **Tavily Query**: `%s`\n", a.Session.TavilyQueries[len(a.Session.TavilyQueries)-1]))
-			if len(a.lastTavilyResults) > 0 {
-				tavilyCitationTable.WriteString("\n| # | Source Reference | Verifiable URL | Relevance | Ground-Truth Excerpt |\n")
-				tavilyCitationTable.WriteString("| :--- | :--- | :--- | :--- | :--- |\n")
-				for cIdx, item := range a.lastTavilyResults {
-					snippet := strings.ReplaceAll(item.Content, "\n", " ")
-					if len(snippet) > 85 {
-						snippet = snippet[:85] + "..."
+			var tavilyCitationTable strings.Builder
+			if !a.DisableGrounding && len(a.Session.TavilyQueries) > 0 {
+				tavilyCitationTable.WriteString(fmt.Sprintf("- **Tavily Query**: `%s`\n", a.Session.TavilyQueries[len(a.Session.TavilyQueries)-1]))
+				if len(a.lastTavilyResults) > 0 {
+					tavilyCitationTable.WriteString("\n| # | Source Reference | Verifiable URL | Relevance | Ground-Truth Excerpt |\n")
+					tavilyCitationTable.WriteString("| :--- | :--- | :--- | :--- | :--- |\n")
+					for cIdx, item := range a.lastTavilyResults {
+						snippet := strings.ReplaceAll(item.Content, "\n", " ")
+						if len(snippet) > 85 {
+							snippet = snippet[:85] + "..."
+						}
+						tavilyCitationTable.WriteString(fmt.Sprintf("| %d | %s | [%s](%s) | %.2f | *\"%s\"* |\n",
+							cIdx+1, item.Title, item.URL, item.URL, item.Score, snippet))
 					}
-					tavilyCitationTable.WriteString(fmt.Sprintf("| %d | %s | [%s](%s) | %.2f | *\"%s\"* |\n",
-						cIdx+1, item.Title, item.URL, item.URL, item.Score, snippet))
+				} else {
+					tavilyCitationTable.WriteString("- **Official Documentation**: Tavily returned no results for this query.\n")
 				}
 			} else {
-				tavilyCitationTable.WriteString("- **Official Documentation**: Tavily returned no results for this query.\n")
+				tavilyCitationTable.WriteString("- **Knowledge Grounding**: Disabled (baseline mode).\n")
 			}
-		} else {
-			tavilyCitationTable.WriteString("- **Knowledge Grounding**: Disabled (baseline mode).\n")
-		}
 
 			falsifyStatus := "PASSED"
 			if falsifyRes.Skipped {
 				falsifyStatus = "SKIPPED — " + falsifyRes.Reason
+			}
+
+			// Quantitative Multi-Tier Economics
+			pTok := a.Session.TokenLedger.PromptTokens
+			cTok := a.Session.TokenLedger.CompletionTokens
+			nebiusCost := a.Session.TokenLedger.EstimatedCostUSD
+			cloudCost := (float64(pTok)*5.0 + float64(cTok)*15.0) / 1_000_000.0
+			cloudSavingsPct := 0.0
+			if cloudCost > 0 {
+				cloudSavingsPct = ((cloudCost - nebiusCost) / cloudCost) * 100.0
+			}
+
+			regressionGuardSection := "- **Regression Guard**: Counter-example verified in sandbox ephemeral test."
+			if a.Session.RegressionTestFile != "" {
+				regressionGuardSection = fmt.Sprintf("- **Permanent Regression Test**: `%s` (Committed into branch to permanently prevent regressions in CI)", a.Session.RegressionTestFile)
+			}
+
+			reasoningSection := ""
+			if a.Session.ThoughtChain != "" {
+				reasoningSection = fmt.Sprintf("\n---\n\n### 🧠 NVIDIA Nemotron Deep Reasoning Trace\n<details>\n<summary>Click to expand architectural & mathematical deduction chain (%d chars)</summary>\n\n```text\n%s\n```\n\n</details>\n", len(a.Session.ThoughtChain), a.Session.ThoughtChain)
 			}
 
 			auditReport := fmt.Sprintf(`## ⚡ Nemotron-Healer Autonomous Verification Report
@@ -386,40 +418,55 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 
 ---
 
-### 🛡️ Adversarial Falsification & Arena Audit
+### 🛡️ Adversarial Falsification & Permanent Regression Guard
 - **Status**: %s (Confidence: %.2f)
-- **Arena**: %s
-- **Test Invariant**: Synthesized edge-case counter-example test executed in sandbox; validated boundary robustness without regressions.
-
+- **Arena Defense**: %s
+%s
+%s
 ---
 
-### 💰 Economic & Token Ledger (Nebius Token Factory)
-| Metric | Value | Comparison |
-| :--- | :--- | :--- |
-| **Prompt Tokens** | %d | Pruned via AST Subgraph |
-| **Completion Tokens** | %d | Surgical Unified Diff |
-| **Time To First Token** | %.2fs | Sub-second streaming |
-| **Measured Throughput** | %.1f T/s | High-throughput streaming |
-| **Estimated Compute Cost** | $%.6f USD | Token Factory catalog ($%.2f/1M in, $%.2f/1M out) |
-| **Human Reference Cost** | $25.00 USD | 30min engineer triage ($50/hr), reference only |
-| **Net Cost Savings** | **%.1f%%%%** | vs human reference |
+### 💰 Quantitative Economic & Throughput Matrix
+| Infrastructure Tier | Model / Agent | Pricing Rate (Prompt / Completion) | Estimated Run Cost | Savings vs Baseline |
+| :--- | :--- | :--- | :--- | :--- |
+| ⚡ **Nebius Token Factory** | **NVIDIA Nemotron 3 Ultra** | **$1.00 / $3.00 per 1M** | **$%.6f USD** | — (Our Platform) |
+| ☁️ Proprietary Cloud Baseline | Standard GPT-4o API | $5.00 / $15.00 per 1M | $%.6f USD | **-%.1f%%%% Cost Reduction** |
+| 🧑‍💻 Senior Staff Engineer | 30-min Manual Triage ($50/hr) | Fixed Engineering Salary | $25.00 USD | **-%.1f%%%% Net Savings** |
+
+**Nebius High-Performance Streaming Metrics:**
+- **Time To First Token (TTFT)**: `+"`%.2fs`"+`
+- **Measured Generation Throughput**: `+"`%.1f tokens/sec`"+`
+- **Total In-Flight Tokens**: %d (Prompt: %d, Completion: %d)
 `,
 				a.WorkDir, a.TestCommand, a.Session.DurationSeconds, turn,
 				archetype.Archetype, archetype.Severity, archetype.Description,
 				blastReport.ModifiedSymbol, len(blastReport.AffectedFiles), strings.Join(blastReport.AffectedFiles, ", "),
 				len(blastReport.TransitiveDependents), blastReport.RiskScore,
 				tavilyCitationTable.String(), falsifyStatus, falsifyRes.ConfidenceScore, arenaNotes,
-				a.Session.TokenLedger.PromptTokens, a.Session.TokenLedger.CompletionTokens,
+				regressionGuardSection, reasoningSection,
+				nebiusCost, cloudCost, cloudSavingsPct, a.Session.TokenLedger.SavingsPercentage,
 				a.Session.TokenLedger.TTFTSeconds, a.Session.TokenLedger.MeasuredTPS,
-				a.Session.TokenLedger.EstimatedCostUSD, PricePromptPerMillion, PriceCompletionPerMillion, a.Session.TokenLedger.SavingsPercentage)
+				a.Session.TokenLedger.TotalTokens, pTok, cTok)
 
-			_ = a.Checkpointer.CreateGitPRBranchWithAudit(branchName, fmt.Sprintf("fix(auton): verified self-healing [%s] in %.2fs via Nemotron 3 Ultra", archetype.Archetype, a.Session.DurationSeconds), auditReport)
+			commitMsg := fmt.Sprintf("fix(auton): verified self-healing [%s] in %.2fs via Nemotron 3 Ultra", archetype.Archetype, a.Session.DurationSeconds)
+			if a.Session.RegressionTestFile != "" {
+				commitMsg = fmt.Sprintf("fix(auton): verified self-healing [%s] + regression test [%s]", archetype.Archetype, a.Session.RegressionTestFile)
+			}
+			_ = a.Checkpointer.CreateGitPRBranchWithAudit(branchName, commitMsg, auditReport)
+
+			// Step Summary Hook for GitHub Actions Native CI/CD
+			if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
+				if f, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+					_, _ = f.WriteString("\n" + auditReport + "\n")
+					_ = f.Close()
+				}
+			}
 
 			a.notify(StateSucceeded, fmt.Sprintf("🎉 Verification + Adversarial Falsification PASSED on Turn %d! Branch `%s` created.", turn, branchName), map[string]interface{}{
 				"duration_seconds":         a.Session.DurationSeconds,
 				"token_ledger":             a.Session.TokenLedger,
 				"falsification_confidence": falsifyRes.ConfidenceScore,
 				"blast_report":             blastReport,
+				"regression_file":          a.Session.RegressionTestFile,
 			})
 			return a.Session, nil
 		}

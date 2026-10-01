@@ -216,3 +216,50 @@ func extractTestCode(resp string, lang LangConfig) string {
 	}
 	return ""
 }
+
+// PersistRegressionTest formats and permanently saves the verified test code into an enduring regression test file in the workspace
+func (f *Falsifier) PersistRegressionTest(targetFile, testCode string) (string, error) {
+	if strings.TrimSpace(testCode) == "" {
+		return "", fmt.Errorf("empty regression test code")
+	}
+
+	lang := detectLanguage(targetFile, f.TestCommand)
+	var regRelFile string
+
+	switch lang.Name {
+	case "Go":
+		dir := filepath.Dir(targetFile)
+		base := strings.TrimSuffix(filepath.Base(targetFile), ".go")
+		if dir == "." || dir == "" {
+			regRelFile = fmt.Sprintf("%s_nemotron_regression_test.go", base)
+		} else {
+			regRelFile = filepath.Join(dir, fmt.Sprintf("%s_nemotron_regression_test.go", base))
+		}
+	case "Rust":
+		regRelFile = "tests/nemotron_regression_test.rs"
+	case "TypeScript/JavaScript":
+		regRelFile = "tests/nemotron_regression.test.ts"
+	default: // Python
+		if _, err := os.Stat(filepath.Join(f.WorkDir, "tests")); err == nil {
+			regRelFile = "tests/test_nemotron_regression.py"
+		} else {
+			regRelFile = "test_nemotron_regression.py"
+		}
+	}
+
+	fullPath := filepath.Join(f.WorkDir, regRelFile)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		return "", err
+	}
+
+	header := fmt.Sprintf("// [Nemotron-Healer] Autonomous Regression Invariant Guard\n// Synthesized by NVIDIA Nemotron 3 Ultra to permanently prevent regression.\n\n")
+	if lang.Name == "Python" {
+		header = "# [Nemotron-Healer] Autonomous Regression Invariant Guard\n# Synthesized by NVIDIA Nemotron 3 Ultra to permanently prevent regression.\n\n"
+	}
+
+	if err := os.WriteFile(fullPath, []byte(header+testCode+"\n"), 0644); err != nil {
+		return "", err
+	}
+
+	return regRelFile, nil
+}

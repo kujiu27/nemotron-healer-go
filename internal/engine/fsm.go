@@ -63,11 +63,13 @@ type HealingSession struct {
 	InitialError    string             `json:"initial_error"`
 	LastError       string             `json:"last_error"`
 	AppliedPatches  []string           `json:"applied_patches"`
-	TavilyQueries   []string           `json:"tavily_queries"`
-	TokenLedger     TokenLedger        `json:"token_ledger"`
-	IsResolved      bool               `json:"is_resolved"`
-	DurationSeconds float64            `json:"duration_seconds"`
-	History         []HealingStepEvent `json:"history"`
+	TavilyQueries      []string           `json:"tavily_queries"`
+	TokenLedger        TokenLedger        `json:"token_ledger"`
+	IsResolved         bool               `json:"is_resolved"`
+	DurationSeconds    float64            `json:"duration_seconds"`
+	RegressionTestFile string             `json:"regression_test_file,omitempty"`
+	ThoughtChain       string             `json:"thought_chain,omitempty"`
+	History            []HealingStepEvent `json:"history"`
 }
 
 func NewHealingSession(sessionID, targetDir, testCommand string, maxTurns int) *HealingSession {

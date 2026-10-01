@@ -18,14 +18,15 @@ import (
 )
 
 type NebiusClient struct {
-	APIKey         string
-	BaseURL        string
-	Model          string
-	FastModel      string
-	ReasoningModel string
-	HTTP           *http.Client
-	LastTTFT       float64
-	LastTPS        float64
+	APIKey           string
+	BaseURL          string
+	Model            string
+	FastModel        string
+	ReasoningModel   string
+	HTTP             *http.Client
+	LastTTFT         float64
+	LastTPS          float64
+	LastThoughtChain string
 }
 
 type ChatMessage struct {
@@ -208,6 +209,8 @@ func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMess
 	var firstTokenTime time.Time
 	tokenCount := 0
 	var fullText strings.Builder
+	var thoughtText strings.Builder
+	c.LastThoughtChain = ""
 	serverPromptTokens := 0
 	serverCompletionTokens := 0
 
@@ -241,6 +244,9 @@ func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMess
 			}
 			if len(chunk.Choices) > 0 {
 				delta := chunk.Choices[0].Delta
+				if delta.ReasoningContent != "" {
+					thoughtText.WriteString(delta.ReasoningContent)
+				}
 				content := delta.Content
 				if content == "" && delta.ReasoningContent != "" {
 					content = delta.ReasoningContent
@@ -259,6 +265,8 @@ func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMess
 			}
 		}
 	}
+
+	c.LastThoughtChain = strings.TrimSpace(thoughtText.String())
 
 	totalDuration := time.Since(startTime).Seconds()
 	if totalDuration > 0 && tokenCount > 0 {
@@ -366,11 +374,20 @@ Do NOT omit the unified diff block.`, testCmd, stderr+"\n"+stdout, archetypeCont
 		targetFile = targetFiles[0]
 	}
 
+	thoughtChain := c.LastThoughtChain
+	if thoughtChain == "" {
+		reThought := regexp.MustCompile(`(?s)<thought>(.*?)</thought>`)
+		if m := reThought.FindStringSubmatch(fullText); len(m) > 1 {
+			thoughtChain = strings.TrimSpace(m[1])
+		}
+	}
+
 	return &PatchSuggestion{
-		Analysis:    fullText,
-		TargetFile:  targetFile,
-		TargetFiles: targetFiles,
-		DiffPatch:   diffPatch,
+		Analysis:     fullText,
+		ThoughtChain: thoughtChain,
+		TargetFile:   targetFile,
+		TargetFiles:  targetFiles,
+		DiffPatch:    diffPatch,
 	}, pTokens, cTokens, nil
 }
 
