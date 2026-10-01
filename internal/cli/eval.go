@@ -28,9 +28,9 @@ var ablationFlag bool
 var repeatFlag int
 
 var evalCmd = &cobra.Command{
-	Short: "Run the in-repo Autonomous Healer Benchmark (AHB-4) with sandboxed isolation, A/B ablation, and repeat runs",
+	Short: "Run the in-repo Autonomous Healer Benchmark (AHB-6) with sandboxed isolation, A/B ablation, and repeat runs",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ AHB-4 In-Repo Benchmark & Ablation Engine"))
+		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ AHB-6 In-Repo Benchmark & Ablation Engine"))
 		fmt.Printf("Repeats per case: %d\n\n", max(1, repeatFlag))
 		fmt.Println("Grounded against Concurrency, API Breaking Migrations, and Re-entrancy Traps")
 		fmt.Println()
@@ -101,6 +101,14 @@ var evalCmd = &cobra.Command{
 				Archetype:   "ConcurrencyRace (Go Data Race)",
 				Description: "Concurrent map and state mutation detected by Go runtime -race detector.",
 			},
+		{
+			ID:          "AHB-06",
+			Name:        "External: go-diff lineHash",
+			Path:        "samples/external_go_diff",
+			Command:     "go test ./diffmatchpatch/ -run TestDiffLinesToChars",
+			Archetype:   "InterfaceBreaking (Real Upstream Bug)",
+			Description: "Real reverted fix from sergi/go-diff commit 6dbe13c: shared lineHash regression test fails on buggy code.",
+		},
 		}
 
 		type EvalRunResult struct {
@@ -167,7 +175,7 @@ var evalCmd = &cobra.Command{
 		}
 
 		// Print Comparative A/B Ablation Scorecard Table
-		fmt.Println("\n" + lipgloss.NewStyle().Bold(true).Render("📊 AHB-4 Ablation Scorecard (NVIDIA x Nebius x Tavily)"))
+		fmt.Println("\n" + lipgloss.NewStyle().Bold(true).Render("📊 AHB-6 Ablation Scorecard (NVIDIA x Nebius x Tavily)"))
 		fmt.Println("=====================================================================================================")
 		fmt.Printf("%-8s | %-24s | %-16s | %-12s | %-12s | %-6s | %-8s\n",
 			"Case ID", "Benchmark Scenario", "Defect Archetype", "Baseline LLM", "Full System", "Turns", "Cost ($)")
