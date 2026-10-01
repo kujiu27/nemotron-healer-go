@@ -235,6 +235,18 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			archetypeContext = archSb.String()
 		}
 
+		// 3.5 Pre-flight Triage via Tier-1 FastModel (Heterogeneous Dual-Model Architecture)
+		if a.Nebius.FastModel != "" && !a.DisableGrounding {
+			triage, ftP, ftC, ftErr := a.Nebius.FastTriage(ctx, a.Session.LastError)
+			if ftErr == nil && triage != nil {
+				a.Session.TokenLedger.PromptTokens += ftP
+				a.Session.TokenLedger.CompletionTokens += ftC
+				if triage.HypothesizedRootCause != "" {
+					a.notify(StateDiagnosing, fmt.Sprintf("Tier-1 Fast Triage (%s): %s", a.Nebius.FastModel, triage.HypothesizedRootCause), nil)
+				}
+			}
+		}
+
 		// 4. Search External Knowledge via Tavily
 		docsCtx := ""
 		query := ""

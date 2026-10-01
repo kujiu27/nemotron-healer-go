@@ -112,7 +112,8 @@ var doctorCmd = &cobra.Command{
 
 		nebius := client.NewNebiusClient()
 		fmt.Printf("• Inference Endpoint: %s\n", nebius.BaseURL)
-		fmt.Printf("• Reasoning Model:    %s\n", nebius.ReasoningModel)
+		fmt.Printf("• Fast Triage Model:  %s (Tier-1 <150ms)\n", nebius.FastModel)
+		fmt.Printf("• Reasoning Brain:    %s\n", nebius.ReasoningModel)
 		fmt.Printf("• Catalog Pricing:    $1.00/1M in, $3.00/1M out\n")
 
 		// Active Network RTT Probe against Inference Endpoint

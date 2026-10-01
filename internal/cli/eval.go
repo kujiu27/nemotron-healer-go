@@ -93,6 +93,14 @@ var evalCmd = &cobra.Command{
 				Archetype:   "SecurityDefect",
 				Description: "Unsanitized user inputs requiring parameterized query AST refactor.",
 			},
+			{
+				ID:          "AHB-05",
+				Name:        "Go Concurrency Race (-race)",
+				Path:        "samples/go_concurrency_race",
+				Command:     "go test -race .",
+				Archetype:   "ConcurrencyRace (Go Data Race)",
+				Description: "Concurrent map and state mutation detected by Go runtime -race detector.",
+			},
 		}
 
 		type EvalRunResult struct {
