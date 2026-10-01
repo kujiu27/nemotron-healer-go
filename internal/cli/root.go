@@ -23,6 +23,8 @@ var (
 	testCmdFlag    string
 	turnsFlag      int
 	noTUIFlag      bool
+	ciFlag         bool
+	sarifFlag      string
 	searchFlag     bool
 	arenaFlag      bool
 	jsonFlag       bool
@@ -58,7 +60,9 @@ var RootCmd = &cobra.Command{
 
 		fmt.Printf("Target: %s\nCommand: `%s`\nMax Turns: %d\n\n", absDir, testCmdFlag, turnsFlag)
 
-		if noTUIFlag {
+		isCI := noTUIFlag || ciFlag || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != ""
+
+		if isCI {
 			// Plain CLI logging mode (ideal for CI / GitHub Actions)
 			agent := engine.NewAgent(absDir, testCmdFlag, turnsFlag, func(event engine.HealingStepEvent) {
 				fmt.Printf("[%s] %s\n", event.State, event.Summary)
@@ -74,12 +78,20 @@ var RootCmd = &cobra.Command{
 				data, _ := json.MarshalIndent(session, "", "  ")
 				fmt.Println(string(data))
 			}
+			if sarifFlag != "" {
+				if sErr := ExportSarif(session, sarifFlag); sErr == nil {
+					fmt.Printf("📊 Exported SARIF 2.1.0 security report to `%s`\n", sarifFlag)
+				}
+			}
 			if session.IsResolved && len(session.AppliedPatches) > 0 && !autoAcceptFlag && !jsonFlag {
 				fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render("\nProposed Verified Surgical Patch:"))
 				fmt.Println(session.AppliedPatches[len(session.AppliedPatches)-1])
 			}
 
-			if !session.IsResolved {
+			if session.IsResolved {
+				fmt.Printf("::notice title=Nemotron Self-Healing Succeeded::Verified fix generated in %.2fs (Turn %d)\n", session.DurationSeconds, session.CurrentTurn)
+			} else {
+				fmt.Printf("::error title=Nemotron Self-Healing Failed::Could not verify fix within %d turns\n", session.MaxTurns)
 				os.Exit(1)
 			}
 			return nil
@@ -182,6 +194,8 @@ func init() {
 	RootCmd.PersistentFlags().StringVarP(&testCmdFlag, "command", "c", "", "Test command to run (default: auto-detected from ecosystem: go test, pytest, npm test, cargo test, make test)")
 	RootCmd.PersistentFlags().IntVarP(&turnsFlag, "turns", "t", 5, "Maximum healing attempts")
 	RootCmd.PersistentFlags().BoolVar(&noTUIFlag, "no-tui", false, "Disable TUI and output plain text (for CI / GitHub Actions)")
+	RootCmd.PersistentFlags().BoolVar(&ciFlag, "ci", false, "Enable headless CI mode with GitHub Actions annotations and step summary")
+	RootCmd.PersistentFlags().StringVar(&sarifFlag, "sarif", "", "Export diagnostic and healing results in standard SARIF 2.1.0 format to path")
 	RootCmd.PersistentFlags().BoolVar(&searchFlag, "search", false, "Enable Test-Time Compute (TTC) MCTS multi-branch search")
 	RootCmd.PersistentFlags().BoolVar(&arenaFlag, "arena", false, "Enable Red-Blue Adversarial Self-Play Arena (attack/defend rounds)")
 	RootCmd.PersistentFlags().BoolVar(&jsonFlag, "json", false, "Output machine-readable telemetry JSON to stdout")
