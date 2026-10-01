@@ -2,11 +2,14 @@ package ast
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
 	goast "go/ast"
 	"go/parser"
 	"go/token"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -106,6 +109,13 @@ func (g *CodeGraph) BuildGraph() error {
 		// Use Go standard library AST parser for Go files
 		if ext == ".go" {
 			return g.parseGoAST(path, rel)
+		}
+
+		// Use Python native AST parser for Python files
+		if ext == ".py" {
+			if err := g.parsePythonAST(path, rel); err == nil {
+				return nil
+			}
 		}
 
 		file, err := os.Open(path)
@@ -269,6 +279,96 @@ func (g *CodeGraph) parseGoAST(path, rel string) error {
 		g.FileSymbols[rel] = append(g.FileSymbols[rel], key)
 		return true
 	})
+
+	return nil
+}
+
+func (g *CodeGraph) parsePythonAST(path, rel string) error {
+	script := `
+import ast, json, sys
+
+try:
+    with open(sys.argv[1], 'r', encoding='utf-8') as f:
+        tree = ast.parse(f.read(), filename=sys.argv[1])
+except Exception:
+    sys.exit(1)
+
+symbols = []
+class_stack = []
+
+class Visitor(ast.NodeVisitor):
+    def visit_ClassDef(self, node):
+        class_stack.append(node.name)
+        symbols.append({
+            "name": node.name,
+            "kind": "class",
+            "line_start": node.lineno,
+            "line_end": getattr(node, 'end_lineno', node.lineno),
+            "calls": []
+        })
+        self.generic_visit(node)
+        class_stack.pop()
+
+    def visit_FunctionDef(self, node):
+        self._handle_func(node)
+
+    def visit_AsyncFunctionDef(self, node):
+        self._handle_func(node)
+
+    def _handle_func(self, node):
+        fullname = f"{class_stack[-1]}.{node.name}" if class_stack else node.name
+        calls = []
+        for child in ast.walk(node):
+            if isinstance(child, ast.Call):
+                if isinstance(child.func, ast.Name):
+                    calls.append(child.func.id)
+                elif isinstance(child.func, ast.Attribute):
+                    calls.append(child.func.attr)
+        symbols.append({
+            "name": fullname,
+            "kind": "function",
+            "line_start": node.lineno,
+            "line_end": getattr(node, 'end_lineno', node.lineno),
+            "calls": list(set(calls))
+        })
+        self.generic_visit(node)
+
+Visitor().visit(tree)
+print(json.dumps(symbols))
+`
+	cmd := exec.Command("python3", "-c", script, path)
+	var outBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	type pySymbol struct {
+		Name      string   `json:"name"`
+		Kind      string   `json:"kind"`
+		LineStart int      `json:"line_start"`
+		LineEnd   int      `json:"line_end"`
+		Calls     []string `json:"calls"`
+	}
+
+	var pySymbols []pySymbol
+	if err := json.Unmarshal(outBuf.Bytes(), &pySymbols); err != nil {
+		return err
+	}
+
+	for _, ps := range pySymbols {
+		key := rel + "::" + ps.Name
+		symNode := &SymbolNode{
+			Name:      ps.Name,
+			Kind:      ps.Kind,
+			FilePath:  rel,
+			LineStart: ps.LineStart,
+			LineEnd:   ps.LineEnd,
+			Calls:     ps.Calls,
+		}
+		g.Symbols[key] = symNode
+		g.FileSymbols[rel] = append(g.FileSymbols[rel], key)
+	}
 
 	return nil
 }

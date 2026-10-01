@@ -232,6 +232,9 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				archSb.WriteString("- DO NOT alter public signatures, function parameters, or return types.\n")
 				archSb.WriteString("- MUST restrict patch strictly to internal logic to avoid cascading downstream regressions.\n")
 			}
+			if archetype.ExemplarPattern != "" {
+				archSb.WriteString(fmt.Sprintf("\n%s\n", archetype.ExemplarPattern))
+			}
 			archetypeContext = archSb.String()
 		}
 
@@ -296,6 +299,29 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		if !applied {
 			a.notify(StateRollingBack, "Patch application failed. Rolling back...", nil)
 			_ = a.Checkpointer.Rollback(cpID)
+			continue
+		}
+
+		// 5.5 Fast Pre-Flight Syntax Gate (<50ms)
+		syntaxOK := true
+		var syntaxErrMsg string
+		targetsToCheck := patchSug.TargetFiles
+		if len(targetsToCheck) == 0 && targetFile != "" {
+			targetsToCheck = []string{targetFile}
+		}
+		for _, tf := range targetsToCheck {
+			if ok, sErr := sandbox.PreFlightSyntaxCheck(a.WorkDir, tf); !ok {
+				syntaxOK = false
+				syntaxErrMsg = sErr
+				break
+			}
+		}
+		if !syntaxOK {
+			a.notify(StateDiagnosing, fmt.Sprintf("⚡ Instant Syntax Gate (<50ms) rejected patch: %s", syntaxErrMsg), map[string]interface{}{
+				"syntax_error": syntaxErrMsg,
+			})
+			_ = a.Checkpointer.Rollback(cpID)
+			failedHistory = append(failedHistory, fmt.Sprintf("Syntax compilation error in patch:\n%s", syntaxErrMsg))
 			continue
 		}
 

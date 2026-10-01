@@ -3,11 +3,57 @@ package sandbox
 import (
 	"bytes"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
+
+// PreFlightSyntaxCheck performs sub-50ms static syntax compilation verification
+// before committing or executing long-running test suites.
+func PreFlightSyntaxCheck(workDir, relFilePath string) (bool, string) {
+	if relFilePath == "" {
+		return true, ""
+	}
+	fullPath := filepath.Join(workDir, relFilePath)
+	if _, err := os.Stat(fullPath); err != nil {
+		return true, ""
+	}
+
+	ext := strings.ToLower(filepath.Ext(relFilePath))
+
+	switch ext {
+	case ".go":
+		fset := token.NewFileSet()
+		if _, err := parser.ParseFile(fset, fullPath, nil, parser.AllErrors); err != nil {
+			return false, fmt.Sprintf("Go Syntax Error in %s: %v", relFilePath, err)
+		}
+	case ".py":
+		cmd := exec.Command("python3", "-m", "py_compile", fullPath)
+		var errBuf bytes.Buffer
+		cmd.Stderr = &errBuf
+		if err := cmd.Run(); err != nil {
+			msg := strings.TrimSpace(errBuf.String())
+			if msg == "" {
+				msg = err.Error()
+			}
+			return false, fmt.Sprintf("Python Syntax Error in %s: %s", relFilePath, msg)
+		}
+	case ".js":
+		if _, lookErr := exec.LookPath("node"); lookErr == nil {
+			cmd := exec.Command("node", "--check", fullPath)
+			var errBuf bytes.Buffer
+			cmd.Stderr = &errBuf
+			if err := cmd.Run(); err != nil {
+				return false, fmt.Sprintf("JavaScript Syntax Error in %s: %s", relFilePath, strings.TrimSpace(errBuf.String()))
+			}
+		}
+	}
+
+	return true, ""
+}
 
 type Patcher struct {
 	WorkDir string
