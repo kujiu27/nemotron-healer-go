@@ -172,6 +172,12 @@ INSTRUCTIONS:
 					return
 				}
 
+				// Fast Pre-Flight Syntax Gate (<50ms)
+				if ok, _ := sandbox.PreFlightSyntaxCheck(wt.WorkDir, targetFile); !ok {
+					child.Backpropagate(-0.7)
+					return
+				}
+
 				verifyRes, _ := wtRunner.Run(a.TestCommand)
 				advPass := false
 				falsifyFailureOutput := ""

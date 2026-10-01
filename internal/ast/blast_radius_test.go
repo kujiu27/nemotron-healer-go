@@ -34,7 +34,11 @@ def transfer_money():
 		t.Fatalf("expected at least 2 symbols extracted, got %d", len(graph.Symbols))
 	}
 
-	report := graph.AnalyzeBlastRadius("account.py")
+	if _, ok := graph.Symbols["account.py::UserAccount.get_balance"]; !ok {
+		t.Fatalf("expected account.py::UserAccount.get_balance, got: %+v", graph.Symbols)
+	}
+
+	report := graph.AnalyzeBlastRadius("account.py", "UserAccount.get_balance")
 	if len(report.AffectedFiles) == 0 {
 		t.Fatalf("expected at least 1 affected file, got 0")
 	}

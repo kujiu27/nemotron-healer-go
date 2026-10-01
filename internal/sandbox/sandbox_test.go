@@ -297,3 +297,45 @@ func TestMultiFileSecurityViolationBlocksAll(t *testing.T) {
 		t.Fatalf("valid file was partially modified despite security block: %q", string(b1))
 	}
 }
+
+func TestPreFlightSyntaxCheck(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// 1. Valid Go code
+	validGo := filepath.Join(tmpDir, "valid.go")
+	_ = os.WriteFile(validGo, []byte("package main\nfunc main() {}\n"), 0644)
+	ok, msg := PreFlightSyntaxCheck(tmpDir, "valid.go")
+	if !ok {
+		t.Fatalf("expected valid Go code to pass syntax check, got: %s", msg)
+	}
+
+	// 2. Invalid Go code (unclosed bracket)
+	badGo := filepath.Join(tmpDir, "bad.go")
+	_ = os.WriteFile(badGo, []byte("package main\nfunc main() {\n"), 0644)
+	badOK, badMsg := PreFlightSyntaxCheck(tmpDir, "bad.go")
+	if badOK {
+		t.Fatalf("expected malformed Go code to be rejected, but it passed!")
+	}
+	if !strings.Contains(badMsg, "Go Syntax Error") {
+		t.Fatalf("expected Go Syntax Error message, got: %s", badMsg)
+	}
+
+	// 3. Valid Python code
+	validPy := filepath.Join(tmpDir, "valid.py")
+	_ = os.WriteFile(validPy, []byte("def add(a, b):\n    return a + b\n"), 0644)
+	okPy, msgPy := PreFlightSyntaxCheck(tmpDir, "valid.py")
+	if !okPy {
+		t.Fatalf("expected valid Python code to pass syntax check, got: %s", msgPy)
+	}
+
+	// 4. Invalid Python code (syntax error)
+	badPy := filepath.Join(tmpDir, "bad.py")
+	_ = os.WriteFile(badPy, []byte("def add(a, b\n    return a +\n"), 0644)
+	badPyOK, badPyMsg := PreFlightSyntaxCheck(tmpDir, "bad.py")
+	if badPyOK {
+		t.Fatalf("expected malformed Python code to be rejected, but it passed!")
+	}
+	if !strings.Contains(badPyMsg, "Python Syntax Error") {
+		t.Fatalf("expected Python Syntax Error message, got: %s", badPyMsg)
+	}
+}

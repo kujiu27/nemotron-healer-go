@@ -28,11 +28,14 @@ type BenchmarkCase struct {
 var (
 	ablationFlag   bool
 	repeatFlag     int
+	caseFilterFlag string
+	archFilterFlag string
 	exportJSONFlag string
 	exportMDFlag   string
 )
 
 var evalCmd = &cobra.Command{
+	Use:   "eval",
 	Short: "Run the in-repo Autonomous Healer Benchmark (AHB-6) with sandboxed isolation, A/B ablation, and repeat runs",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ AHB-6 In-Repo Benchmark & Ablation Engine"))
@@ -114,6 +117,23 @@ var evalCmd = &cobra.Command{
 			Archetype:   "InterfaceBreaking (Real Upstream Bug)",
 			Description: "Real reverted fix from sergi/go-diff commit 6dbe13c: shared lineHash regression test fails on buggy code.",
 		},
+		}
+
+		if caseFilterFlag != "" || archFilterFlag != "" {
+			var filtered []BenchmarkCase
+			for _, c := range cases {
+				if caseFilterFlag != "" && !strings.EqualFold(c.ID, caseFilterFlag) {
+					continue
+				}
+				if archFilterFlag != "" && !strings.Contains(strings.ToLower(c.Archetype), strings.ToLower(archFilterFlag)) {
+					continue
+				}
+				filtered = append(filtered, c)
+			}
+			if len(filtered) == 0 {
+				return fmt.Errorf("no benchmark cases matched filter (case=%q, archetype=%q)", caseFilterFlag, archFilterFlag)
+			}
+			cases = filtered
 		}
 
 		type EvalRunResult struct {
@@ -331,6 +351,8 @@ func max(a, b int) int {
 func init() {
 	evalCmd.Flags().BoolVar(&ablationFlag, "ablation", true, "Perform side-by-side A/B ablation against baseline ungrounded model")
 	evalCmd.Flags().IntVar(&repeatFlag, "repeat", 1, "Repeat each benchmark case N times to expose variance")
+	evalCmd.Flags().StringVar(&caseFilterFlag, "case", "", "Filter benchmark cases by ID (e.g. AHB-05, AHB-06)")
+	evalCmd.Flags().StringVar(&archFilterFlag, "archetype", "", "Filter benchmark cases by defect archetype name")
 	evalCmd.Flags().StringVar(&exportJSONFlag, "export-json", "", "Export benchmark ablation results to JSON file")
 	evalCmd.Flags().StringVar(&exportMDFlag, "export-md", "", "Export benchmark ablation scorecard to Markdown file")
 	RootCmd.AddCommand(evalCmd)
