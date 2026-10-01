@@ -18,6 +18,7 @@ type NebiusClient struct {
 	APIKey         string
 	BaseURL        string
 	Model          string
+	FastModel      string
 	ReasoningModel string
 	HTTP           *http.Client
 	LastTTFT       float64
@@ -94,10 +95,16 @@ func NewNebiusClient() *NebiusClient {
 		reasoningModel = envModel
 	}
 
+	fastModel := "meta-llama/Meta-Llama-3.1-8B-Instruct"
+	if envFast := os.Getenv("NEBIUS_FAST_MODEL"); envFast != "" {
+		fastModel = envFast
+	}
+
 	return &NebiusClient{
 		APIKey:         apiKey,
 		BaseURL:        baseURL,
 		Model:          reasoningModel,
+		FastModel:      fastModel,
 		ReasoningModel: reasoningModel,
 		HTTP:           &http.Client{Timeout: 120 * time.Second},
 	}
@@ -277,4 +284,89 @@ Do NOT omit the unified diff block.`, testCmd, stderr+"\n"+stdout, archetypeCont
 		TargetFile: targetFile,
 		DiffPatch:  diffPatch,
 	}, pTokens, cTokens, nil
+}
+
+type FastTriageResult struct {
+	DecisiveErrorLine     string `json:"decisive_error_line"`
+	HypothesizedRootCause string `json:"hypothesized_root_cause"`
+	RecommendedQuery      string `json:"recommended_query"`
+}
+
+// FastTriage calls the fast lightweight tier model (<150ms) to extract quick diagnostic insights and search query.
+func (c *NebiusClient) FastTriage(ctx context.Context, errorTrace string) (*FastTriageResult, int, int, error) {
+	if c.FastModel == "" {
+		return nil, 0, 0, nil
+	}
+
+	prompt := fmt.Sprintf(`You are a fast pre-flight code triage agent.
+Analyze the following test failure traceback. Extract:
+1. The decisive root error line.
+2. A 1-sentence hypothesis of the root cause.
+3. A 4-word search query for official documentation.
+
+Respond in exact format:
+ERROR_LINE: <line>
+CAUSE: <sentence>
+QUERY: <query>
+
+[TRACE]
+%s`, errorTrace)
+
+	reqBody := ChatRequest{
+		Model:       c.FastModel,
+		Messages:    []ChatMessage{{Role: "user", Content: prompt}},
+		Temperature: 0.0,
+		Stream:      false,
+	}
+
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	url := strings.TrimRight(c.BaseURL, "/") + "/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, 0, 0, fmt.Errorf("fast triage status: %d", resp.StatusCode)
+	}
+
+	var chatResp ChatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+		return nil, 0, 0, err
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return nil, chatResp.Usage.PromptTokens, chatResp.Usage.CompletionTokens, nil
+	}
+
+	text := chatResp.Choices[0].Message.Content
+	res := &FastTriageResult{}
+
+	lines := strings.Split(text, "\n")
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		if strings.HasPrefix(l, "ERROR_LINE:") {
+			res.DecisiveErrorLine = strings.TrimSpace(strings.TrimPrefix(l, "ERROR_LINE:"))
+		} else if strings.HasPrefix(l, "CAUSE:") {
+			res.HypothesizedRootCause = strings.TrimSpace(strings.TrimPrefix(l, "CAUSE:"))
+		} else if strings.HasPrefix(l, "QUERY:") {
+			res.RecommendedQuery = strings.TrimSpace(strings.TrimPrefix(l, "QUERY:"))
+		}
+	}
+
+	return res, chatResp.Usage.PromptTokens, chatResp.Usage.CompletionTokens, nil
 }
