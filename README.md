@@ -40,6 +40,7 @@ When CI tests fail or breaking changes break your codebase, developers waste hou
 | GitHub Action works on a real runner | `action-smoke` job in [CI](.github/workflows/ci.yml) runs the composite action end-to-end on every push |
 | Release binaries are live | [Releases](https://github.com/kujiu27/nemotron-healer-go/releases) — auto-published on `v*` tag pushes |
 | Benchmark statistics with variance | `nemotron-healer eval --repeat N` — per-case solve rates + mean±std |
+| Full pipeline runs end-to-end without API keys | `make eval-mock` — labeled mock endpoints (`X-Nemotron-Healer: MOCK`), a wiring demo that writes no receipts |
 
 ---
 
