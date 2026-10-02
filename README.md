@@ -29,6 +29,18 @@ When CI tests fail or breaking changes break your codebase, developers waste hou
 > Rollback uses file snapshots plus a manifest so created files are removed exactly. Run it on CI
 > runners or disposable worktrees — not on machines holding production secrets.
 
+## 🔍 Evidence & Verification (everything checkable, nothing on faith)
+
+| Claim | Receipt |
+| :--- | :--- |
+| Performance (7.5MB binary, ~12MB RSS, <10ms start) | [`docs/PERF.md`](docs/PERF.md) — regenerate: `make bench` |
+| All 7 benchmark cases ship genuinely RED (no leaked answers) | [`docs/BENCHMARK_RED_MATRIX.md`](docs/BENCHMARK_RED_MATRIX.md) — regenerate: `bash scripts/verify_red.sh`; enforced by CI on every push |
+| Real upstream bugs, not self-authored cases | [`samples/external_go_diff/README.md`](samples/external_go_diff/README.md) (sergi/go-diff `6dbe13c`) · [`samples/external_go_toml/README.md`](samples/external_go_toml/README.md) (pelletier/go-toml `6fa69af`) — red/green proofs included |
+| Adversarial self-audit with every finding fixed | [`GRAND_PRIZE_GAP_AUDIT.md`](GRAND_PRIZE_GAP_AUDIT.md) — remediation ledger maps each finding to its fix commit |
+| GitHub Action works on a real runner | `action-smoke` job in [CI](.github/workflows/ci.yml) runs the composite action end-to-end on every push |
+| Release binaries are live | [Releases](https://github.com/kujiu27/nemotron-healer-go/releases) — auto-published on `v*` tag pushes |
+| Benchmark statistics with variance | `nemotron-healer eval --repeat N` — per-case solve rates + mean±std |
+
 ---
 
 ## ⚡ Performance: Python vs Go Architecture
