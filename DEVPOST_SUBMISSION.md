@@ -30,8 +30,9 @@ fix survived contact with edge cases. Engineers still triage broken builds by ha
 2. **Scope** — builds a workspace symbol graph (Go via `go/parser` AST; Python/TS/JS via line
    grammars) and computes a Blast Radius risk score; high-risk targets get a hard
    non-signature-breaking constraint injected into the prompt.
-3. **Ground** — queries Tavily for live official migration docs; every claim in the final audit
-   card carries a verifiable source URL.
+3. **Ground** — the Nemotron Nano triage tier distills the traceback into a search
+   query (rule-table fallback), queries Tavily, and extracts the full text of the
+   top official doc; every claim in the final audit card carries a verifiable source URL.
 4. **Synthesize** — Nemotron 3 Ultra (Token Factory, streaming) emits a minimal unified diff.
    Optional test-time-compute search: divergent archetype-guided hypotheses, sandbox rollouts,
    reward-scored branch selection, and feedback-guided depth-2 hardening of candidates that pass base tests but
