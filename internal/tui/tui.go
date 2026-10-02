@@ -28,11 +28,6 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#7D56F4")).
 			Padding(1)
-
-	diffStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#50FA7B")).
-			Background(lipgloss.Color("#282A36")).
-			Padding(1)
 )
 
 type EventMsg engine.HealingStepEvent
