@@ -44,12 +44,20 @@ runs:
 
     - name: Run Autonomous Self-Healing Pipeline
       shell: bash
+      env:
+        # Inputs are passed via env, never interpolated into the script body:
+        # callers deriving inputs from untrusted events (e.g. comment bodies)
+        # must not get script injection.
+        NH_PATH: ${{ inputs.path }}
+        NH_COMMAND: ${{ inputs.command }}
+        NH_TURNS: ${{ inputs.turns }}
+        NH_ARENA: ${{ inputs.enable_arena }}
       run: |
         ARENA_FLAG=""
-        if [[ "${{ inputs.enable_arena }}" == "true" ]]; then
+        if [[ "$NH_ARENA" == "true" ]]; then
           ARENA_FLAG="--arena"
         fi
-        nemotron-healer "${{ inputs.path }}" --command "${{ inputs.command }}" --turns "${{ inputs.turns }}" $ARENA_FLAG --no-tui
+        nemotron-healer "$NH_PATH" --command "$NH_COMMAND" --turns "$NH_TURNS" $ARENA_FLAG --no-tui
 
     - name: Publish PR Audit Report Comment
       if: always() && github.event_name == 'pull_request'

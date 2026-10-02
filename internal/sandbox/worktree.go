@@ -35,7 +35,8 @@ func NewWorktreeSandbox(baseRepoDir string, prefix string) (*WorktreeSandbox, er
 	worktreePath := filepath.Join(os.TempDir(), "nemotron_worktrees", uniqueID)
 
 	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(worktreePath), 0755); err != nil {
+	// 0700: worktree copies of the repo must not be world-readable in /tmp.
+	if err := os.MkdirAll(filepath.Dir(worktreePath), 0700); err != nil {
 		return nil, fmt.Errorf("failed to create worktree parent dir: %w", err)
 	}
 

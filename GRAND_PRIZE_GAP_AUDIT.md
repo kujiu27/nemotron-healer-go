@@ -171,6 +171,8 @@ DESIGN 还宣称 R>0.7 时 "restricts unified diffs to non-signature-breaking op
 | 样本被治愈污染基准无复发防护 | 重伤 | 红态完整性门禁:verify_red.sh + CI benchmark-red job + 收据 | 5edd0a2/4d9a242 |
 | AHB-07 挂起类在 CI 触发 job 级击杀 | 重伤 | GOMEMLIMIT=256MiB 自困,坏树有界 FAIL,好树 0.6s | 5edd0a2 |
 
+
+| 专职安全审查:PersistRegressionTest 路径穿越(HIGH)、嵌套 .git/符号链接逃逸、DSN 型密钥泄漏、/tmp 快照全局可读、分支碰撞误提交、action 输入注入 | 重伤×6 | 全部修复 + 5 个安全回归测试;env 改默认拒绝白名单;git 错误强制传播;会话 ID 改 crypto/rand | fix/security-hardening |
 > 后续追加轮(9-13)发现与修复已并入上表;主 README 的 "Evidence & Verification" 一节给全部收据入口。
 ### Remediation Status (for judges)
 

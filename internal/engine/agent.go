@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
 	"os"
@@ -50,7 +51,14 @@ func NewAgent(workDir, testCommand string, maxTurns int, onEvent EventCallback, 
 	tavily := client.NewTavilyClient()
 	falsifier := falsify.NewFalsifier(nebius, runner, workDir, testCommand)
 
-	sessionID := fmt.Sprintf("go-%d", time.Now().Unix()%100000)
+	// Collision-free session ID: the old Unix()%100000 made two sessions in the
+	// same second collide on branch names, silently committing onto the
+	// user's current branch.
+	sid := make([]byte, 5)
+	if _, err := rand.Read(sid); err != nil {
+		panic(fmt.Sprintf("crypto/rand unavailable: %v", err)) // ponytail: unrecoverable entropy failure
+	}
+	sessionID := fmt.Sprintf("go-%x", sid)
 	session := NewHealingSession(sessionID, workDir, testCommand, maxTurns)
 
 	return &Agent{
@@ -307,6 +315,13 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		targetFile := patchSug.TargetFile
 		if targetFile == "" {
 			targetFile = targetHint
+		}
+		// The LLM controls TargetFile: reject traversal/absolute before ANY
+		// downstream use (patch headers, falsifier reads, regression writes).
+		if cleaned := filepath.Clean(targetFile); cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || filepath.IsAbs(targetFile) {
+			a.notify(StateFailed, fmt.Sprintf("Turn %d: rejected LLM target file escaping workspace: %q", turn, targetFile), nil)
+			_ = a.Checkpointer.Rollback(cpID)
+			continue
 		}
 
 		// 5. Apply Atomic Patch in Sandbox

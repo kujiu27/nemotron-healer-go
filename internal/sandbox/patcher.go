@@ -67,30 +67,63 @@ func NewPatcher(workDir string) *Patcher {
 // and blocking tampering with sensitive files (.env, .git, credentials, private keys).
 func ValidateSafePath(workDir, relPath string) (string, error) {
 	cleanRel := filepath.Clean(relPath)
-	if strings.HasPrefix(cleanRel, "..") || filepath.IsAbs(relPath) {
+	if cleanRel == ".." || strings.HasPrefix(cleanRel, ".."+string(filepath.Separator)) || filepath.IsAbs(relPath) {
 		return "", fmt.Errorf("security violation: path traversal detected (%s escapes workspace)", relPath)
 	}
 
 	lower := strings.ToLower(cleanRel)
 	if strings.Contains(lower, ".env") ||
-		strings.HasPrefix(lower, ".git") ||
 		strings.Contains(lower, "id_rsa") ||
 		strings.Contains(lower, "id_ed25519") ||
 		strings.Contains(lower, ".ssh") ||
 		strings.Contains(lower, "credentials") {
 		return "", fmt.Errorf("security violation: modification of protected file forbidden (%s)", relPath)
 	}
+	// Any path COMPONENT equal to .git (nested repos, submodules) is
+	// protected — a prefix-only check let `nested/.git/hooks/pre-commit` through.
+	for _, seg := range strings.Split(cleanRel, string(filepath.Separator)) {
+		if strings.ToLower(seg) == ".git" {
+			return "", fmt.Errorf("security violation: modification of protected .git path forbidden (%s)", relPath)
+		}
+	}
 
 	absWorkDir, err := filepath.Abs(workDir)
 	if err != nil {
 		return "", err
 	}
+	// Resolve BOTH sides: on macOS even TempDir() sits behind /var -> /private/var.
+	resolvedWork := absWorkDir
+	if rw, rErr := filepath.EvalSymlinks(absWorkDir); rErr == nil {
+		resolvedWork = rw
+	}
 	fullPath := filepath.Join(absWorkDir, cleanRel)
-	if !strings.HasPrefix(fullPath, absWorkDir) {
+	if !strings.HasPrefix(fullPath, absWorkDir+string(filepath.Separator)) && fullPath != absWorkDir {
 		return "", fmt.Errorf("security violation: path traversal out of bounds")
 	}
 
+	// Symlink containment: resolve the deepest existing ancestor and require
+	// the resolved path to stay inside the workspace. A workspace symlink
+	// like `assets -> /etc` must not let a diff write outside.
+	probe := fullPath
+	for !fileExists(probe) {
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			break
+		}
+		probe = parent
+	}
+	if resolved, rErr := filepath.EvalSymlinks(probe); rErr == nil {
+		if !strings.HasPrefix(resolved, resolvedWork+string(filepath.Separator)) && resolved != resolvedWork {
+			return "", fmt.Errorf("security violation: symlink escapes workspace (%s -> %s)", relPath, resolved)
+		}
+	}
+
 	return fullPath, nil
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
 
 // ExtractModifiedFiles parses unified diff headers (--- and +++) to discover all target files

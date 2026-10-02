@@ -239,7 +239,12 @@ func (f *Falsifier) PersistRegressionTest(targetFile, testCode string) (string, 
 		}
 	}
 
-	fullPath := filepath.Join(f.WorkDir, regRelFile)
+	// targetFile is LLM-controlled; the derived regression path must pass the
+	// same sandbox gate as patches (traversal, .git, symlink containment).
+	fullPath, err := sandbox.ValidateSafePath(f.WorkDir, regRelFile)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		return "", err
 	}

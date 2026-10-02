@@ -115,37 +115,22 @@ func parseTracebacks(stdout, stderr string) []string {
 	return traces
 }
 
-// sanitizeEnvironment filters out secrets and API credentials before spawning sub-processes.
+// sanitizeEnvironment builds the subprocess environment from an explicit
+// ALLOWLIST (default-deny). The previous keyword DENYLIST leaked DSN-style
+// secrets (DATABASE_URL, REDIS_URL, SENTRY_DSN...) into every test subprocess.
 func sanitizeEnvironment() []string {
-	var safeEnv []string
-	sensitiveKeywords := []string{
-		"KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL", "AUTH", "PRIVATE",
+	allow := map[string]bool{
+		"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "SHELL": true,
+		"LANG": true, "LC_ALL": true, "LC_CTYPE": true, "TERM": true, "TMPDIR": true,
+		"VIRTUAL_ENV": true, "PYTHONPATH": true, "PYTHONUNBUFFERED": true,
+		"GOPATH": true, "GOROOT": true, "GOFLAGS": true, "GOPROXY": true,
+		"GOSUMDB": true, "GONOSUMDB": true, "GO111MODULE": true, "GOTOOLCHAIN": true,
+		"CI": true, "GITHUB_ACTIONS": true,
 	}
-
+	var safeEnv []string
 	for _, entry := range os.Environ() {
 		parts := strings.SplitN(entry, "=", 2)
-		if len(parts) == 0 {
-			continue
-		}
-		key := strings.ToUpper(parts[0])
-
-		// Always keep fundamental runtime variables
-		if key == "PATH" || key == "HOME" || key == "USER" || key == "SHELL" ||
-			key == "LANG" || key == "LC_ALL" || key == "TERM" || key == "VIRTUAL_ENV" ||
-			key == "PYTHONPATH" || key == "GOPATH" || key == "GOROOT" || key == "TMPDIR" {
-			safeEnv = append(safeEnv, entry)
-			continue
-		}
-
-		isSensitive := false
-		for _, kw := range sensitiveKeywords {
-			if strings.Contains(key, kw) {
-				isSensitive = true
-				break
-			}
-		}
-
-		if !isSensitive {
+		if len(parts) == 2 && allow[parts[0]] {
 			safeEnv = append(safeEnv, entry)
 		}
 	}
