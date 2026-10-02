@@ -47,8 +47,14 @@ var RootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		// Under --json, stdout carries ONLY the machine-readable document;
+		// every human line (banner, sniffer, progress, annotations) goes to stderr.
+		human := os.Stdout
+		if jsonFlag {
+			human = os.Stderr
+		}
 
-		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ Nemotron-Healer (Go Edition)"))
+		fmt.Fprintln(human, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ Nemotron-Healer (Go Edition)"))
 
 		// Zero-Config Ecosystem Sniffer: Auto-detect test runner if not specified
 		if testCmdFlag == "" {
@@ -57,18 +63,18 @@ var RootCmd = &cobra.Command{
 				return fmt.Errorf("no test command specified and could not auto-detect ecosystem: %w (please specify with -c or --command)", err)
 			}
 			testCmdFlag = detectedCmd
-			fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render(
+			fmt.Fprintln(human, lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render(
 				fmt.Sprintf("🔍 Zero-Config Ecosystem Sniffer: Auto-detected %s -> `%s`", ecosystem, testCmdFlag)))
 		}
 
-		fmt.Printf("Target: %s\nCommand: `%s`\nMax Turns: %d\n\n", absDir, testCmdFlag, turnsFlag)
+		fmt.Fprintf(human, "Target: %s\nCommand: `%s`\nMax Turns: %d\n\n", absDir, testCmdFlag, turnsFlag)
 
 		isCI := noTUIFlag || ciFlag || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != ""
 
 		if isCI {
 			// Plain CLI logging mode (ideal for CI / GitHub Actions)
 			agent := engine.NewAgent(absDir, testCmdFlag, turnsFlag, func(event engine.HealingStepEvent) {
-				fmt.Printf("[%s] %s\n", event.State, event.Summary)
+				fmt.Fprintf(human, "[%s] %s\n", event.State, event.Summary)
 			}, nil)
 			agent.EnableSearch = searchFlag
 			agent.EnableArena = arenaFlag
@@ -83,7 +89,7 @@ var RootCmd = &cobra.Command{
 			}
 			if sarifFlag != "" {
 				if sErr := ExportSarif(session, sarifFlag); sErr == nil {
-					fmt.Printf("📊 Exported SARIF 2.1.0 security report to `%s`\n", sarifFlag)
+					fmt.Fprintf(human, "📊 Exported SARIF 2.1.0 security report to `%s`\n", sarifFlag)
 				}
 			}
 			if session.IsResolved && len(session.AppliedPatches) > 0 && !jsonFlag {
@@ -108,9 +114,9 @@ var RootCmd = &cobra.Command{
 			}
 
 			if session.IsResolved {
-				fmt.Printf("::notice title=Nemotron Self-Healing Succeeded::Verified fix generated in %.2fs (Turn %d)\n", session.DurationSeconds, session.CurrentTurn)
+				fmt.Fprintf(human, "::notice title=Nemotron Self-Healing Succeeded::Verified fix generated in %.2fs (Turn %d)\n", session.DurationSeconds, session.CurrentTurn)
 			} else {
-				fmt.Printf("::error title=Nemotron Self-Healing Failed::Could not verify fix within %d turns\n", session.MaxTurns)
+				fmt.Fprintf(human, "::error title=Nemotron Self-Healing Failed::Could not verify fix within %d turns\n", session.MaxTurns)
 				os.Exit(1)
 			}
 			return nil
