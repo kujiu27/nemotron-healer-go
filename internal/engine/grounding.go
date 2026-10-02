@@ -10,9 +10,9 @@ import (
 
 var (
 	pydanticDeprecatedRegex = regexp.MustCompile(`(?i)(PydanticDeprecatedSince\w+|@validator|field_validator|BaseModel)`)
-	sqlSyntaxRegex         = regexp.MustCompile(`(?i)(sqlite3|syntax error|operationalerror|injection)`)
-	deadlockRegex          = regexp.MustCompile(`(?i)(deadlock|corrupted|race condition|asyncio\.gather|lock)`)
-	attributeErrRegex      = regexp.MustCompile(`(?i)(AttributeError:\s*'[a-zA-Z0-9_]+'\s*object has no attribute\s*'([a-zA-Z0-9_]+)')`)
+	sqlSyntaxRegex          = regexp.MustCompile(`(?i)(sqlite3|syntax error|operationalerror|injection)`)
+	deadlockRegex           = regexp.MustCompile(`(?i)(deadlock|corrupted|race condition|asyncio\.gather|lock)`)
+	attributeErrRegex       = regexp.MustCompile(`(?i)(AttributeError:\s*'[a-zA-Z0-9_]+'\s*object has no attribute\s*'([a-zA-Z0-9_]+)')`)
 )
 
 // BuildGroundingQuery creates a high-precision search query for Tavily,

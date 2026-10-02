@@ -34,7 +34,7 @@ fix survived contact with edge cases. Engineers still triage broken builds by ha
    card carries a verifiable source URL.
 4. **Synthesize** — Nemotron 3 Ultra (Token Factory, streaming) emits a minimal unified diff.
    Optional test-time-compute search: divergent archetype-guided hypotheses, sandbox rollouts,
-   UCB1 selection, and feedback-guided depth-2 hardening of candidates that pass base tests but
+   reward-scored branch selection, and feedback-guided depth-2 hardening of candidates that pass base tests but
    fail adversarial ones.
 5. **Falsify** — an adversarial model generates hostile edge-case tests executed against the
    patched code. Failing the counter-example rolls the patch back. Skips (e.g. generator

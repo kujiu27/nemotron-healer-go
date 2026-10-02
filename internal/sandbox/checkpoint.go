@@ -167,7 +167,7 @@ func (c *CheckpointManager) CreateGitPRBranch(branchName, commitMsg string) erro
 	return c.CreateGitPRBranchWithAudit(branchName, commitMsg, "")
 }
 
-// CreateGitPRBranchWithAudit writes an Alibaba OCR-style Audit Card into the PR branch before committing.
+// CreateGitPRBranchWithAudit writes the Audit Card into the PR branch before committing.
 func (c *CheckpointManager) CreateGitPRBranchWithAudit(branchName, commitMsg, auditReport string) error {
 	_ = c.EnsureGitContext()
 

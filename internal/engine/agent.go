@@ -20,25 +20,25 @@ type EventCallback func(event HealingStepEvent)
 type TokenCallback func(token string)
 
 type Agent struct {
-	WorkDir       string
-	TestCommand   string
-	MaxTurns      int
-	EnableSearch  bool
-	EnableArena   bool
+	WorkDir      string
+	TestCommand  string
+	MaxTurns     int
+	EnableSearch bool
+	EnableArena  bool
 	// DisableGrounding turns off Tavily retrieval and archetype constraints;
 	// used as the un-grounded baseline in A/B ablation runs.
-	DisableGrounding bool
+	DisableGrounding  bool
 	lastTavilyResults []client.TavilySearchResultItem
-	Session       *HealingSession
-	Runner        *sandbox.Runner
-	Checkpointer  *sandbox.CheckpointManager
-	Patcher       *sandbox.Patcher
-	CodeGraph     *ast.CodeGraph
-	Nebius        *client.NebiusClient
-	Tavily        *client.TavilyClient
-	Falsifier     *falsify.Falsifier
-	OnEvent       EventCallback
-	OnStreamToken TokenCallback
+	Session           *HealingSession
+	Runner            *sandbox.Runner
+	Checkpointer      *sandbox.CheckpointManager
+	Patcher           *sandbox.Patcher
+	CodeGraph         *ast.CodeGraph
+	Nebius            *client.NebiusClient
+	Tavily            *client.TavilyClient
+	Falsifier         *falsify.Falsifier
+	OnEvent           EventCallback
+	OnStreamToken     TokenCallback
 }
 
 func NewAgent(workDir, testCommand string, maxTurns int, onEvent EventCallback, onToken TokenCallback) *Agent {
@@ -177,13 +177,13 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 
 	var failedHistory []string
 
-	// Step 2: If Test-Time Compute (TTC) MCTS Search is enabled, explore mutation tree
+	// Step 2: If Test-Time Compute (TTC) Divergent Hypothesis Search is enabled, explore hypothesis branches
 	if a.EnableSearch {
 		mctsRes, err := a.RunMCTSSearch(ctx, a.Session.LastError, 6)
 		if err == nil && mctsRes.Resolved {
 			return a.Session, nil
 		}
-		a.notify(StateDiagnosing, "MCTS Search did not achieve high-reward convergence; falling back to sequential repair...", nil)
+		a.notify(StateDiagnosing, "DHS (Divergent Hypothesis Search) did not achieve high-reward convergence; falling back to sequential repair...", nil)
 	}
 
 	// Step 3: Self-Healing Loop
@@ -211,9 +211,9 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			"blast_report": blastReport,
 		})
 
-		// 3. Deterministic Defect Archetype Classification (Alibaba OCR Hybrid Rule Engine)
+		// 3. Deterministic Defect Archetype Classification (Rule Engine)
 		archetype := ClassifyDefect(a.Session.LastError, codeCtx)
-		a.notify(StateDiagnosing, fmt.Sprintf("Alibaba OCR Hybrid Rules: Classified as [%s] (%s) - %s",
+		a.notify(StateDiagnosing, fmt.Sprintf("Archetype Rule Engine: Classified as [%s] (%s) - %s",
 			archetype.Archetype, archetype.Severity, archetype.Description), map[string]interface{}{
 			"archetype": archetype,
 		})
@@ -433,7 +433,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 - **Target Repository**: %s
 - **Test Command**: `+"`%s`"+`
 - **Healing Outcome**: ✅ **SUCCEEDED in %.2fs (Turn %d)**
-- **Defect Archetype (Alibaba OCR Hybrid)**: **%s** (%s)
+- **Defect Archetype (Deterministic Rule Engine)**: **%s** (%s)
   > %s
 
 ---

@@ -7,12 +7,12 @@ import (
 type DefectArchetype string
 
 const (
-	ArchetypeConcurrencyRace      DefectArchetype = "ConcurrencyRace"
-	ArchetypeInterfaceBreaking    DefectArchetype = "InterfaceBreaking"
-	ArchetypeSecurityDefect       DefectArchetype = "SecurityDefect"
-	ArchetypeResourceLeak         DefectArchetype = "ResourceLeak"
-	ArchetypeNullTypeError        DefectArchetype = "NullTypeError"
-	ArchetypeGeneralAssertion     DefectArchetype = "GeneralAssertion"
+	ArchetypeConcurrencyRace   DefectArchetype = "ConcurrencyRace"
+	ArchetypeInterfaceBreaking DefectArchetype = "InterfaceBreaking"
+	ArchetypeSecurityDefect    DefectArchetype = "SecurityDefect"
+	ArchetypeResourceLeak      DefectArchetype = "ResourceLeak"
+	ArchetypeNullTypeError     DefectArchetype = "NullTypeError"
+	ArchetypeGeneralAssertion  DefectArchetype = "GeneralAssertion"
 )
 
 type ArchetypeAnalysis struct {
@@ -23,7 +23,7 @@ type ArchetypeAnalysis struct {
 	ExemplarPattern string          `json:"exemplar_pattern,omitempty"`
 }
 
-// ClassifyDefect uses deterministic rules (inspired by Alibaba Open Code Review)
+// ClassifyDefect uses deterministic rules
 // to categorize failures before LLM inference, injecting domain-specific negative constraints and few-shot exemplars.
 func ClassifyDefect(trace string, sourceContext string) ArchetypeAnalysis {
 	lowerTrace := strings.ToLower(trace)

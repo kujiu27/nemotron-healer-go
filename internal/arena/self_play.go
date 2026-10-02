@@ -13,12 +13,12 @@ import (
 )
 
 type AdversarialRoundResult struct {
-	Round             int    `json:"round"`
-	RedAttackVector   string `json:"red_attack_vector"`
-	RedAttackCode     string `json:"red_attack_code"`
-	AttackSucceeded   bool   `json:"attack_succeeded"`
-	BlueDefensePatch  string `json:"blue_defense_patch,omitempty"`
-	DefenseVerified   bool   `json:"defense_verified"`
+	Round              int    `json:"round"`
+	RedAttackVector    string `json:"red_attack_vector"`
+	RedAttackCode      string `json:"red_attack_code"`
+	AttackSucceeded    bool   `json:"attack_succeeded"`
+	BlueDefensePatch   string `json:"blue_defense_patch,omitempty"`
+	DefenseVerified    bool   `json:"defense_verified"`
 	EquilibriumReached bool   `json:"equilibrium_reached"`
 }
 
@@ -40,7 +40,7 @@ func NewArena(nebius *client.NebiusClient, runner *sandbox.Runner, patcher *sand
 	}
 }
 
-// SelfPlay executes a multi-turn Minimax game between Red (Fuzzer) and Blue (Hardener).
+// SelfPlay executes a multi-round attack/defend adversarial loop between Red (Fuzzer) and Blue (Hardener).
 func (a *Arena) SelfPlay(ctx context.Context, targetFile string, maxRounds int) ([]AdversarialRoundResult, bool, error) {
 	if maxRounds <= 0 {
 		maxRounds = 3

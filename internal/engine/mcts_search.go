@@ -25,8 +25,8 @@ type MCTSSearchResult struct {
 }
 
 // RunMCTSSearch executes Test-Time Compute (TTC) search across code mutation hypotheses:
-// breadth-first archetype-guided expansion with sandbox rollouts, UCB1 selection, and
-// feedback-guided depth-2 refinement of candidates that pass base tests but fail adversarial ones.
+// breadth-first archetype-guided expansion with sandbox rollouts, reward-based selection,
+// and feedback-guided depth-2 refinement of candidates that pass base tests but fail adversarial ones.
 func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, budgetNodes int) (*MCTSSearchResult, error) {
 	if budgetNodes <= 0 {
 		budgetNodes = 6
@@ -63,7 +63,7 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 	}
 
 	if canUseWorktree {
-		a.notify(StateSynthesizingPatch, fmt.Sprintf("⚡ Launching Parallel MCTS Worktree Search: %d concurrent isolated rollouts for [%s]...", len(hypotheses), archetype.Archetype), nil)
+		a.notify(StateSynthesizingPatch, fmt.Sprintf("⚡ Launching Parallel Divergent Hypothesis Search (DHS): %d concurrent isolated rollouts for [%s]...", len(hypotheses), archetype.Archetype), nil)
 
 		var wg sync.WaitGroup
 		var mu sync.Mutex
@@ -98,7 +98,7 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 				defer func() { <-sem }()
 
 				promptMessages := []client.ChatMessage{
-					{Role: "system", Content: "You are an autonomous MCTS code synthesis engine exploring a specific hypothesis branch. Output exact, surgical unified diff patches."},
+					{Role: "system", Content: "You are an autonomous code synthesis engine exploring a specific hypothesis branch. Output exact, surgical unified diff patches."},
 					{
 						Role: "user",
 						Content: fmt.Sprintf(`[HYPOTHESIS BRANCH]
@@ -193,7 +193,7 @@ INSTRUCTIONS:
 				reward := evaluator.ComputeReward(verifyRes.IsSuccess, advPass, blastReport.RiskScore, diffPatch)
 				child.Backpropagate(reward)
 
-				a.notify(StateVerifyingSandbox, fmt.Sprintf("MCTS Worktree Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f (Parallel Worktree)",
+				a.notify(StateVerifyingSandbox, fmt.Sprintf("DHS Worktree Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f (Parallel Worktree)",
 					cID, verifyRes.IsSuccess, advPass, reward), map[string]interface{}{
 					"node_id":   cID,
 					"reward":    reward,
@@ -210,7 +210,7 @@ INSTRUCTIONS:
 				if verifyRes.IsSuccess && !advPass && nodesCreated < budgetNodes {
 					depth2ID := fmt.Sprintf("%s.1", cID)
 					refinePrompt := []client.ChatMessage{
-						{Role: "system", Content: "You are an autonomous MCTS code synthesis engine in Depth-2 tree search. Harden the previous candidate patch against the adversarial counter-example."},
+						{Role: "system", Content: "You are an autonomous code synthesis engine in depth-2 refinement. Harden the previous candidate patch against the adversarial counter-example."},
 						{
 							Role: "user",
 							Content: fmt.Sprintf(`[PREVIOUS CANDIDATE PATCH]
@@ -261,7 +261,7 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 								r2 := evaluator.ComputeReward(v2.IsSuccess, adv2, blastReport.RiskScore, refineDiff)
 								child2.Backpropagate(r2)
 
-								a.notify(StateVerifyingSandbox, fmt.Sprintf("MCTS Depth-2 Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f",
+								a.notify(StateVerifyingSandbox, fmt.Sprintf("DHS Depth-2 Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f",
 									depth2ID, v2.IsSuccess, adv2, r2), nil)
 
 								if r2 > bestReward {
@@ -302,7 +302,7 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 		}
 
 		if winningBranch != nil && winningBranch.reward >= 0.70 {
-			a.notify(StateSucceeded, fmt.Sprintf("🎉 MCTS Parallel Search converged on optimal branch [%s] (%s) with Reward: %.3f (Depth: %d)!",
+			a.notify(StateSucceeded, fmt.Sprintf("🎉 DHS Parallel Search converged on optimal branch [%s] (%s) with Reward: %.3f (Depth: %d)!",
 				winningBranch.childID, winningBranch.hypName, winningBranch.reward, winningBranch.searchDepth), nil)
 
 			// Apply winning patch in main workspace
@@ -312,8 +312,8 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 				a.Session.DurationSeconds = time.Since(start).Seconds()
 				a.Session.AppliedPatches = append(a.Session.AppliedPatches, winningBranch.diffPatch)
 
-				branchName := fmt.Sprintf("fix/nemotron-mcts-%s", a.Session.SessionID)
-				_ = a.Checkpointer.CreateGitPRBranch(branchName, fmt.Sprintf("fix(mcts): verified parallel search repair [%s] (Reward: %.3f)", winningBranch.childID, winningBranch.reward))
+				branchName := fmt.Sprintf("fix/nemotron-dhs-%s", a.Session.SessionID)
+				_ = a.Checkpointer.CreateGitPRBranch(branchName, fmt.Sprintf("fix(dhs): verified divergent-search repair [%s] (Reward: %.3f)", winningBranch.childID, winningBranch.reward))
 
 				return &MCTSSearchResult{
 					Resolved:        true,
@@ -343,7 +343,7 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 		}, nil
 	}
 
-	a.notify(StateSynthesizingPatch, fmt.Sprintf("MCTS Sequential Tree Expansion: Generating %d divergent patch branches for [%s]...", len(hypotheses), archetype.Archetype), nil)
+	a.notify(StateSynthesizingPatch, fmt.Sprintf("DHS Sequential Expansion: Generating %d divergent patch branches for [%s]...", len(hypotheses), archetype.Archetype), nil)
 	for i, hyp := range hypotheses {
 		select {
 		case <-ctx.Done():
@@ -352,14 +352,14 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 		}
 
 		childID := fmt.Sprintf("node_%d", i+1)
-		a.notify(StateSynthesizingPatch, fmt.Sprintf("Expanding MCTS [%s]: %s", childID, hyp.Name), nil)
+		a.notify(StateSynthesizingPatch, fmt.Sprintf("Expanding DHS branch [%s]: %s", childID, hyp.Name), nil)
 
 		// Create isolated checkpoint for this simulation rollout
 		cpID, _ := a.Checkpointer.CreateCheckpoint()
 
 		// Prompt Nemotron 3 Ultra with specific hypothesis guidance
 		promptMessages := []client.ChatMessage{
-			{Role: "system", Content: "You are an autonomous MCTS code synthesis engine exploring a specific hypothesis branch. Output exact, surgical unified diff patches."},
+			{Role: "system", Content: "You are an autonomous code synthesis engine exploring a specific hypothesis branch. Output exact, surgical unified diff patches."},
 			{
 				Role: "user",
 				Content: fmt.Sprintf(`[HYPOTHESIS BRANCH]
@@ -407,7 +407,7 @@ INSTRUCTIONS:
 		nodesCreated++
 
 		if diffPatch == "" {
-			a.notify(StateRollingBack, fmt.Sprintf("MCTS [%s] failed to synthesize valid diff. Pruning branch...", childID), nil)
+			a.notify(StateRollingBack, fmt.Sprintf("DHS [%s] failed to synthesize valid diff. Pruning branch...", childID), nil)
 			child.Backpropagate(-0.9)
 			_ = a.Checkpointer.Rollback(cpID)
 			continue
@@ -416,7 +416,7 @@ INSTRUCTIONS:
 		// Rollout: Apply patch in isolated sandbox
 		applied, applyMsg := a.Patcher.ApplyPatch(diffPatch, targetFile)
 		if !applied {
-			a.notify(StateRollingBack, fmt.Sprintf("MCTS [%s] diff application failed (%s). Pruning branch...", childID, applyMsg), nil)
+			a.notify(StateRollingBack, fmt.Sprintf("DHS [%s] diff application failed (%s). Pruning branch...", childID, applyMsg), nil)
 			child.Backpropagate(-0.8)
 			_ = a.Checkpointer.Rollback(cpID)
 			continue
@@ -440,7 +440,7 @@ INSTRUCTIONS:
 		reward := evaluator.ComputeReward(verifyRes.IsSuccess, advPass, blastReport.RiskScore, diffPatch)
 		child.Backpropagate(reward)
 
-		a.notify(StateVerifyingSandbox, fmt.Sprintf("MCTS Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f",
+		a.notify(StateVerifyingSandbox, fmt.Sprintf("DHS Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f",
 			childID, verifyRes.IsSuccess, advPass, reward), map[string]interface{}{
 			"node_id":   childID,
 			"reward":    reward,
@@ -450,15 +450,15 @@ INSTRUCTIONS:
 
 		// If this branch achieves Pareto-optimal victory (>= 0.70)
 		if reward >= 0.70 {
-			a.notify(StateSucceeded, fmt.Sprintf("🎉 MCTS Search converged on optimal branch [%s] (%s) with Reward: %.3f!",
+			a.notify(StateSucceeded, fmt.Sprintf("🎉 DHS converged on optimal branch [%s] (%s) with Reward: %.3f!",
 				childID, hyp.Name, reward), nil)
 
 			a.Session.IsResolved = true
 			a.Session.DurationSeconds = time.Since(start).Seconds()
 			a.Session.AppliedPatches = append(a.Session.AppliedPatches, diffPatch)
 
-			branchName := fmt.Sprintf("fix/nemotron-mcts-%s", a.Session.SessionID)
-			_ = a.Checkpointer.CreateGitPRBranch(branchName, fmt.Sprintf("fix(mcts): verified repair via MCTS search branch [%s] (Reward: %.3f)", childID, reward))
+			branchName := fmt.Sprintf("fix/nemotron-dhs-%s", a.Session.SessionID)
+			_ = a.Checkpointer.CreateGitPRBranch(branchName, fmt.Sprintf("fix(dhs): verified repair via divergent-search branch [%s] (Reward: %.3f)", childID, reward))
 
 			return &MCTSSearchResult{
 				Resolved:        true,
@@ -474,10 +474,10 @@ INSTRUCTIONS:
 		// expand child node into refined sub-hypothesis guided by execution feedback (AlphaCode 2 / Snell et al.).
 		if verifyRes.IsSuccess && !advPass && nodesCreated < budgetNodes {
 			depth2ID := fmt.Sprintf("%s.1", childID)
-			a.notify(StateSynthesizingPatch, fmt.Sprintf("MCTS Depth-2 Deepening [%s]: Refining candidate based on adversarial feedback...", depth2ID), nil)
+			a.notify(StateSynthesizingPatch, fmt.Sprintf("DHS Depth-2 Hardening [%s]: Refining candidate based on adversarial feedback...", depth2ID), nil)
 
 			refinePrompt := []client.ChatMessage{
-				{Role: "system", Content: "You are an autonomous MCTS code synthesis engine in Depth-2 tree search. Harden the previous candidate patch against the adversarial counter-example."},
+				{Role: "system", Content: "You are an autonomous code synthesis engine in depth-2 refinement. Harden the previous candidate patch against the adversarial counter-example."},
 				{
 					Role: "user",
 					Content: fmt.Sprintf(`[PREVIOUS CANDIDATE PATCH]
@@ -520,7 +520,7 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 						reward2 := evaluator.ComputeReward(verifyRes2.IsSuccess, advPass2, blastReport.RiskScore, refineDiff)
 						child2.Backpropagate(reward2)
 
-						a.notify(StateVerifyingSandbox, fmt.Sprintf("MCTS Depth-2 Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f",
+						a.notify(StateVerifyingSandbox, fmt.Sprintf("DHS Depth-2 Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f",
 							depth2ID, verifyRes2.IsSuccess, advPass2, reward2), map[string]interface{}{
 							"node_id":   depth2ID,
 							"reward":    reward2,
@@ -529,7 +529,7 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 						})
 
 						if reward2 >= 0.70 {
-							a.notify(StateSucceeded, fmt.Sprintf("🎉 MCTS Depth-2 converged on optimal hardened branch [%s] with Reward: %.3f!", depth2ID, reward2), nil)
+							a.notify(StateSucceeded, fmt.Sprintf("🎉 DHS Depth-2 converged on optimal hardened branch [%s] with Reward: %.3f!", depth2ID, reward2), nil)
 							a.Session.IsResolved = true
 							a.Session.DurationSeconds = time.Since(start).Seconds()
 							a.Session.AppliedPatches = append(a.Session.AppliedPatches, refineDiff)

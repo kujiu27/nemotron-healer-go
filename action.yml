@@ -11,7 +11,7 @@ inputs:
     required: false
     default: "5"
   enable_arena:
-    description: "Enable Red-Blue Minimax Adversarial Self-Play Arena"
+    description: "Enable Red-Blue Adversarial Self-Play Arena"
     required: false
     default: "true"
   github_token:

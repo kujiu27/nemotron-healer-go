@@ -109,14 +109,14 @@ var evalCmd = &cobra.Command{
 				Archetype:   "ConcurrencyRace (Go Data Race)",
 				Description: "Concurrent map and state mutation detected by Go runtime -race detector.",
 			},
-		{
-			ID:          "AHB-06",
-			Name:        "External: go-diff lineHash",
-			Path:        "samples/external_go_diff",
-			Command:     "go test ./diffmatchpatch/ -run TestDiffLinesToChars",
-			Archetype:   "InterfaceBreaking (Real Upstream Bug)",
-			Description: "Real reverted fix from sergi/go-diff commit 6dbe13c: shared lineHash regression test fails on buggy code.",
-		},
+			{
+				ID:          "AHB-06",
+				Name:        "External: go-diff lineHash",
+				Path:        "samples/external_go_diff",
+				Command:     "go test ./diffmatchpatch/ -run TestDiffLinesToChars",
+				Archetype:   "InterfaceBreaking (Real Upstream Bug)",
+				Description: "Real reverted fix from sergi/go-diff commit 6dbe13c: shared lineHash regression test fails on buggy code.",
+			},
 		}
 
 		if caseFilterFlag != "" || archFilterFlag != "" {
@@ -157,45 +157,45 @@ var evalCmd = &cobra.Command{
 			for idx, c := range cases {
 				fmt.Printf("[%d/%d] Sandboxing & Evaluating %s (%s)...\n", idx+1, len(cases), c.ID, c.Name)
 
-		// Step 1: Create clean isolated temporary sandboxes (one per arm)
-		tmpDir, err := createIsolatedSandbox(c.Path)
-		if err != nil {
-			fmt.Printf("  ⚠️ Could not sandbox %s: %v (skipping)\n", c.Path, err)
-			continue
-		}
-		defer os.RemoveAll(tmpDir)
+				// Step 1: Create clean isolated temporary sandboxes (one per arm)
+				tmpDir, err := createIsolatedSandbox(c.Path)
+				if err != nil {
+					fmt.Printf("  ⚠️ Could not sandbox %s: %v (skipping)\n", c.Path, err)
+					continue
+				}
+				defer os.RemoveAll(tmpDir)
 
-		baseDir, err := createIsolatedSandbox(c.Path)
-		if err != nil {
-			fmt.Printf("  ⚠️ Could not sandbox baseline %s: %v (skipping)\n", c.Path, err)
-			continue
-		}
-		defer os.RemoveAll(baseDir)
+				baseDir, err := createIsolatedSandbox(c.Path)
+				if err != nil {
+					fmt.Printf("  ⚠️ Could not sandbox baseline %s: %v (skipping)\n", c.Path, err)
+					continue
+				}
+				defer os.RemoveAll(baseDir)
 
-		// Step 2: Measured baseline — single-turn greedy LLM loop, no Tavily grounding, no archetype constraints
-		baseAgent := engine.NewAgent(baseDir, c.Command, 1, nil, nil)
-		baseAgent.EnableArena = false
-		baseAgent.DisableGrounding = true
-		baseSession, _ := baseAgent.Run(context.Background())
-		baselinePass := baseSession.IsResolved
+				// Step 2: Measured baseline — single-turn greedy LLM loop, no Tavily grounding, no archetype constraints
+				baseAgent := engine.NewAgent(baseDir, c.Command, 1, nil, nil)
+				baseAgent.EnableArena = false
+				baseAgent.DisableGrounding = true
+				baseSession, _ := baseAgent.Run(context.Background())
+				baselinePass := baseSession.IsResolved
 
-		// Step 3: Run Full Nemotron-Healer System in the fresh isolated sandbox
-		start := time.Now()
-		agent := engine.NewAgent(tmpDir, c.Command, 3, nil, nil)
-		agent.EnableArena = false // Fast verifiable evaluation
-		session, _ := agent.Run(context.Background())
-		dur := time.Since(start).Seconds()
+				// Step 3: Run Full Nemotron-Healer System in the fresh isolated sandbox
+				start := time.Now()
+				agent := engine.NewAgent(tmpDir, c.Command, 3, nil, nil)
+				agent.EnableArena = false // Fast verifiable evaluation
+				session, _ := agent.Run(context.Background())
+				dur := time.Since(start).Seconds()
 
-			results = append(results, EvalRunResult{
-				CaseID:       c.ID,
-				Name:         c.Name,
-				Archetype:    c.Archetype,
-				BaselinePass: baselinePass,
-				FullPass:     session.IsResolved,
-				TurnsTaken:   session.CurrentTurn,
-				DurationS:    dur,
-				CostUSD:      session.TokenLedger.EstimatedCostUSD,
-			})
+				results = append(results, EvalRunResult{
+					CaseID:       c.ID,
+					Name:         c.Name,
+					Archetype:    c.Archetype,
+					BaselinePass: baselinePass,
+					FullPass:     session.IsResolved,
+					TurnsTaken:   session.CurrentTurn,
+					DurationS:    dur,
+					CostUSD:      session.TokenLedger.EstimatedCostUSD,
+				})
 			}
 		}
 
