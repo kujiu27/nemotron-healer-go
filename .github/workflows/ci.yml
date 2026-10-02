@@ -122,9 +122,16 @@ jobs:
 
       - name: Verify every AHB case ships RED (no leaked answers)
         run: |
-          bash -x scripts/verify_red.sh 2> >(tail -80 >&2) || {
-            echo '```'; cat docs/BENCHMARK_RED_MATRIX.md 2>/dev/null; echo '```' >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          }
-          cat docs/BENCHMARK_RED_MATRIX.md >> "$GITHUB_STEP_SUMMARY"
+          bash -x scripts/verify_red.sh >/tmp/vr.out 2>/tmp/vr.err; RC=$?
+          {
+            echo '## verify_red trace tail'
+            echo '```'
+            tail -60 /tmp/vr.err
+            echo '```'
+            echo '## matrix'
+            echo '```'
+            cat docs/BENCHMARK_RED_MATRIX.md 2>/dev/null || echo '(no matrix written)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $RC
 
