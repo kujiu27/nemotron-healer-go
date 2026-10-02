@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Real-API eval: requires NEBIUS_API_KEY + TAVILY_API_KEY.
 # Writes timestamped results to docs/EVAL_RESULTS.md (appended).
+# EVAL_OUT overrides the destination (testing only — mock runs must never
+# touch the committed receipt).
 set -euo pipefail
 : "${NEBIUS_API_KEY:?export NEBIUS_API_KEY first}"
 : "${TAVILY_API_KEY:?export TAVILY_API_KEY first}"
 
 COMMIT=$(git rev-parse --short HEAD)
 STAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-OUT=docs/EVAL_RESULTS.md
+OUT="${EVAL_OUT:-docs/EVAL_RESULTS.md}"
 
 go build -o /tmp/nemotron-healer-eval ./cmd/nemotron-healer
 {
