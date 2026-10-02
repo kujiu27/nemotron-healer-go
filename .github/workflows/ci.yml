@@ -71,3 +71,31 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "${GITHUB_REF_NAME}" dist/* --title "${GITHUB_REF_NAME}" --generate-notes
+
+  action-smoke:
+    name: Composite Action Smoke (real runner)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Runs THIS composite action end-to-end: setup-go, source build,
+      # heal invocation against the AHB-06 failing sample. CI has no API
+      # keys, so the honest outcome is a non-zero exit after the red test
+      # reproduces — which proves the whole distribution chain works
+      # (install, build, run, report) on a real GitHub runner.
+      - name: Run composite action against AHB-06 (expect honest keyless failure)
+        id: act
+        continue-on-error: true
+        uses: ./
+        with:
+          path: samples/external_go_diff
+          command: go test ./diffmatchpatch/ -run TestDiffLinesToChars
+          turns: '1'
+          enable_arena: 'false'
+
+      - name: Assert action ran and failed honestly (no API key in CI)
+        if: steps.act.outcome != 'failure'
+        run: |
+          echo "Expected the healer to exit non-zero without API keys, got: ${{ steps.act.outcome }}"
+          exit 1

@@ -5,7 +5,10 @@ inputs:
   command:
     description: "The test command to execute and verify (e.g. 'pytest', 'go test ./...')"
     required: true
-    default: "pytest"
+  path:
+    description: "Working directory to heal, relative to the repo root (e.g. a failing sample or sub-project)"
+    required: false
+    default: "."
   turns:
     description: "Maximum self-healing attempts"
     required: false
@@ -46,7 +49,7 @@ runs:
         if [[ "${{ inputs.enable_arena }}" == "true" ]]; then
           ARENA_FLAG="--arena"
         fi
-        nemotron-healer . --command "${{ inputs.command }}" --turns "${{ inputs.turns }}" $ARENA_FLAG --no-tui
+        nemotron-healer "${{ inputs.path }}" --command "${{ inputs.command }}" --turns "${{ inputs.turns }}" $ARENA_FLAG --no-tui
 
     - name: Publish PR Audit Report Comment
       if: always() && github.event_name == 'pull_request'
