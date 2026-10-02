@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nemotron-healer/nemotron-healer-go/internal/sandbox"
+	"github.com/kujiu27/nemotron-healer-go/internal/sandbox"
 )
 
 type NebiusClient struct {

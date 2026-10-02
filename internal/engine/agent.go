@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nemotron-healer/nemotron-healer-go/internal/arena"
-	"github.com/nemotron-healer/nemotron-healer-go/internal/ast"
-	"github.com/nemotron-healer/nemotron-healer-go/internal/client"
-	"github.com/nemotron-healer/nemotron-healer-go/internal/falsify"
-	"github.com/nemotron-healer/nemotron-healer-go/internal/sandbox"
+	"github.com/kujiu27/nemotron-healer-go/internal/arena"
+	"github.com/kujiu27/nemotron-healer-go/internal/ast"
+	"github.com/kujiu27/nemotron-healer-go/internal/client"
+	"github.com/kujiu27/nemotron-healer-go/internal/falsify"
+	"github.com/kujiu27/nemotron-healer-go/internal/sandbox"
 )
 
 type EventCallback func(event HealingStepEvent)

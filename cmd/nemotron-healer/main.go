@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/nemotron-healer/nemotron-healer-go/internal/cli"
+	"github.com/kujiu27/nemotron-healer-go/internal/cli"
 )
 
 func main() {

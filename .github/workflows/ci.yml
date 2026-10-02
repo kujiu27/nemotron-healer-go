@@ -22,7 +22,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: 'stable'
           check-latest: true
 
       - name: Verify Dependencies
@@ -40,3 +40,34 @@ jobs:
           CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/nemotron-healer_darwin_amd64 ./cmd/nemotron-healer
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/nemotron-healer_windows_amd64.exe ./cmd/nemotron-healer
           ls -lh dist/
+
+  release:
+    name: Publish Release (tag pushes)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Build all platform binaries
+        run: |
+          mkdir -p dist
+          VERSION="${GITHUB_REF_NAME}"
+          CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build -trimpath -ldflags="-s -w -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=${VERSION}" -o dist/nemotron-healer_linux_amd64       ./cmd/nemotron-healer
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -trimpath -ldflags="-s -w -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=${VERSION}" -o dist/nemotron-healer_darwin_arm64     ./cmd/nemotron-healer
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags="-s -w -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=${VERSION}" -o dist/nemotron-healer_darwin_amd64     ./cmd/nemotron-healer
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=${VERSION}" -o dist/nemotron-healer_windows_amd64.exe ./cmd/nemotron-healer
+          ls -lh dist/
+
+      - name: Create GitHub Release and upload binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/* --title "${GITHUB_REF_NAME}" --generate-notes

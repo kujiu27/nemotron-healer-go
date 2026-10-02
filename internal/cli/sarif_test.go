@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nemotron-healer/nemotron-healer-go/internal/engine"
+	"github.com/kujiu27/nemotron-healer-go/internal/engine"
 )
 
 func TestExportSarif(t *testing.T) {

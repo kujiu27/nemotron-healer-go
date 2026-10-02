@@ -13,11 +13,14 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/nemotron-healer/nemotron-healer-go/internal/client"
-	"github.com/nemotron-healer/nemotron-healer-go/internal/engine"
-	"github.com/nemotron-healer/nemotron-healer-go/internal/tui"
+	"github.com/kujiu27/nemotron-healer-go/internal/client"
+	"github.com/kujiu27/nemotron-healer-go/internal/engine"
+	"github.com/kujiu27/nemotron-healer-go/internal/tui"
 	"github.com/spf13/cobra"
 )
+
+// Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
+var Version = "v0.3.0"
 
 var (
 	testCmdFlag    string
@@ -202,7 +205,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version info",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("nemotron-healer-go v0.2.0 (NVIDIA Nemotron 3 Ultra + Tavily)")
+		fmt.Printf("nemotron-healer-go %s (NVIDIA Nemotron 3 Ultra + Tavily)\n", Version)
 	},
 }
 

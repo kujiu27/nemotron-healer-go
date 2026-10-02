@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/nemotron-healer/nemotron-healer-go/internal/client"
-	"github.com/nemotron-healer/nemotron-healer-go/internal/sandbox"
+	"github.com/kujiu27/nemotron-healer-go/internal/client"
+	"github.com/kujiu27/nemotron-healer-go/internal/sandbox"
 )
 
 type FalsificationResult struct {
