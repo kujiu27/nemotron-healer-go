@@ -183,7 +183,7 @@ INSTRUCTIONS:
 				falsifyFailureOutput := ""
 
 				if verifyRes.IsSuccess {
-					falsifyRes, _ := wtFalsifier.StressTest(ctx, targetHint, diffPatch)
+					falsifyRes, _ := wtFalsifier.StressTest(ctx, targetFile, diffPatch)
 					advPass = falsifyRes.Passed
 					if !advPass {
 						falsifyFailureOutput = falsifyRes.FailureOutput
@@ -207,7 +207,10 @@ INSTRUCTIONS:
 				finalNode := child
 
 				// Depth-2 Iterative Refinement if base passed but adv failed
-				if verifyRes.IsSuccess && !advPass && nodesCreated < budgetNodes {
+				mu.Lock()
+				withinBudget := nodesCreated < budgetNodes
+				mu.Unlock()
+				if verifyRes.IsSuccess && !advPass && withinBudget {
 					depth2ID := fmt.Sprintf("%s.1", cID)
 					refinePrompt := []client.ChatMessage{
 						{Role: "system", Content: "You are an autonomous code synthesis engine in depth-2 refinement. Harden the previous candidate patch against the adversarial counter-example."},
@@ -254,7 +257,7 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 								v2, _ := wtRunner.Run(a.TestCommand)
 								adv2 := false
 								if v2.IsSuccess {
-									f2, _ := wtFalsifier.StressTest(ctx, targetHint, refineDiff)
+									f2, _ := wtFalsifier.StressTest(ctx, targetFile, refineDiff)
 									adv2 = f2.Passed
 								}
 
@@ -355,7 +358,11 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 		a.notify(StateSynthesizingPatch, fmt.Sprintf("Expanding DHS branch [%s]: %s", childID, hyp.Name), nil)
 
 		// Create isolated checkpoint for this simulation rollout
-		cpID, _ := a.Checkpointer.CreateCheckpoint()
+		cpID, cpErr := a.Checkpointer.CreateCheckpoint()
+		if cpErr != nil {
+			a.notify(StateFailed, fmt.Sprintf("DHS branch [%s]: checkpoint failed, pruning: %v", childID, cpErr), nil)
+			continue
+		}
 
 		// Prompt Nemotron 3 Ultra with specific hypothesis guidance
 		promptMessages := []client.ChatMessage{
@@ -429,7 +436,7 @@ INSTRUCTIONS:
 
 		if verifyRes.IsSuccess {
 			// Run Adversarial Falsification stress test
-			falsifyRes, _ := a.Falsifier.StressTest(ctx, targetHint, diffPatch)
+			falsifyRes, _ := a.Falsifier.StressTest(ctx, targetFile, diffPatch)
 			advPass = falsifyRes.Passed
 			if !advPass {
 				falsifyFailureOutput = falsifyRes.FailureOutput
@@ -513,7 +520,7 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 						verifyRes2, _ := a.Runner.Run(a.TestCommand)
 						advPass2 := false
 						if verifyRes2.IsSuccess {
-							f2, _ := a.Falsifier.StressTest(ctx, targetHint, refineDiff)
+							f2, _ := a.Falsifier.StressTest(ctx, targetFile, refineDiff)
 							advPass2 = f2.Passed
 						}
 

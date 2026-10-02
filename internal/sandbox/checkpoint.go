@@ -60,7 +60,7 @@ func (c *CheckpointManager) CreateCheckpoint() (string, error) {
 		return nil
 	})
 	if err == nil {
-		err = os.WriteFile(backupDir+".manifest", []byte(strings.Join(manifest, "\n")), 0644)
+		err = os.WriteFile(backupDir+".manifest", []byte(strings.Join(manifest, "\n")), 0600)
 	}
 
 	return checkpointID, err
