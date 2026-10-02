@@ -73,6 +73,22 @@ nemotron-healer . --command "pytest"
 nemotron-healer . --command "go test ./..." --no-tui
 ```
 
+### 4. Use as a GitHub Action
+```yaml
+- name: Autonomous Self-Healing CI
+  uses: kujiu27/nemotron-healer-go@v0.4.0
+  with:
+    path: .                    # directory to heal (default: repo root)
+    command: go test ./...     # the failing test command
+    turns: '5'
+    enable_arena: 'true'
+```
+Requires repo secrets `NEBIUS_API_KEY` (tokenfactory.nebius.com) and
+`TAVILY_API_KEY` (tavily.com). The composite action builds the healer from
+source — no release dependency — and comments the full audit card on the PR.
+This exact action chain is smoke-tested on a real GitHub runner on every push
+(see the `action-smoke` job in CI).
+
 ---
 
 ## 🛠 Architecture & State Machine
