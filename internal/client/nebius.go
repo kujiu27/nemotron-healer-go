@@ -100,7 +100,10 @@ func NewNebiusClient() *NebiusClient {
 		reasoningModel = envModel
 	}
 
-	fastModel := "meta-llama/Meta-Llama-3.1-8B-Instruct"
+	// Catalog-verified fast tier: nvidia/Nemotron-3-Nano-30B-A3B ($0.06/$0.24 per 1M).
+	// The previous default (meta-llama/Meta-Llama-3.1-8B-Instruct) is not in the
+	// Token Factory catalog — every FastTriage call would fail and silently skip.
+	fastModel := "nvidia/Nemotron-3-Nano-30B-A3B"
 	if envFast := os.Getenv("NEBIUS_FAST_MODEL"); envFast != "" {
 		fastModel = envFast
 	}

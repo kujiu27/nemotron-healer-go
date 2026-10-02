@@ -19,7 +19,7 @@ When CI tests fail or breaking changes break your codebase, developers waste hou
 
 1. **Reproduction (Red State)**: Executes the failing test command and isolates the precise execution trace.
 2. **Symbol Graph Blast Radius Analysis**: Maps the codebase symbol graph (Go via `go/parser` AST; Python/TS/JS via line grammars) and scores downstream blast radius across files.
-3. **Dynamic Knowledge Grounding**: Queries **Tavily Search API** for up-to-the-minute official migration guides and documentation, bypassing LLM knowledge cutoffs.
+3. **Dynamic Knowledge Grounding**: Queries **Tavily Search API** for up-to-the-minute official migration guides and documentation, then pulls full text of the top hit via **Tavily Extract**; the Nemotron Nano triage tier synthesizes the search query from the actual traceback. Bypasses LLM knowledge cutoffs.
 4. **Surgical Patch Synthesis**: Prompts **NVIDIA Nemotron 3 Ultra** on **Nebius Token Factory** for minimal, atomic Unified Diff patches.
 5. **Transactional Sandbox & Adversarial Falsification**: Applies patches with atomic rollback safeguards, verifies test passes, and generates adversarial edge-case tests to eliminate AI patch overfitting.
 6. **Git PR Automation**: Commits verified patches directly into a dedicated fix branch (`fix/nemotron-heal-xxx`).

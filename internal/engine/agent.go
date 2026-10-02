@@ -240,6 +240,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		}
 
 		// 3.5 Pre-flight Triage via Tier-1 FastModel (Heterogeneous Dual-Model Architecture)
+		modelQuery := ""
 		if a.Nebius.FastModel != "" && !a.DisableGrounding {
 			triage, ftP, ftC, ftErr := a.Nebius.FastTriage(ctx, a.Session.LastError)
 			if ftErr == nil && triage != nil {
@@ -248,6 +249,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				if triage.HypothesizedRootCause != "" {
 					a.notify(StateDiagnosing, fmt.Sprintf("Tier-1 Fast Triage (%s): %s", a.Nebius.FastModel, triage.HypothesizedRootCause), nil)
 				}
+				modelQuery = triage.RecommendedQuery
 			}
 		}
 
@@ -258,11 +260,30 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			a.notify(StateDiagnosing, "Grounding disabled (baseline mode): skipping Tavily retrieval and archetype constraints.", nil)
 		} else {
 			query = BuildGroundingQuery(a.WorkDir, targetHint, archetype, a.Session.LastError)
+			if modelQuery != "" {
+				// Model-synthesized query beats the static rule table: it reflects
+				// the actual traceback instead of pattern-matched keywords.
+				query = modelQuery
+				a.notify(StateSearchingKnowledge, fmt.Sprintf("Using Nemotron Nano triage query (rule-table fallback bypassed): '%s'", query), nil)
+			}
 			a.notify(StateSearchingKnowledge, fmt.Sprintf("Searching Tavily for official documentation: '%s'", query), nil)
 			tavilyResp, _ := a.Tavily.Search(ctx, query, 3)
 			docsCtx = a.Tavily.FormatContext(tavilyResp)
-			if tavilyResp != nil {
+			if tavilyResp != nil && len(tavilyResp.Results) > 0 {
 				a.lastTavilyResults = tavilyResp.Results
+				// Extract full text of the top hit for deeper grounding;
+				// honest degrade to snippets on any error.
+				top := tavilyResp.Results[0]
+				if extracted, exErr := a.Tavily.Extract(ctx, top.URL); exErr == nil && extracted != "" {
+					excerpt := extracted
+					if len(excerpt) > 4000 {
+						excerpt = excerpt[:4000]
+					}
+					docsCtx += fmt.Sprintf("\n[FULL TEXT EXCERPT — %s]\n%s\n", top.URL, excerpt)
+					a.notify(StateSearchingKnowledge, fmt.Sprintf("Tavily Extract: enriched grounding with %d chars of full text from the top result", len(excerpt)), nil)
+				} else if exErr != nil {
+					a.notify(StateSearchingKnowledge, fmt.Sprintf("Tavily Extract unavailable (%v) — falling back to search snippets", exErr), nil)
+				}
 			}
 			a.Session.TavilyQueries = append(a.Session.TavilyQueries, query)
 		}
