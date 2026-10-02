@@ -306,35 +306,75 @@ func (p *Patcher) applyAtomicMultiFileHunks(targetFiles []string, diffPatch stri
 	return true, fmt.Sprintf("Atomically replaced hunks in: %s", strings.Join(changed, ", "))
 }
 
-func replaceHunksInContent(content string, diffPatch string) (string, bool) {
-	var oldLines []string
-	var newLines []string
-	inHunk := false
+type diffHunk struct {
+	oldLines []string
+	newLines []string
+}
 
+// parseHunks splits a per-file diff chunk into individual hunks. Lines inside
+// a hunk keep their leading character stripped ('\ No newline' markers are
+// skipped; they carry no content for matching).
+func parseHunks(diffPatch string) []diffHunk {
+	var hunks []diffHunk
+	var cur *diffHunk
 	for _, dLine := range strings.Split(diffPatch, "\n") {
-		if strings.HasPrefix(dLine, "@@") {
-			inHunk = true
-			continue
-		}
-		if inHunk {
-			if strings.HasPrefix(dLine, "-") && !strings.HasPrefix(dLine, "---") {
-				oldLines = append(oldLines, strings.TrimPrefix(dLine, "-"))
-			} else if strings.HasPrefix(dLine, "+") && !strings.HasPrefix(dLine, "+++") {
-				newLines = append(newLines, strings.TrimPrefix(dLine, "+"))
-			} else if strings.HasPrefix(dLine, " ") {
-				oldLines = append(oldLines, strings.TrimPrefix(dLine, " "))
-				newLines = append(newLines, strings.TrimPrefix(dLine, " "))
-			}
+		switch {
+		case strings.HasPrefix(dLine, "@@"):
+			hunks = append(hunks, diffHunk{})
+			cur = &hunks[len(hunks)-1]
+		case cur == nil:
+			// header or diff noise before the first hunk
+		case strings.HasPrefix(dLine, "\\"):
+			// "\ No newline at end of file" marker: skip
+		case strings.HasPrefix(dLine, "---"):
+			// file header
+		case strings.HasPrefix(dLine, "+++"):
+			// file header
+		case strings.HasPrefix(dLine, "-"):
+			cur.oldLines = append(cur.oldLines, strings.TrimPrefix(dLine, "-"))
+		case strings.HasPrefix(dLine, "+"):
+			cur.newLines = append(cur.newLines, strings.TrimPrefix(dLine, "+"))
+		case strings.HasPrefix(dLine, " "):
+			l := strings.TrimPrefix(dLine, " ")
+			cur.oldLines = append(cur.oldLines, l)
+			cur.newLines = append(cur.newLines, l)
 		}
 	}
+	return hunks
+}
 
-	oldBlock := strings.Join(oldLines, "\n")
-	newBlock := strings.Join(newLines, "\n")
-
-	if oldBlock != "" && strings.Contains(content, oldBlock) {
-		newContent := strings.Replace(content, oldBlock, newBlock, 1)
-		return newContent, true
+// replaceHunksInContent applies every hunk of the chunk independently: each
+// hunk's old block must match somewhere in the content, and is replaced once.
+// All hunks must apply or nothing does (callers write content only on true).
+// The previous implementation concatenated ALL hunks into one block, which
+// only matched when the hunks were contiguous in the file — multi-hunk diffs
+// (the common LLM shape) always failed the fallback.
+func replaceHunksInContent(content string, diffPatch string) (string, bool) {
+	hunks := parseHunks(diffPatch)
+	if len(hunks) == 0 {
+		return "", false
 	}
 
-	return "", false
+	newContent := content
+	applied := 0
+	for _, h := range hunks {
+		if len(h.oldLines) == 0 && len(h.newLines) == 0 {
+			continue // empty hunk
+		}
+		oldBlock := strings.Join(h.oldLines, "\n")
+		newBlock := strings.Join(h.newLines, "\n")
+		if oldBlock == "" {
+			// pure insertion with no context: cannot locate reliably
+			return "", false
+		}
+		if !strings.Contains(newContent, oldBlock) {
+			return "", false
+		}
+		newContent = strings.Replace(newContent, oldBlock, newBlock, 1)
+		applied++
+	}
+	if applied == 0 {
+		return "", false
+	}
+	return newContent, true
 }
