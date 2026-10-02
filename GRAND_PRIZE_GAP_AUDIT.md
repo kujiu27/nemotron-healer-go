@@ -181,5 +181,5 @@ remaining open items are human tasks: a recorded real-API eval run
 (`scripts/run_real_eval.sh` → `docs/EVAL_RESULTS.md`) and the 3-minute demo
 video. Offline-verifiable evidence committed in-repo: performance receipts
 (`docs/PERF.md`, regenerate via `make bench`), red/green proofs for both
-real upstream-bug benchmark cases (`samples/external_*/README.md`), and 44
+real upstream-bug benchmark cases (`samples/external_*/README.md`), and 46
 unit tests plus CI on every push.
