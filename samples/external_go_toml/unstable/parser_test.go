@@ -1,0 +1,1235 @@
+package unstable
+
+import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/pelletier/go-toml/v2/internal/assert"
+)
+
+func TestParser_AST_Numbers(t *testing.T) {
+	examples := []struct {
+		desc  string
+		input string
+		kind  Kind
+		err   bool
+	}{
+		{
+			desc:  "integer just digits",
+			input: `1234`,
+			kind:  Integer,
+		},
+		{
+			desc:  "integer zero",
+			input: `0`,
+			kind:  Integer,
+		},
+		{
+			desc:  "integer sign",
+			input: `+99`,
+			kind:  Integer,
+		},
+		{
+			desc:  "integer hex uppercase",
+			input: `0xDEADBEEF`,
+			kind:  Integer,
+		},
+		{
+			desc:  "integer hex lowercase",
+			input: `0xdead_beef`,
+			kind:  Integer,
+		},
+		{
+			desc:  "integer octal",
+			input: `0o01234567`,
+			kind:  Integer,
+		},
+		{
+			desc:  "integer binary",
+			input: `0b11010110`,
+			kind:  Integer,
+		},
+		{
+			desc:  "float zero",
+			input: `0.0`,
+			kind:  Float,
+		},
+		{
+			desc:  "float positive zero",
+			input: `+0.0`,
+			kind:  Float,
+		},
+		{
+			desc:  "float negative zero",
+			input: `-0.0`,
+			kind:  Float,
+		},
+		{
+			desc:  "float pi",
+			input: `3.1415`,
+			kind:  Float,
+		},
+		{
+			desc:  "float negative",
+			input: `-0.01`,
+			kind:  Float,
+		},
+		{
+			desc:  "float signed exponent",
+			input: `5e+22`,
+			kind:  Float,
+		},
+		{
+			desc:  "float exponent lowercase",
+			input: `1e06`,
+			kind:  Float,
+		},
+		{
+			desc:  "float exponent uppercase",
+			input: `-2E-2`,
+			kind:  Float,
+		},
+		{
+			desc:  "float fractional with exponent",
+			input: `6.626e-34`,
+			kind:  Float,
+		},
+		{
+			desc:  "float underscores",
+			input: `224_617.445_991_228`,
+			kind:  Float,
+		},
+		{
+			desc:  "inf",
+			input: `inf`,
+			kind:  Float,
+		},
+		{
+			desc:  "inf negative",
+			input: `-inf`,
+			kind:  Float,
+		},
+		{
+			desc:  "inf positive",
+			input: `+inf`,
+			kind:  Float,
+		},
+		{
+			desc:  "nan",
+			input: `nan`,
+			kind:  Float,
+		},
+		{
+			desc:  "nan negative",
+			input: `-nan`,
+			kind:  Float,
+		},
+		{
+			desc:  "nan positive",
+			input: `+nan`,
+			kind:  Float,
+		},
+	}
+
+	for _, e := range examples {
+		e := e
+		t.Run(e.desc, func(t *testing.T) {
+			p := Parser{}
+			p.Reset([]byte(`A = ` + e.input))
+			p.NextExpression()
+			err := p.Error()
+			if e.err {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+
+				expected := astNode{
+					Kind: KeyValue,
+					Children: []astNode{
+						{Kind: e.kind, Data: []byte(e.input)},
+						{Kind: Key, Data: []byte(`A`)},
+					},
+				}
+				compareNode(t, expected, p.Expression())
+			}
+		})
+	}
+}
+
+type (
+	astNode struct {
+		Kind     Kind
+		Data     []byte
+		Children []astNode
+	}
+)
+
+func compareNode(t *testing.T, e astNode, n *Node) {
+	t.Helper()
+	assert.Equal(t, e.Kind, n.Kind)
+	assert.Equal(t, e.Data, n.Data)
+
+	compareIterator(t, e.Children, n.Children())
+}
+
+func compareIterator(t *testing.T, expected []astNode, actual Iterator) {
+	t.Helper()
+	idx := 0
+
+	for actual.Next() {
+		n := actual.Node()
+
+		if idx >= len(expected) {
+			t.Fatal("extra child in actual tree")
+		}
+		e := expected[idx]
+
+		compareNode(t, e, n)
+
+		idx++
+	}
+
+	if idx < len(expected) {
+		t.Fatal("missing children in actual", "idx =", idx, "expected =", len(expected))
+	}
+}
+
+//nolint:funlen
+func TestParser_AST(t *testing.T) {
+	examples := []struct {
+		desc  string
+		input string
+		ast   astNode
+		err   bool
+	}{
+		{
+			desc:  "simple string assignment",
+			input: `A = "hello"`,
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: String,
+						Data: []byte(`hello`),
+					},
+					{
+						Kind: Key,
+						Data: []byte(`A`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "simple bool assignment",
+			input: `A = true`,
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: Bool,
+						Data: []byte(`true`),
+					},
+					{
+						Kind: Key,
+						Data: []byte(`A`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "array of strings",
+			input: `A = ["hello", ["world", "again"]]`,
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: Array,
+						Children: []astNode{
+							{
+								Kind: String,
+								Data: []byte(`hello`),
+							},
+							{
+								Kind: Array,
+								Children: []astNode{
+									{
+										Kind: String,
+										Data: []byte(`world`),
+									},
+									{
+										Kind: String,
+										Data: []byte(`again`),
+									},
+								},
+							},
+						},
+					},
+					{
+						Kind: Key,
+						Data: []byte(`A`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "array of arrays of strings",
+			input: `A = ["hello", "world"]`,
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: Array,
+						Children: []astNode{
+							{
+								Kind: String,
+								Data: []byte(`hello`),
+							},
+							{
+								Kind: String,
+								Data: []byte(`world`),
+							},
+						},
+					},
+					{
+						Kind: Key,
+						Data: []byte(`A`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "inline table",
+			input: `name = { first = "Tom", last = "Preston-Werner" }`,
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: InlineTable,
+						Children: []astNode{
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Tom`)},
+									{Kind: Key, Data: []byte(`first`)},
+								},
+							},
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Preston-Werner`)},
+									{Kind: Key, Data: []byte(`last`)},
+								},
+							},
+						},
+					},
+					{
+						Kind: Key,
+						Data: []byte(`name`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "multiline inline table",
+			input: "name = {\n  first = \"Tom\",\n  last = \"Preston-Werner\"\n}",
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: InlineTable,
+						Children: []astNode{
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Tom`)},
+									{Kind: Key, Data: []byte(`first`)},
+								},
+							},
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Preston-Werner`)},
+									{Kind: Key, Data: []byte(`last`)},
+								},
+							},
+						},
+					},
+					{
+						Kind: Key,
+						Data: []byte(`name`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "inline table with trailing comma",
+			input: `name = { first = "Tom", last = "Preston-Werner", }`,
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: InlineTable,
+						Children: []astNode{
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Tom`)},
+									{Kind: Key, Data: []byte(`first`)},
+								},
+							},
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Preston-Werner`)},
+									{Kind: Key, Data: []byte(`last`)},
+								},
+							},
+						},
+					},
+					{
+						Kind: Key,
+						Data: []byte(`name`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "empty inline table with newline",
+			input: "name = {\n}",
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind:     InlineTable,
+						Children: nil,
+					},
+					{
+						Kind: Key,
+						Data: []byte(`name`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "inline table with leading comma",
+			input: "name = { first = \"Tom\"\n, last = \"Werner\" }",
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: InlineTable,
+						Children: []astNode{
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Tom`)},
+									{Kind: Key, Data: []byte(`first`)},
+								},
+							},
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Werner`)},
+									{Kind: Key, Data: []byte(`last`)},
+								},
+							},
+						},
+					},
+					{
+						Kind: Key,
+						Data: []byte(`name`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "inline table with leading trailing comma",
+			input: "name = { first = \"Tom\"\n, }",
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: InlineTable,
+						Children: []astNode{
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Tom`)},
+									{Kind: Key, Data: []byte(`first`)},
+								},
+							},
+						},
+					},
+					{
+						Kind: Key,
+						Data: []byte(`name`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "inline table comma at start is error",
+			input: "name = { , first = \"Tom\" }",
+			err:   true,
+		},
+		{
+			desc:  "inline table double comma across newline is error",
+			input: "name = { first = \"Tom\",\n, last = \"Werner\" }",
+			err:   true,
+		},
+	}
+
+	for _, e := range examples {
+		e := e
+		t.Run(e.desc, func(t *testing.T) {
+			p := Parser{}
+			p.Reset([]byte(e.input))
+			p.NextExpression()
+			err := p.Error()
+			if e.err {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				compareNode(t, e.ast, p.Expression())
+			}
+		})
+	}
+}
+
+//nolint:funlen
+func TestParser_AST_InlineTablesWithComments(t *testing.T) {
+	examples := []struct {
+		desc  string
+		input string
+		ast   astNode
+		err   bool
+	}{
+		{
+			desc:  "inline table with comment before first key-value",
+			input: "name = { # comment\n first = \"Tom\" }",
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: InlineTable,
+						Children: []astNode{
+							{
+								Kind: Comment,
+								Data: []byte(`# comment`),
+							},
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Tom`)},
+									{Kind: Key, Data: []byte(`first`)},
+								},
+							},
+						},
+					},
+					{
+						Kind: Key,
+						Data: []byte(`name`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "inline table with comment after comma",
+			input: "name = { first = \"Tom\", # comment\n last = \"Werner\" }",
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: InlineTable,
+						Children: []astNode{
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Tom`)},
+									{Kind: Key, Data: []byte(`first`)},
+								},
+							},
+							{
+								Kind: Comment,
+								Data: []byte(`# comment`),
+							},
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Werner`)},
+									{Kind: Key, Data: []byte(`last`)},
+								},
+							},
+						},
+					},
+					{
+						Kind: Key,
+						Data: []byte(`name`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "inline table with comment after key-value",
+			input: "name = { first = \"Tom\" # comment\n }",
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: InlineTable,
+						Children: []astNode{
+							{
+								Kind: KeyValue,
+								Children: []astNode{
+									{Kind: String, Data: []byte(`Tom`)},
+									{Kind: Key, Data: []byte(`first`)},
+								},
+							},
+							{
+								Kind: Comment,
+								Data: []byte(`# comment`),
+							},
+						},
+					},
+					{
+						Kind: Key,
+						Data: []byte(`name`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "array with comment after value",
+			input: "a = [ 1 # comment\n ]",
+			ast: astNode{
+				Kind: KeyValue,
+				Children: []astNode{
+					{
+						Kind: Array,
+						Children: []astNode{
+							{
+								Kind: Integer,
+								Data: []byte(`1`),
+							},
+							{
+								Kind: Comment,
+								Data: []byte(`# comment`),
+							},
+						},
+					},
+					{
+						Kind: Key,
+						Data: []byte(`a`),
+					},
+				},
+			},
+		},
+		{
+			desc:  "inline table with invalid comment before first key-value",
+			input: "name = { # comment\r first = \"Tom\" }",
+			err:   true,
+		},
+		{
+			desc:  "inline table with invalid comment after comma",
+			input: "name = { first = \"Tom\", # comment\r last = \"Werner\" }",
+			err:   true,
+		},
+		{
+			desc:  "inline table with invalid comment after key-value",
+			input: "name = { first = \"Tom\" # comment\r }",
+			err:   true,
+		},
+	}
+
+	for _, e := range examples {
+		e := e
+		t.Run(e.desc, func(t *testing.T) {
+			p := Parser{KeepComments: true}
+			p.Reset([]byte(e.input))
+			p.NextExpression()
+			err := p.Error()
+			if e.err {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				compareNode(t, e.ast, p.Expression())
+			}
+		})
+	}
+}
+
+func BenchmarkParseBasicStringWithUnicode(b *testing.B) {
+	p := &Parser{}
+	b.Run("4", func(b *testing.B) {
+		input := []byte(`"\u1234\u5678\u9ABC\u1234\u5678\u9ABC"`)
+		b.ReportAllocs()
+		b.SetBytes(int64(len(input)))
+
+		for i := 0; i < b.N; i++ {
+			_, _, _, _ = p.parseBasicString(input)
+		}
+	})
+	b.Run("8", func(b *testing.B) {
+		input := []byte(`"\u12345678\u9ABCDEF0\u12345678\u9ABCDEF0"`)
+		b.ReportAllocs()
+		b.SetBytes(int64(len(input)))
+
+		for i := 0; i < b.N; i++ {
+			_, _, _, _ = p.parseBasicString(input)
+		}
+	})
+}
+
+func BenchmarkParseBasicStringsEasy(b *testing.B) {
+	p := &Parser{}
+
+	for _, size := range []int{1, 4, 8, 16, 21} {
+		b.Run(strconv.Itoa(size), func(b *testing.B) {
+			input := []byte(`"` + strings.Repeat("A", size) + `"`)
+
+			b.ReportAllocs()
+			b.SetBytes(int64(len(input)))
+
+			for i := 0; i < b.N; i++ {
+				_, _, _, _ = p.parseBasicString(input)
+			}
+		})
+	}
+}
+
+func TestParser_AST_DateTimes(t *testing.T) {
+	examples := []struct {
+		desc  string
+		input string
+		kind  Kind
+		err   bool
+	}{
+		{
+			desc:  "offset-date-time with delim 'T' and UTC offset",
+			input: `2021-07-21T12:08:05Z`,
+			kind:  DateTime,
+		},
+		{
+			desc:  "offset-date-time with space delim and +8hours offset",
+			input: `2021-07-21 12:08:05+08:00`,
+			kind:  DateTime,
+		},
+		{
+			desc:  "local-date-time with nano second",
+			input: `2021-07-21T12:08:05.666666666`,
+			kind:  LocalDateTime,
+		},
+		{
+			desc:  "local-date-time",
+			input: `2021-07-21T12:08:05`,
+			kind:  LocalDateTime,
+		},
+		{
+			desc:  "local-date",
+			input: `2021-07-21`,
+			kind:  LocalDate,
+		},
+	}
+
+	for _, e := range examples {
+		e := e
+		t.Run(e.desc, func(t *testing.T) {
+			p := Parser{}
+			p.Reset([]byte(`A = ` + e.input))
+			p.NextExpression()
+			err := p.Error()
+			if e.err {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+
+				expected := astNode{
+					Kind: KeyValue,
+					Children: []astNode{
+						{Kind: e.kind, Data: []byte(e.input)},
+						{Kind: Key, Data: []byte(`A`)},
+					},
+				}
+				compareNode(t, expected, p.Expression())
+			}
+		})
+	}
+}
+
+// This example demonstrates how to parse a TOML document and preserving
+// comments.  Comments are stored in the AST as Comment nodes. This example
+// displays the structure of the full AST generated by the parser using the
+// following structure:
+//
+//  1. Each root-level expression is separated by three dashes.
+//  2. Bytes associated to a node are displayed in square brackets.
+//  3. Siblings have the same indentation.
+//  4. Children of a node are indented one level.
+func ExampleParser_comments() {
+	doc := `# Top of the document comment.
+# Optional, any amount of lines.
+
+# Above table.
+[table] # Next to table.
+# Above simple value.
+key = "value" # Next to simple value.
+# Below simple value.
+
+# Some comment alone.
+
+# Multiple comments, on multiple lines.
+
+# Above inline table.
+name = { first = "Tom", last = "Preston-Werner" } # Next to inline table.
+# Below inline table.
+
+# Above array.
+array = [ 1, 2, 3 ] # Next to one-line array.
+# Below array.
+
+# Above multi-line array.
+key5 = [ # Next to start of inline array.
+  # Second line before array content.
+  1, # Next to first element.
+  # After first element.
+  # Before second element.
+  2,
+  3, # Next to last element
+  # After last element.
+] # Next to end of array.
+# Below multi-line array.
+
+# Before array table.
+[[products]] # Next to array table.
+# After array table.
+`
+
+	var printGeneric func(*Parser, int, *Node)
+	printGeneric = func(p *Parser, indent int, e *Node) {
+		if e == nil {
+			return
+		}
+		s := p.Shape(e.Raw)
+		x := fmt.Sprintf("%d:%d->%d:%d (%d->%d)", s.Start.Line, s.Start.Column, s.End.Line, s.End.Column, s.Start.Offset, s.End.Offset)
+		fmt.Printf("%-25s | %s%s [%s]\n", x, strings.Repeat("  ", indent), e.Kind, e.Data)
+		printGeneric(p, indent+1, e.Child())
+		printGeneric(p, indent, e.Next())
+	}
+
+	printTree := func(p *Parser) {
+		for p.NextExpression() {
+			e := p.Expression()
+			fmt.Println("---")
+			printGeneric(p, 0, e)
+		}
+		if err := p.Error(); err != nil {
+			panic(err)
+		}
+	}
+
+	p := &Parser{
+		KeepComments: true,
+	}
+	p.Reset([]byte(doc))
+	printTree(p)
+
+	// Output:
+	// ---
+	// 1:1->1:31 (0->30)         | Comment [# Top of the document comment.]
+	// ---
+	// 2:1->2:33 (31->63)        | Comment [# Optional, any amount of lines.]
+	// ---
+	// 4:1->4:15 (65->79)        | Comment [# Above table.]
+	// ---
+	// 1:1->1:1 (0->0)           | Table []
+	// 5:2->5:7 (81->86)         |   Key [table]
+	// 5:9->5:25 (88->104)       | Comment [# Next to table.]
+	// ---
+	// 6:1->6:22 (105->126)      | Comment [# Above simple value.]
+	// ---
+	// 7:1->7:14 (127->140)      | KeyValue []
+	// 7:7->7:14 (133->140)      |   String [value]
+	// 7:1->7:4 (127->130)       |   Key [key]
+	// 7:15->7:38 (141->164)     | Comment [# Next to simple value.]
+	// ---
+	// 8:1->8:22 (165->186)      | Comment [# Below simple value.]
+	// ---
+	// 10:1->10:22 (188->209)    | Comment [# Some comment alone.]
+	// ---
+	// 12:1->12:40 (211->250)    | Comment [# Multiple comments, on multiple lines.]
+	// ---
+	// 14:1->14:22 (252->273)    | Comment [# Above inline table.]
+	// ---
+	// 15:1->15:50 (274->323)    | KeyValue []
+	// 15:8->15:9 (281->282)     |   InlineTable []
+	// 15:10->15:23 (283->296)   |     KeyValue []
+	// 15:18->15:23 (291->296)   |       String [Tom]
+	// 15:10->15:15 (283->288)   |       Key [first]
+	// 15:25->15:48 (298->321)   |     KeyValue []
+	// 15:32->15:48 (305->321)   |       String [Preston-Werner]
+	// 15:25->15:29 (298->302)   |       Key [last]
+	// 15:1->15:5 (274->278)     |   Key [name]
+	// 15:51->15:74 (324->347)   | Comment [# Next to inline table.]
+	// ---
+	// 16:1->16:22 (348->369)    | Comment [# Below inline table.]
+	// ---
+	// 18:1->18:15 (371->385)    | Comment [# Above array.]
+	// ---
+	// 19:1->19:20 (386->405)    | KeyValue []
+	// 1:1->1:1 (0->0)           |   Array []
+	// 19:11->19:12 (396->397)   |     Integer [1]
+	// 19:14->19:15 (399->400)   |     Integer [2]
+	// 19:17->19:18 (402->403)   |     Integer [3]
+	// 19:1->19:6 (386->391)     |   Key [array]
+	// 19:21->19:46 (406->431)   | Comment [# Next to one-line array.]
+	// ---
+	// 20:1->20:15 (432->446)    | Comment [# Below array.]
+	// ---
+	// 22:1->22:26 (448->473)    | Comment [# Above multi-line array.]
+	// ---
+	// 23:1->31:2 (474->694)     | KeyValue []
+	// 1:1->1:1 (0->0)           |   Array []
+	// 23:10->23:42 (483->515)   |     Comment [# Next to start of inline array.]
+	// 24:3->24:38 (518->553)    |       Comment [# Second line before array content.]
+	// 25:3->25:4 (556->557)     |     Integer [1]
+	// 25:6->25:30 (559->583)    |     Comment [# Next to first element.]
+	// 26:3->26:25 (586->608)    |       Comment [# After first element.]
+	// 27:3->27:27 (611->635)    |       Comment [# Before second element.]
+	// 28:3->28:4 (638->639)     |     Integer [2]
+	// 29:3->29:4 (643->644)     |     Integer [3]
+	// 29:6->29:28 (646->668)    |     Comment [# Next to last element]
+	// 30:3->30:24 (671->692)    |       Comment [# After last element.]
+	// 23:1->23:5 (474->478)     |   Key [key5]
+	// 31:3->31:26 (695->718)    | Comment [# Next to end of array.]
+	// ---
+	// 32:1->32:26 (719->744)    | Comment [# Below multi-line array.]
+	// ---
+	// 34:1->34:22 (746->767)    | Comment [# Before array table.]
+	// ---
+	// 1:1->1:1 (0->0)           | ArrayTable []
+	// 35:3->35:11 (770->778)    |   Key [products]
+	// 35:14->35:36 (781->803)   | Comment [# Next to array table.]
+	// ---
+	// 36:1->36:21 (804->824)    | Comment [# After array table.]
+}
+
+func TestIterator_IsLast(t *testing.T) {
+	// Test IsLast on an iterator with multiple elements using public Parser API
+	doc := `array = [1, 2, 3]`
+	p := Parser{}
+	p.Reset([]byte(doc))
+	p.NextExpression()
+
+	e := p.Expression()
+	arr := e.Value() // The array node
+
+	it := arr.Children()
+	count := 0
+	lastCount := 0
+	for it.Next() {
+		count++
+		if it.IsLast() {
+			lastCount++
+		}
+	}
+
+	assert.Equal(t, 3, count)
+	assert.Equal(t, 1, lastCount)
+}
+
+func TestNodeChaining(t *testing.T) {
+	// Test that sibling nodes are correctly chained via Next()
+	// This exercises the internal PushAndChain functionality through public APIs
+	doc := `a.b.c = 1`
+	p := Parser{}
+	p.Reset([]byte(doc))
+	p.NextExpression()
+
+	e := p.Expression()
+	// KeyValue has children: value, then key parts (a, b, c)
+	keyIt := e.Key()
+
+	// Collect all key parts by following the iterator
+	var keys []string
+	for keyIt.Next() {
+		keys = append(keys, string(keyIt.Node().Data))
+	}
+
+	assert.Equal(t, []string{"a", "b", "c"}, keys)
+}
+
+func TestMultipleExpressions(t *testing.T) {
+	// Test parsing multiple top-level expressions
+	// This exercises root iteration through public APIs
+	doc := `
+key1 = "value1"
+key2 = "value2"
+key3 = "value3"
+`
+	p := Parser{}
+	p.Reset([]byte(doc))
+
+	var keys []string
+	for p.NextExpression() {
+		e := p.Expression()
+		keyIt := e.Key()
+		keyIt.Next()
+		keys = append(keys, string(keyIt.Node().Data))
+	}
+
+	assert.NoError(t, p.Error())
+	assert.Equal(t, []string{"key1", "key2", "key3"}, keys)
+}
+
+func ExampleParser() {
+	doc := `
+	hello = "world"
+	value = 42
+	`
+	p := Parser{}
+	p.Reset([]byte(doc))
+	for p.NextExpression() {
+		e := p.Expression()
+		fmt.Printf("Expression: %s\n", e.Kind)
+		value := e.Value()
+		it := e.Key()
+		k := it.Node() // shortcut: we know there is no dotted key in the example
+		fmt.Printf("%s -> (%s) %s\n", k.Data, value.Kind, value.Data)
+	}
+
+	// Output:
+	// Expression: KeyValue
+	// hello -> (String) world
+	// Expression: KeyValue
+	// value -> (Integer) 42
+}
+
+func TestParserErrorPosition(t *testing.T) {
+	examples := []struct {
+		name           string
+		input          string
+		expectedOffset int
+		expectedLine   int
+		expectedColumn int
+	}{
+		{
+			name:           "comment then invalid key start",
+			input:          "# comment\n= \"value\"",
+			expectedOffset: 10,
+			expectedLine:   2,
+			expectedColumn: 1,
+		},
+		{
+			name:           "no comment invalid key start",
+			input:          "= \"value\"",
+			expectedOffset: 0,
+			expectedLine:   1,
+			expectedColumn: 1,
+		},
+		{
+			name:           "multiple comments then error",
+			input:          "# c1\n# c2\n= \"val\"",
+			expectedOffset: 10,
+			expectedLine:   3,
+			expectedColumn: 1,
+		},
+		{
+			name:           "valid line then invalid key start",
+			input:          "a = 1\n= \"val\"",
+			expectedOffset: 6,
+			expectedLine:   2,
+			expectedColumn: 1,
+		},
+		{
+			name:           "blank lines then error",
+			input:          "\n\n= \"val\"",
+			expectedOffset: 2,
+			expectedLine:   3,
+			expectedColumn: 1,
+		},
+		{
+			name:           "expected newline but got invalid char",
+			input:          "a = 1 b = 2",
+			expectedOffset: 6,
+			expectedLine:   1,
+			expectedColumn: 7,
+		},
+	}
+
+	for _, e := range examples {
+		t.Run(e.name, func(t *testing.T) {
+			p := Parser{}
+			p.Reset([]byte(e.input))
+			for p.NextExpression() {
+			}
+			err := p.Error()
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+
+			var perr *ParserError
+			if !errors.As(err, &perr) {
+				t.Fatalf("expected *ParserError, got %T", err)
+			}
+
+			r := p.Range(perr.Highlight)
+			shape := p.Shape(r)
+
+			if int(r.Offset) != e.expectedOffset {
+				t.Errorf("offset: got %d, want %d", r.Offset, e.expectedOffset)
+			}
+			if shape.Start.Line != e.expectedLine {
+				t.Errorf("line: got %d, want %d", shape.Start.Line, e.expectedLine)
+			}
+			if shape.Start.Column != e.expectedColumn {
+				t.Errorf("column: got %d, want %d", shape.Start.Column, e.expectedColumn)
+			}
+		})
+	}
+}
+
+func TestParserErrorError(t *testing.T) {
+	err := &ParserError{Message: "boom"}
+	assert.Equal(t, "boom", err.Error())
+}
+
+func TestParserRangeNotSubslicePanics(t *testing.T) {
+	p := &Parser{}
+	p.Reset([]byte("a = 1"))
+	// A slice with a capacity larger than the document cannot be one of its
+	// subslices.
+	other := make([]byte, 2, 64)
+	assert.Panics(t, func() {
+		_ = p.Range(other)
+	})
+}
+
+func TestParserExpressionEmpty(t *testing.T) {
+	p := &Parser{}
+	p.Reset([]byte(""))
+	assert.True(t, p.Expression() == nil)
+}
+
+func parseAll(doc string) error {
+	p := &Parser{}
+	p.Reset([]byte(doc))
+	for p.NextExpression() {
+	}
+	return p.Error()
+}
+
+func TestParserScanErrors(t *testing.T) {
+	invalid := []string{
+		"a = [1\rx]",
+		"# comment\rx",
+		"# comment\x00",
+		"a = '''\rx'''",
+		"a = \"aaaaaaaaaaaaaaaaaaaaaaaa",
+		"a = \"\\u0041\nx\"",
+		"a = \"\\u0041\xffx\"",
+		`a = """x""""""`,
+		"a = \"\"\"\\\rx\"\"\"",
+		"a = \"\"\"x\rz\"\"\"",
+		"a = \"\"\"\xffx\"\"\"",
+		"a = '\xc3\x28'",
+		"a = '\xe0\x80\x80'",
+		"a = '\xed\xa0\x80'",
+		"a = '\xe1\x80\x28'",
+		"a = '\xf0\x80\x80\x80'",
+		"a = '\xf4\x90\x80\x80'",
+		"a = '\xf1\x28\x80\x80'",
+		"a = '\xf0\x9f'",
+		"a = '\xc3'",
+		"a = '\xfe'",
+	}
+	for _, doc := range invalid {
+		t.Run(fmt.Sprintf("%q", doc), func(t *testing.T) {
+			assert.Error(t, parseAll(doc))
+		})
+	}
+
+	valid := []string{
+		"a = \"\\e\"",   // TOML v1.1.0 escape (U+001B)
+		"a = \"\\x1b\"", // TOML v1.1.0 hex escape
+		"a = \"\"\"a\r\nb\"\"\"",
+		"a = \"\"\"\\\n  \r\n  x\"\"\"",
+		"a = '\xc3\xa9'",
+		"a = '\xe2\x82\xac'",
+		"a = '\xe0\xa4\x84'",
+		"a = '\xed\x9f\xbf'",
+		"a = '\xf0\x90\x80\x80'",
+		"a = '\xf4\x8f\xbf\xbf'",
+		"a = '\xf1\x80\x80\x80'",
+		"# comment ends in unicode \xc3\xa9",
+	}
+	for _, doc := range valid {
+		t.Run(fmt.Sprintf("%q", doc), func(t *testing.T) {
+			assert.NoError(t, parseAll(doc))
+		})
+	}
+}
+
+func TestParserNextExpressionAfterError(t *testing.T) {
+	p := &Parser{}
+	p.Reset([]byte("a = \"\n\"\nb = 1"))
+	for p.NextExpression() {
+	}
+	assert.Error(t, p.Error())
+	assert.False(t, p.NextExpression())
+}
+
+func TestParserScanEdgeCases(t *testing.T) {
+	invalid := []string{
+		"a = {,}",
+		"a = \"\"\"\\t a\rb\"\"\"",
+		"a = \"\"\"\\t \xffx\"\"\"",
+		"a = \"\"\"\\t x\"\"\"\"\"\"",
+		"a = \"\"\"\\\n\r x\"\"\"",
+		"a = '\xe1\x28\x80'",
+	}
+	for _, doc := range invalid {
+		t.Run(fmt.Sprintf("%q", doc), func(t *testing.T) {
+			assert.Error(t, parseAll(doc))
+		})
+	}
+
+	valid := []string{
+		"a = [1,\r\n2]",
+		"# comment\r\nb = 1",
+		"# comment\twith tab",
+		"a = '''x\r\ny'''",
+		"a = \"\\u0041\tb\"",
+		"a = \"\"\"\\t a\r\nb\"\"\"",
+		"a = \"\"\"\\t x\"\"\"\"",
+		"a = \"\"\"\\t x\"\"\"\"\"",
+	}
+	for _, doc := range valid {
+		t.Run(fmt.Sprintf("%q", doc), func(t *testing.T) {
+			assert.NoError(t, parseAll(doc))
+		})
+	}
+}
+
+func TestUnquotedStringValueRequiresQuotes(t *testing.T) {
+	p := Parser{}
+	p.Reset([]byte(`timeout = 20s`))
+	for p.NextExpression() {
+	}
+
+	err := p.Error()
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+
+	var perr *ParserError
+	if !errors.As(err, &perr) {
+		t.Fatalf("expected *ParserError, got %T", err)
+	}
+
+	if perr.Message != "strings must be quoted" {
+		t.Fatalf("expected %q, got %q", "strings must be quoted", perr.Message)
+	}
+}
