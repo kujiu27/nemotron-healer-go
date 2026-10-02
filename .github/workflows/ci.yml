@@ -121,4 +121,10 @@ jobs:
         run: python3 -m pip install --quiet pytest pydantic
 
       - name: Verify every AHB case ships RED (no leaked answers)
-        run: bash scripts/verify_red.sh
+        run: |
+          bash -x scripts/verify_red.sh 2> >(tail -80 >&2) || {
+            echo '```'; cat docs/BENCHMARK_RED_MATRIX.md 2>/dev/null; echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          cat docs/BENCHMARK_RED_MATRIX.md >> "$GITHUB_STEP_SUMMARY"
+
