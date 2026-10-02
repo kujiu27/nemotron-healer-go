@@ -42,8 +42,10 @@ run_case() { # id dir command
   # A watchdog kill (124 / SIGALRM) still counts as red for hang-type bugs.
   if [ "$code" -eq 0 ]; then
     echo "GREEN|$id|$src|$cmd|"
+    [ -n "${GITHUB_STEP_SUMMARY:-}" ] && echo "::error title=red-matrix::$id GREEN (CORRUPT?) exit=$code"
   else
     echo "RED|$id|$src|$cmd|exit=$code"
+    [ -n "${GITHUB_STEP_SUMMARY:-}" ] && echo "::notice title=red-matrix::$id RED exit=$code"
   fi
 }
 
