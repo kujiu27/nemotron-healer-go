@@ -42,14 +42,25 @@ run_case() { # id dir command
   # A watchdog kill (124 / SIGALRM) still counts as red for hang-type bugs.
   if [ "$code" -eq 0 ]; then
     echo "GREEN|$id|$src|$cmd|"
-    [ -n "${GITHUB_STEP_SUMMARY:-}" ] && echo "::error title=red-matrix::$id GREEN (CORRUPT?) exit=$code" > /dev/stdout
+
   else
     echo "RED|$id|$src|$cmd|exit=$code"
-    [ -n "${GITHUB_STEP_SUMMARY:-}" ] && echo "::notice title=red-matrix::$id RED exit=$code" > /dev/stdout
+
   fi
 }
 
 ALL_RED=1
+VERDICTS=/tmp/red_matrix_verdicts.txt
+: > "$VERDICTS"
+
+run_case AHB-01 samples/fastapi_async_deadlock    "$PYTEST -q"               >> "$VERDICTS"
+run_case AHB-02 samples/hard_concurrency_cascade  "$PYTEST -q"               >> "$VERDICTS"
+run_case AHB-03 samples/pydantic_v2_migration     "$PYTEST -q"               >> "$VERDICTS"
+run_case AHB-04 samples/sql_injection_remediation "$PYTEST -q"               >> "$VERDICTS"
+run_case AHB-05 samples/go_concurrency_race       "go test -race ."          >> "$VERDICTS"
+run_case AHB-06 samples/external_go_diff          "go test ./diffmatchpatch/ -run TestDiffLinesToChars" >> "$VERDICTS"
+run_case AHB-07 samples/external_go_toml          "go test . -run TestUnmarshalRecursiveEmbedded -count=1" >> "$VERDICTS"
+
 {
   echo "| Case | Sample | Command | State |"
   echo "| :--- | :--- | :--- | :--- |"
@@ -63,17 +74,16 @@ ALL_RED=1
     else
       echo "| $id | \`$src\` | \`$cmd\` | RED as shipped ($rest) |"
     fi
-  done
-} < <(
-  run_case AHB-01 samples/fastapi_async_deadlock    "$PYTEST -q"
-  run_case AHB-02 samples/hard_concurrency_cascade  "$PYTEST -q"
-  run_case AHB-03 samples/pydantic_v2_migration     "$PYTEST -q"
-  run_case AHB-04 samples/sql_injection_remediation "$PYTEST -q"
-  run_case AHB-05 samples/go_concurrency_race       "go test -race ."
-  run_case AHB-06 samples/external_go_diff          "go test ./diffmatchpatch/ -run TestDiffLinesToChars"
-  run_case AHB-07 samples/external_go_toml          "go test . -run TestUnmarshalRecursiveEmbedded -count=1"
-) > /tmp/red_matrix_table.md
+  done < "$VERDICTS"
+} > /tmp/red_matrix_table.md
 
+# Workflow annotations must reach the real step stdout — emit after the
+# redirected table generation, in the main shell.
+if [ "$ALL_RED" -ne 1 ]; then
+  grep '^GREEN|' "$VERDICTS" | while IFS='|' read -r _ id _src _cmd _rest; do
+    echo "::error title=red-matrix::$id GREEN — CORRUPTED (answer shipped?)"
+  done
+fi
 mkdir -p docs
 {
   echo "# Benchmark RED-State Integrity Matrix"
