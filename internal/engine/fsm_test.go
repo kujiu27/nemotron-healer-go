@@ -46,4 +46,3 @@ func TestHealingSessionPatchDigest(t *testing.T) {
 		t.Fatalf("expected patch digest to be stored, got %s", session.PatchDigest)
 	}
 }
-

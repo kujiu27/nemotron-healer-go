@@ -212,7 +212,7 @@ func init() {
 	RootCmd.PersistentFlags().BoolVar(&noTUIFlag, "no-tui", false, "Disable TUI and output plain text (for CI / GitHub Actions)")
 	RootCmd.PersistentFlags().BoolVar(&ciFlag, "ci", false, "Enable headless CI mode with GitHub Actions annotations and step summary")
 	RootCmd.PersistentFlags().StringVar(&sarifFlag, "sarif", "", "Export diagnostic and healing results in standard SARIF 2.1.0 format to path")
-	RootCmd.PersistentFlags().BoolVar(&searchFlag, "search", false, "Enable Test-Time Compute (TTC) MCTS multi-branch search")
+	RootCmd.PersistentFlags().BoolVar(&searchFlag, "search", false, "Enable Test-Time Compute (TTC) divergent hypothesis search (parallel best-of-N branches + adversarial depth-2 refinement)")
 	RootCmd.PersistentFlags().BoolVar(&arenaFlag, "arena", false, "Enable Red-Blue Adversarial Self-Play Arena (attack/defend rounds)")
 	RootCmd.PersistentFlags().BoolVar(&jsonFlag, "json", false, "Output machine-readable telemetry JSON to stdout")
 	RootCmd.PersistentFlags().BoolVarP(&autoAcceptFlag, "yes", "y", false, "Automatically accept and commit without interactive prompt (default in CI)")

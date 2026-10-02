@@ -21,9 +21,9 @@
 ---
 
 ### [0:45 - 1:15] The Breakthrough: Hybrid Archetypes & Dynamic Grounding
-- **Visual:** Terminal highlights `[DIAGNOSING] Alibaba OCR Hybrid Rules: Classified as [ConcurrencyRace]`. Then shows `[SEARCHING_KNOWLEDGE] Searching Tavily...` and streaming Nemotron 3 Ultra output.
+- **Visual:** Terminal highlights `[DIAGNOSING] Archetype Rule Engine: Classified as [ConcurrencyRace]`. Then shows `[SEARCHING_KNOWLEDGE] Searching Tavily...` and streaming Nemotron 3 Ultra output.
 - **Voiceover:**  
-  *"Unlike naive wrappers, Nemotron-Healer employs an Alibaba OCR-inspired hybrid rule engine: it classifies defects into deterministic archetypes—injecting rigid negative constraints into the prompt. To bypass training cutoffs, it queries the Tavily Search API in real-time for official breaking change migration specs, then unleashes NVIDIA Nemotron 3 Ultra on Nebius Token Factory to synthesize surgical Unified Diffs."*
+  *"Unlike naive wrappers, Nemotron-Healer uses a deterministic archetype rule engine: it classifies defects into deterministic archetypes—injecting rigid negative constraints into the prompt. To bypass training cutoffs, it queries the Tavily Search API in real-time for official breaking change migration specs, then unleashes NVIDIA Nemotron 3 Ultra on Nebius Token Factory to synthesize surgical Unified Diffs."*
 
 ---
 

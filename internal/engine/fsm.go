@@ -54,15 +54,15 @@ type HealingStepEvent struct {
 }
 
 type HealingSession struct {
-	SessionID       string             `json:"session_id"`
-	TargetDir       string             `json:"target_dir"`
-	TestCommand     string             `json:"test_command"`
-	CurrentState    HealingState       `json:"current_state"`
-	CurrentTurn     int                `json:"current_turn"`
-	MaxTurns        int                `json:"max_turns"`
-	InitialError    string             `json:"initial_error"`
-	LastError       string             `json:"last_error"`
-	AppliedPatches  []string           `json:"applied_patches"`
+	SessionID          string             `json:"session_id"`
+	TargetDir          string             `json:"target_dir"`
+	TestCommand        string             `json:"test_command"`
+	CurrentState       HealingState       `json:"current_state"`
+	CurrentTurn        int                `json:"current_turn"`
+	MaxTurns           int                `json:"max_turns"`
+	InitialError       string             `json:"initial_error"`
+	LastError          string             `json:"last_error"`
+	AppliedPatches     []string           `json:"applied_patches"`
 	TavilyQueries      []string           `json:"tavily_queries"`
 	TokenLedger        TokenLedger        `json:"token_ledger"`
 	IsResolved         bool               `json:"is_resolved"`

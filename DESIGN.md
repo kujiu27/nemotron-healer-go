@@ -4,7 +4,7 @@
 > **Target System:** `nemotron-healer-go`  
 > **Status:** APPROVED & IMPLEMENTED  
 > **Author:** Core Engineering Team  
-> **Reference Inspirations:** Alibaba Open Code Review (OCR) Hybrid Pipeline, TypeSafe Jev Architecture
+> **Reference Inspirations:** Published code-review heuristics, TypeSafe Jev Architecture
 
 ---
 
@@ -20,7 +20,7 @@ Standard Large Language Model (LLM) coding assistants operate in an **unverified
 ### 1.2 The Design Mandate
 `nemotron-healer-go` is designed as a **zero-dependency, single-binary, in-situ autonomous code self-healing engine** built in Go:
 - **Instant Cold Start**: `< 5ms` binary startup time;
-- **Deterministic Pre-Filtering**: Alibaba OCR-inspired hybrid defect archetype classification before LLM invocation;
+- **Deterministic Pre-Filtering**: Rule-based defect archetype classification before LLM invocation;
 - **AST Dependency Graphing**: Quantitative Blast Radius risk scoring;
 - **Dynamic Knowledge Grounding**: Tavily Search integration for real-time upstream migration specs;
 - **Transactional Rollback**: Zero repository contamination through snapshot checkpoints;
@@ -53,7 +53,7 @@ Standard Large Language Model (LLM) coding assistants operate in an **unverified
                                                 ▼
                              ┌─────────────────────────────────────┐
                              │ Deterministic Defect Classifier     │
-                             │ (Alibaba OCR Hybrid Rule Pipeline)  │
+                             │ (Archetype Rule Engine Pipeline)    │
                              └──────────────────┬──────────────────┘
                                                 │
                                                 ▼
@@ -97,7 +97,7 @@ Standard Large Language Model (LLM) coding assistants operate in an **unverified
 
 ## 3. Core Subsystems Detailed Specification
 
-### 3.1 Deterministic Defect Archetype Classifier (Alibaba OCR Inspired)
+### 3.1 Deterministic Defect Archetype Classifier (Rule Engine)
 Rather than passing raw, unstructured error traces to the model, the hybrid classifier (`internal/engine/archetype.go`) categorizes the failure into a formal **Defect Archetype** and binds **Mandatory Negative Constraints**:
 
 | Archetype | Detection Signatures | Injected Engineering Constraints |
@@ -152,7 +152,7 @@ $$\text{Cost}_{\text{Nebius}} = \frac{P_{\text{tokens}} \times \$0.10 + C_{\text
 $$\text{Cost Savings} = \frac{\$25.00 - \text{Cost}_{\text{Nebius}}}{\$25.00} \times 100\%$$
 *Baseline: 30 minutes of human triage at \$50.00/hour.*
 
-Every verified fix automatically commits an **Alibaba OCR-Style Verification Audit Card** (`HEAL_AUDIT_REPORT.md`) directly into the created PR branch for complete auditability.
+Every verified fix automatically commits a **Verification Audit Card** (`HEAL_AUDIT_REPORT.md`) directly into the created PR branch for complete auditability.
 
 ---
 

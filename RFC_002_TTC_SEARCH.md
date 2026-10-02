@@ -1,6 +1,9 @@
 # 📄 RFC-002: Test-Time Compute (TTC) Tree Search & Adversarial Self-Play Engine
 
-> **Document Status:** APPROVED FOR IMPLEMENTATION  
+> **Document Status:** ORIGINAL DESIGN RFC — the shipped implementation is a subset: breadth-first archetype-guided
+> hypothesis expansion with sandbox rollouts, reward-based branch selection, and feedback-guided depth-2 adversarial
+> refinement (see `internal/engine/mcts_search.go`). Full tree selection iterations and minimax self-play are NOT
+> implemented; user-facing naming says "Divergent Hypothesis Search (DHS)", not MCTS.
 > **Theoretical Grounding:**  
 > 1. *Large Language Monkeys: Scaling Inference Compute with Repeated Sampling* (Brown et al., Stanford, arXiv:2407.21787)  
 > 2. *Scaling LLM Test-Time Compute Optimally can be More Effective than Scaling Pre-training* (Snell et al., UC Berkeley / Google DeepMind, arXiv:2408.03314)  

@@ -20,9 +20,9 @@ type SarifLocation struct {
 }
 
 type SarifResult struct {
-	RuleID    string `json:"ruleId"`
-	Level     string `json:"level"`
-	Message   struct {
+	RuleID  string `json:"ruleId"`
+	Level   string `json:"level"`
+	Message struct {
 		Text string `json:"text"`
 	} `json:"message"`
 	Locations []SarifLocation `json:"locations,omitempty"`

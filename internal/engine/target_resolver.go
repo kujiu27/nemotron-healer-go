@@ -18,10 +18,10 @@ type TargetLocation struct {
 }
 
 var (
-	pyTraceRegex     = regexp.MustCompile(`File\s+"([^"]+)",\s+line\s+(\d+)(?:,\s+in\s+([a-zA-Z0-9_]+))?`)
-	pyShortRegex     = regexp.MustCompile(`([a-zA-Z0-9_\-./\\]+\.py):(\d+)(?::\s*(?:in\s+([a-zA-Z0-9_]+))?)?`)
-	goTraceRegex     = regexp.MustCompile(`([a-zA-Z0-9_\-./\\]+\.go):(\d+):`)
-	tsTraceRegex     = regexp.MustCompile(`(?:at\s+(?:async\s+)?([a-zA-Z0-9_.]+)\s+\()?([a-zA-Z0-9_\-./\\]+\.(?:ts|js|tsx|jsx)):(\d+):(\d+)\)?`)
+	pyTraceRegex = regexp.MustCompile(`File\s+"([^"]+)",\s+line\s+(\d+)(?:,\s+in\s+([a-zA-Z0-9_]+))?`)
+	pyShortRegex = regexp.MustCompile(`([a-zA-Z0-9_\-./\\]+\.py):(\d+)(?::\s*(?:in\s+([a-zA-Z0-9_]+))?)?`)
+	goTraceRegex = regexp.MustCompile(`([a-zA-Z0-9_\-./\\]+\.go):(\d+):`)
+	tsTraceRegex = regexp.MustCompile(`(?:at\s+(?:async\s+)?([a-zA-Z0-9_.]+)\s+\()?([a-zA-Z0-9_\-./\\]+\.(?:ts|js|tsx|jsx)):(\d+):(\d+)\)?`)
 )
 
 func isTestFile(path string) bool {
