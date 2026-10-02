@@ -1,4 +1,4 @@
-module github.com/nemotron-healer/nemotron-healer-go
+module github.com/kujiu27/nemotron-healer-go
 
 go 1.26.5
 

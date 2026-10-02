@@ -38,25 +38,25 @@ When CI tests fail or breaking changes break your codebase, developers waste hou
 | **Hot Start Latency** | ~450ms (interpreter + imports) | **< 10ms measured** (`/usr/bin/time`, darwin/arm64) |
 | **Memory Footprint** | ~65MB | **~12.3MB RSS measured** |
 | **Distribution** | Requires Python 3.11+, pip, venv | **Single Static Binary (~7.3MB, `-s -w`)** |
-| **CI Setup Time** | 30s ~ 60s (`setup-python`, `pip install`) | **< 1s (`wget` release binary)** |
+| **CI Setup Time** | 30s ~ 60s (`setup-python`, `pip install`) | **~15s (`actions/setup-go` + `go build`, no releases needed)** |
 | **Terminal UX** | Basic text logs | **Cyberpunk TUI (`bubbletea` + `lipgloss`)** |
 
 ---
 
-## 🚀 Quick Start
-
-### 1. Download Binary
-Download the pre-compiled binary for your architecture from [Releases](https://github.com/kujiu27/nemotron-healer-go/releases):
+### 1. Install
+Zero-404 install paths — build from source, no release binaries required:
 
 ```bash
-# macOS Apple Silicon (M1/M2/M3/M4)
-curl -fsSL https://github.com/kujiu27/nemotron-healer-go/releases/download/v0.2.0/nemotron-healer_darwin_arm64 -o /usr/local/bin/nemotron-healer
-chmod +x /usr/local/bin/nemotron-healer
+# One-liner (requires Go 1.26+)
+go install github.com/kujiu27/nemotron-healer-go/cmd/nemotron-healer@latest
 
-# Linux x86_64
-curl -fsSL https://github.com/kujiu27/nemotron-healer-go/releases/download/v0.2.0/nemotron-healer_linux_amd64 -o /usr/local/bin/nemotron-healer
-chmod +x /usr/local/bin/nemotron-healer
+# Or from a clone
+git clone https://github.com/kujiu27/nemotron-healer-go.git
+cd nemotron-healer-go && make build   # produces ./bin/nemotron-healer
 ```
+
+Pre-compiled binaries are attached to [Releases](https://github.com/kujiu27/nemotron-healer-go/releases)
+(auto-published by CI on every `v*` tag push).
 
 ### 2. Verify Environment
 ```bash

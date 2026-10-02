@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nemotron-healer/nemotron-healer-go/internal/engine"
+	"github.com/kujiu27/nemotron-healer-go/internal/engine"
 )
 
 type SarifLocation struct {
@@ -95,7 +95,7 @@ func ExportSarif(session *engine.HealingSession, outputPath string) error {
 					}{
 						Name:           "Nemotron-Healer",
 						Version:        "0.2.0",
-						InformationURI: "https://github.com/nemotron-healer/nemotron-healer-go",
+						InformationURI: "https://github.com/kujiu27/nemotron-healer-go",
 						Rules: []SarifRule{
 							{
 								ID: ruleID,

@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nemotron-healer/nemotron-healer-go/internal/client"
-	"github.com/nemotron-healer/nemotron-healer-go/internal/falsify"
-	"github.com/nemotron-healer/nemotron-healer-go/internal/mcts"
-	"github.com/nemotron-healer/nemotron-healer-go/internal/sandbox"
+	"github.com/kujiu27/nemotron-healer-go/internal/client"
+	"github.com/kujiu27/nemotron-healer-go/internal/falsify"
+	"github.com/kujiu27/nemotron-healer-go/internal/mcts"
+	"github.com/kujiu27/nemotron-healer-go/internal/sandbox"
 )
 
 type MCTSSearchResult struct {

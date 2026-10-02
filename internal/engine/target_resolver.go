@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nemotron-healer/nemotron-healer-go/internal/ast"
+	"github.com/kujiu27/nemotron-healer-go/internal/ast"
 )
 
 type TargetLocation struct {

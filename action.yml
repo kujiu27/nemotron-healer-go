@@ -22,16 +22,21 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Download Nemotron-Healer Binary
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+        check-latest: true
+
+    - name: Build Nemotron-Healer from source
       shell: bash
       run: |
-        OS_TYPE="linux_amd64"
-        if [[ "$RUNNER_OS" == "macOS" ]]; then
-          OS_TYPE="darwin_arm64"
-        fi
-        echo "Installing Nemotron-Healer for $OS_TYPE..."
-        curl -fsSL "https://github.com/kujiu27/nemotron-healer-go/releases/download/v0.2.0/nemotron-healer_${OS_TYPE}" -o /usr/local/bin/nemotron-healer
-        chmod +x /usr/local/bin/nemotron-healer
+        REF="${{ github.action_ref }}"
+        if [ -z "$REF" ]; then REF="main"; fi
+        echo "Building Nemotron-Healer from source @ ${REF}..."
+        git clone --depth 1 --branch "${REF}" https://github.com/kujiu27/nemotron-healer-go.git /tmp/nh-src \
+          || git clone --depth 1 https://github.com/kujiu27/nemotron-healer-go.git /tmp/nh-src
+        CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /usr/local/bin/nemotron-healer /tmp/nh-src/cmd/nemotron-healer
         nemotron-healer version
 
     - name: Run Autonomous Self-Healing Pipeline

@@ -1,13 +1,13 @@
 .PHONY: all build test clean cross
 
 BINARY_NAME=nemotron-healer
-VERSION=0.2.0
+VERSION=0.3.0
 
 all: test build
 
 build:
 	@mkdir -p bin
-	go build -ldflags="-s -w -X main.version=$(VERSION)" -o bin/$(BINARY_NAME) ./cmd/$(BINARY_NAME)
+	go build -ldflags="-s -w -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=v$(VERSION)" -o bin/$(BINARY_NAME) ./cmd/$(BINARY_NAME)
 
 test:
 	go test -v -race ./...

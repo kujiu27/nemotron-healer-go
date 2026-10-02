@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/nemotron-healer/nemotron-healer-go/internal/engine"
+	"github.com/kujiu27/nemotron-healer-go/internal/engine"
 	"github.com/spf13/cobra"
 )
 
