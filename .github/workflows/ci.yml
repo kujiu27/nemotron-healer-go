@@ -122,7 +122,7 @@ jobs:
 
       - name: Verify every AHB case ships RED (no leaked answers)
         run: |
-          RC=0; bash -x scripts/verify_red.sh >/tmp/vr.out 2>/tmp/vr.err || RC=$?
+          RC=0; bash -x scripts/verify_red.sh 2>/tmp/vr.err || RC=$?
           {
             echo '## verify_red trace tail'
             echo '```'
