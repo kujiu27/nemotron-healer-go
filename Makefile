@@ -1,4 +1,4 @@
-.PHONY: all build test bench clean cross
+.PHONY: all build test bench check clean cross
 
 BINARY_NAME=nemotron-healer
 VERSION=0.5.0
@@ -25,3 +25,6 @@ cross:
 
 clean:
 	rm -rf bin/ dist/
+
+check:
+	python3 scripts/check_links.py

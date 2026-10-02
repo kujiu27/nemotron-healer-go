@@ -34,8 +34,8 @@ When CI tests fail or breaking changes break your codebase, developers waste hou
 | Claim | Receipt |
 | :--- | :--- |
 | Performance (7.5MB binary, ~12MB RSS, <10ms start) | [`docs/PERF.md`](docs/PERF.md) — regenerate: `make bench` |
-| All 7 benchmark cases ship genuinely RED (no leaked answers) | [`docs/BENCHMARK_RED_MATRIX.md`](docs/BENCHMARK_RED_MATRIX.md) — regenerate: `bash scripts/verify_red.sh`; enforced by CI on every push |
-| Real upstream bugs, not self-authored cases | [`samples/external_go_diff/README.md`](samples/external_go_diff/README.md) (sergi/go-diff `6dbe13c`) · [`samples/external_go_toml/README.md`](samples/external_go_toml/README.md) (pelletier/go-toml `6fa69af`) — red/green proofs included |
+| All 9 benchmark cases ship genuinely RED (no leaked answers) | [`docs/BENCHMARK_RED_MATRIX.md`](docs/BENCHMARK_RED_MATRIX.md) — regenerate: `bash scripts/verify_red.sh`; enforced by CI on every push |
+| Real upstream bugs, not self-authored cases | [`samples/external_go_diff/README.md`](samples/external_go_diff/README.md) (sergi/go-diff `6dbe13c`) · [`samples/external_go_toml/README.md`](samples/external_go_toml/README.md) (pelletier/go-toml `6fa69af`) · [`samples/external_gjson/README.md`](samples/external_gjson/README.md) (tidwall/gjson `0b52f9a`) · [`samples/external_jwt/README.md`](samples/external_jwt/README.md) (golang-jwt/jwt `1a11d37`) — red/green proofs included |
 | Adversarial self-audit with every finding fixed | [`GRAND_PRIZE_GAP_AUDIT.md`](GRAND_PRIZE_GAP_AUDIT.md) — remediation ledger maps each finding to its fix commit |
 | GitHub Action works on a real runner | `action-smoke` job in [CI](.github/workflows/ci.yml) runs the composite action end-to-end on every push |
 | Release binaries are live | [Releases](https://github.com/kujiu27/nemotron-healer-go/releases) — auto-published on `v*` tag pushes |
