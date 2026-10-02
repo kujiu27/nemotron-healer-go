@@ -249,7 +249,7 @@ func (f *Falsifier) PersistRegressionTest(targetFile, testCode string) (string, 
 		return "", err
 	}
 
-	header := fmt.Sprintf("// [Nemotron-Healer] Autonomous Regression Invariant Guard\n// Synthesized by NVIDIA Nemotron 3 Ultra to permanently prevent regression.\n\n")
+	header := "// [Nemotron-Healer] Autonomous Regression Invariant Guard\n// Synthesized by NVIDIA Nemotron 3 Ultra to permanently prevent regression.\n\n"
 	if lang.Name == "Python" {
 		header = "# [Nemotron-Healer] Autonomous Regression Invariant Guard\n# Synthesized by NVIDIA Nemotron 3 Ultra to permanently prevent regression.\n\n"
 	}
