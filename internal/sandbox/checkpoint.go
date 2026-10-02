@@ -24,7 +24,8 @@ func NewCheckpointManager(workDir string) *CheckpointManager {
 func (c *CheckpointManager) CreateCheckpoint() (string, error) {
 	checkpointID := fmt.Sprintf("cp_%d", time.Now().UnixNano())
 	backupDir := filepath.Join(os.TempDir(), "nemotron_checkpoints", checkpointID)
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
+	// 0700: snapshots of the workspace must not be world-readable in /tmp.
+	if err := os.MkdirAll(backupDir, 0700); err != nil {
 		return "", err
 	}
 
@@ -171,18 +172,26 @@ func (c *CheckpointManager) CreateGitPRBranch(branchName, commitMsg string) erro
 func (c *CheckpointManager) CreateGitPRBranchWithAudit(branchName, commitMsg, auditReport string) error {
 	_ = c.EnsureGitContext()
 
+	// Branch creation must SUCCEED before any add/commit: on collision the
+	// old code silently committed the LLM patch onto the user's current branch.
 	cmd1 := exec.Command("git", "checkout", "-b", branchName)
 	cmd1.Dir = c.WorkDir
-	_ = cmd1.Run()
+	if err := cmd1.Run(); err != nil {
+		return fmt.Errorf("refusing to commit: branch creation failed for %s: %w", branchName, err)
+	}
 
 	if auditReport != "" {
 		auditPath := filepath.Join(c.WorkDir, "HEAL_AUDIT_REPORT.md")
-		_ = os.WriteFile(auditPath, []byte(auditReport), 0644)
+		if err := os.WriteFile(auditPath, []byte(auditReport), 0644); err != nil {
+			return err
+		}
 	}
 
 	cmd2 := exec.Command("git", "add", "-A")
 	cmd2.Dir = c.WorkDir
-	_ = cmd2.Run()
+	if err := cmd2.Run(); err != nil {
+		return fmt.Errorf("git add failed: %w", err)
+	}
 
 	cmd3 := exec.Command("git", "commit", "--allow-empty", "-m", commitMsg)
 	cmd3.Dir = c.WorkDir
