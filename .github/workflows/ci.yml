@@ -134,12 +134,14 @@ jobs:
       - name: Verify AHB-07 ships RED (hang case, isolated)
         id: a7
         continue-on-error: true
+        env:
+          GOMEMLIMIT: 256MiB
         run: |
           tmp=$(mktemp -d)
           cp -R samples/external_go_toml/. "$tmp/"
           cd "$tmp"
-          ulimit -t 25
-          go test . -run TestUnmarshalRecursiveEmbedded -count=1 -timeout 30s
+          ulimit -t 30
+          go test . -run TestUnmarshalRecursiveEmbedded -count=1 -timeout 20s
 
       - name: Assert AHB-07 was RED
         if: steps.a7.outcome != 'failure'
