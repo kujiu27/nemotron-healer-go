@@ -61,7 +61,7 @@ run_case AHB-03 samples/pydantic_v2_migration     "$PYTEST -q"               >> 
 run_case AHB-04 samples/sql_injection_remediation "$PYTEST -q"               >> "$VERDICTS"; note AHB-04-done
 run_case AHB-05 samples/go_concurrency_race       "go test -race ."          >> "$VERDICTS"; note AHB-05-done
 run_case AHB-06 samples/external_go_diff          "go test ./diffmatchpatch/ -run TestDiffLinesToChars" >> "$VERDICTS"; note AHB-06-done
-run_case AHB-07 samples/external_go_toml          "go test . -run TestUnmarshalRecursiveEmbedded -count=1" >> "$VERDICTS"; note AHB-07-done
+run_case AHB-07 samples/external_go_toml          "go test . -run TestUnmarshalRecursiveEmbedded -count=1 -timeout 30s" >> "$VERDICTS"; note AHB-07-done
 
 {
   echo "| Case | Sample | Command | State |"

@@ -121,7 +121,7 @@ var evalCmd = &cobra.Command{
 				ID:          "AHB-07",
 				Name:        "External: go-toml recursive embedding",
 				Path:        "samples/external_go_toml",
-				Command:     "go test . -run TestUnmarshalRecursiveEmbedded -count=1",
+				Command:     "go test . -run TestUnmarshalRecursiveEmbedded -count=1 -timeout 30s",
 				Archetype:   "ResourceLeak/InfiniteRecursion (Real Upstream Bug)",
 				Description: "Real reverted fix from pelletier/go-toml commit 6fa69af: unmarshal into a self/mutually embedded struct hangs in infinite recursion.",
 			},
