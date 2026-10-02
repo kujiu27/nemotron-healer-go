@@ -120,6 +120,9 @@ jobs:
       - name: Install Python deps (pytest, pydantic)
         run: python3 -m pip install --quiet pytest pydantic
 
+      - name: Doc link integrity (receipts must exist)
+        run: python3 scripts/check_links.py
+
       - name: Verify AHB-01..06 ship RED (no leaked answers)
         run: |
           RC=0; bash -x scripts/verify_red.sh --skip AHB-07 2>/tmp/vr.err || RC=$?
