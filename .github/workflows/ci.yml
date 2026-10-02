@@ -120,22 +120,29 @@ jobs:
       - name: Install Python deps (pytest, pydantic)
         run: python3 -m pip install --quiet pytest pydantic
 
-      - name: Verify every AHB case ships RED (no leaked answers)
+      - name: Verify AHB-01..06 ship RED (no leaked answers)
         run: |
-          RC=0; bash -x scripts/verify_red.sh 2>/tmp/vr.err || RC=$?
-          {
-            echo '## verify_red trace tail'
-            echo '```'
-            tail -60 /tmp/vr.err
-            echo '```'
-            echo '## matrix'
-            echo '```'
-            cat docs/BENCHMARK_RED_MATRIX.md 2>/dev/null || echo '(no matrix written)'
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$RC" -ne 0 ]; then
-            echo "::error title=verify_red trace::$(tail -c 500 /tmp/vr.err | tr '\n' '~')"
-            echo "::error title=verify_red matrix::$(grep -E 'AHB-0|CORRUPT' docs/BENCHMARK_RED_MATRIX.md 2>/dev/null | tr '\n' '~' | tail -c 500)"
-          fi
+          RC=0; bash -x scripts/verify_red.sh --skip AHB-07 2>/tmp/vr.err || RC=$?
+          cat docs/BENCHMARK_RED_MATRIX.md 2>/dev/null >> "$GITHUB_STEP_SUMMARY"
           exit $RC
 
+      # The go-toml hang case gets its own step: hosted runners tear down the
+      # whole step process group when the infinite-recursion buggy tree runs,
+      # so we run it isolated and treat ANY non-zero outcome (including the
+      # teardown itself) as the required RED state. A fixed/green tree exits 0
+      # quickly and fails this check.
+      - name: Verify AHB-07 ships RED (hang case, isolated)
+        id: a7
+        continue-on-error: true
+        run: |
+          tmp=$(mktemp -d)
+          cp -R samples/external_go_toml/. "$tmp/"
+          cd "$tmp"
+          ulimit -t 25
+          go test . -run TestUnmarshalRecursiveEmbedded -count=1 -timeout 30s
+
+      - name: Assert AHB-07 was RED
+        if: steps.a7.outcome != 'failure'
+        run: |
+          echo "AHB-07 unexpectedly GREEN (outcome=${{ steps.a7.outcome }}) — answer leaked into the sample?"
+          exit 1
