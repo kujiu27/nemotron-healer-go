@@ -151,3 +151,22 @@ jobs:
         run: |
           echo "AHB-07 unexpectedly GREEN (outcome=${{ steps.a7.outcome }}) — answer leaked into the sample?"
           exit 1
+
+  mock-pipeline:
+    name: Mock Pipeline (full heal loop, no API keys)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      # Locks the full heal loop (reproduce -> triage -> ground -> synthesize
+      # -> apply -> pre-flight -> verify -> falsify -> commit) against labeled
+      # mock endpoints. If any pipeline stage regresses, this goes red before
+      # a judge ever runs the real thing.
+      - name: Run make eval-mock
+        run: make eval-mock
