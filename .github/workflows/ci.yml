@@ -99,3 +99,21 @@ jobs:
         run: |
           echo "Expected the healer to exit non-zero without API keys, got: ${{ steps.act.outcome }}"
           exit 1
+
+  benchmark-red:
+    name: Benchmark RED-State Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Set up Python deps (pytest, pydantic)
+        run: python3 -m pip install --quiet pytest pydantic
+
+      - name: Verify every AHB case ships RED (no leaked answers)
+        run: bash scripts/verify_red.sh
