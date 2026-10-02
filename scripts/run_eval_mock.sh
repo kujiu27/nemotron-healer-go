@@ -36,8 +36,27 @@ run_mode() { # label extra-flags...
   return $rc
 }
 
+# --json stdout must be a single parseable JSON document (machine contract).
+run_json_mode() {
+  echo "=== MOCK pipeline run [json-purity]: stdout must be pure JSON ==="
+  local tmp rc=0
+  tmp=$(mktemp -d)
+  cp -R samples/external_gjson/. "$tmp/"
+  (
+    cd "$tmp"
+    NEBIUS_API_KEY=mock TAVILY_API_KEY=mock \
+    NEBIUS_BASE_URL="http://127.0.0.1:$PORT/v1" \
+    TAVILY_BASE_URL="http://127.0.0.1:$PORT" \
+    "$REPO/bin/nemotron-healer" . --command "go test . -run TestEmptyValueQuery -count=1" --turns 1 --no-tui --yes --json 2>/dev/null \
+      | python3 -c "import json,sys; j=json.load(sys.stdin); print('pure JSON, resolved:', j['is_resolved'])"
+  ) || rc=$?
+  echo "=== [json-purity] exit code: $rc ==="
+  return $rc
+}
+
 rc=0
 run_mode plain || rc=$?
 run_mode search --search || rc=$?
 run_mode arena --arena || rc=$?
+run_json_mode || rc=$?
 exit $rc
