@@ -179,10 +179,15 @@ func (c *NebiusClient) executeWithRetry(ctx context.Context, createReq func() (*
 
 // StreamCompletion sends a chat request and calls onToken for each incoming streaming token.
 func (c *NebiusClient) StreamCompletion(ctx context.Context, messages []ChatMessage, onToken func(string)) (string, int, int, error) {
+	return c.StreamCompletionWithTemp(ctx, messages, 0.1, onToken)
+}
+
+// StreamCompletionWithTemp sends a chat request with a configurable sampling temperature.
+func (c *NebiusClient) StreamCompletionWithTemp(ctx context.Context, messages []ChatMessage, temperature float64, onToken func(string)) (string, int, int, error) {
 	reqBody := ChatRequest{
 		Model:         c.Model,
 		Messages:      messages,
-		Temperature:   0.1,
+		Temperature:   temperature,
 		Stream:        true,
 		StreamOptions: &StreamOptions{IncludeUsage: true},
 	}
@@ -331,7 +336,15 @@ Do NOT omit the unified diff block.`, testCmd, stderr+"\n"+stdout, archetypeCont
 		{Role: "user", Content: prompt},
 	}
 
-	fullText, pTokens, cTokens, err := c.StreamCompletion(ctx, messages, onToken)
+	// Adaptive Temperature Annealing:
+	// Turn 1 (len(failedHistory) == 0): T = 0.25 (exploration across candidate hypotheses)
+	// Turn 2+ (len(failedHistory) > 0): T = 0.05 (deterministic convergence on targeted surgical repair)
+	temp := 0.25
+	if len(failedHistory) > 0 {
+		temp = 0.05
+	}
+
+	fullText, pTokens, cTokens, err := c.StreamCompletionWithTemp(ctx, messages, temp, onToken)
 	if err != nil {
 		return nil, 0, 0, err
 	}

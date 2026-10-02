@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"github.com/nemotron-healer/nemotron-healer-go/internal/engine"
@@ -55,6 +56,9 @@ func ExportSarif(session *engine.HealingSession, outputPath string) error {
 	ruleID := "NH-DEFECT"
 	level := "warning"
 	msgText := "Defect identified and resolved autonomously by Nemotron-Healer"
+	if session.PatchDigest != "" {
+		msgText = fmt.Sprintf("Defect resolved autonomously by Nemotron-Healer (Audit Digest: %s)", session.PatchDigest)
+	}
 	if !session.IsResolved {
 		level = "error"
 		msgText = "Defect unresolved: " + session.LastError

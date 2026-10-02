@@ -38,3 +38,12 @@ func TestHealingSessionTransitions(t *testing.T) {
 		t.Fatalf("expected 1 history event, got %d", len(session.History))
 	}
 }
+
+func TestHealingSessionPatchDigest(t *testing.T) {
+	session := NewHealingSession("test-digest", ".", "go test ./...", 3)
+	session.PatchDigest = "sha256:abcd1234ef5678"
+	if session.PatchDigest != "sha256:abcd1234ef5678" {
+		t.Fatalf("expected patch digest to be stored, got %s", session.PatchDigest)
+	}
+}
+

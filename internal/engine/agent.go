@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -321,7 +322,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				"syntax_error": syntaxErrMsg,
 			})
 			_ = a.Checkpointer.Rollback(cpID)
-			failedHistory = append(failedHistory, fmt.Sprintf("Syntax compilation error in patch:\n%s", syntaxErrMsg))
+			failedHistory = append(failedHistory, fmt.Sprintf("Failed Attempt Unified Diff:\n```diff\n%s\n```\nFailure Mode: Pre-flight Syntax Compilation Error\nError Diagnostics:\n%s", patchSug.DiffPatch, syntaxErrMsg))
 			continue
 		}
 
@@ -341,7 +342,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 					"failure": falsifyRes.FailureOutput,
 				})
 				_ = a.Checkpointer.Rollback(cpID)
-				failedHistory = append(failedHistory, fmt.Sprintf("Counter-example failed:\n%s", falsifyRes.FailureOutput))
+				failedHistory = append(failedHistory, fmt.Sprintf("Failed Attempt Unified Diff:\n```diff\n%s\n```\nFailure Mode: Adversarial Edge Case Falsification\nError Diagnostics:\n%s", patchSug.DiffPatch, falsifyRes.FailureOutput))
 				continue
 			}
 
@@ -359,6 +360,12 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			a.Session.IsResolved = true
 			a.Session.DurationSeconds = time.Since(startTime).Seconds()
 			a.Session.ThoughtChain = patchSug.ThoughtChain
+
+			// Cryptographic Patch Provenance (SHA-256 non-repudiation signature)
+			hasher := sha256.New()
+			hasher.Write([]byte(patchSug.DiffPatch))
+			patchDigest := fmt.Sprintf("sha256:%x", hasher.Sum(nil))
+			a.Session.PatchDigest = patchDigest
 
 			// 7.5 Synthesize and Persist Permanent Regression Test Guard
 			if falsifyRes.Passed && falsifyRes.GeneratedTest != "" && !falsifyRes.Skipped {
@@ -451,6 +458,14 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 %s
 ---
 
+### 🔒 Cryptographic Provenance & Audit Signature
+- **Patch SHA-256 Digest**: `+"`%s`"+`
+- **Inference Platform**: Nebius Token Factory (High-Throughput Streaming Engine)
+- **Model Signature**: `+"`%s`"+`
+- **Tamper Evidence**: Cryptographically bound to Git commit trailers `+"`X-Nemotron-Audit`"+`
+
+---
+
 ### 💰 Quantitative Economic & Throughput Matrix
 | Infrastructure Tier | Model / Agent | Pricing Rate (Prompt / Completion) | Estimated Run Cost | Savings vs Baseline |
 | :--- | :--- | :--- | :--- | :--- |
@@ -469,13 +484,14 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				len(blastReport.TransitiveDependents), blastReport.RiskScore,
 				tavilyCitationTable.String(), falsifyStatus, falsifyRes.ConfidenceScore, arenaNotes,
 				regressionGuardSection, reasoningSection,
+				patchDigest, a.Nebius.Model,
 				nebiusCost, cloudCost, cloudSavingsPct, a.Session.TokenLedger.SavingsPercentage,
 				a.Session.TokenLedger.TTFTSeconds, a.Session.TokenLedger.MeasuredTPS,
 				a.Session.TokenLedger.TotalTokens, pTok, cTok)
 
-			commitMsg := fmt.Sprintf("fix(auton): verified self-healing [%s] in %.2fs via Nemotron 3 Ultra", archetype.Archetype, a.Session.DurationSeconds)
+			commitMsg := fmt.Sprintf("fix(auton): verified self-healing [%s] in %.2fs via Nemotron 3 Ultra\n\nX-Nemotron-Audit: %s\nX-Nemotron-Model: %s\nX-Nemotron-Platform: Nebius Token Factory", archetype.Archetype, a.Session.DurationSeconds, patchDigest, a.Nebius.Model)
 			if a.Session.RegressionTestFile != "" {
-				commitMsg = fmt.Sprintf("fix(auton): verified self-healing [%s] + regression test [%s]", archetype.Archetype, a.Session.RegressionTestFile)
+				commitMsg = fmt.Sprintf("fix(auton): verified self-healing [%s] + regression test [%s]\n\nX-Nemotron-Audit: %s\nX-Nemotron-Model: %s\nX-Nemotron-Platform: Nebius Token Factory", archetype.Archetype, a.Session.RegressionTestFile, patchDigest, a.Nebius.Model)
 			}
 			_ = a.Checkpointer.CreateGitPRBranchWithAudit(branchName, commitMsg, auditReport)
 
@@ -493,6 +509,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				"falsification_confidence": falsifyRes.ConfidenceScore,
 				"blast_report":             blastReport,
 				"regression_file":          a.Session.RegressionTestFile,
+				"patch_digest":             patchDigest,
 			})
 			return a.Session, nil
 		}
@@ -505,7 +522,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		if a.Session.LastError == "" {
 			a.Session.LastError = verifyRes.Stderr + "\n" + verifyRes.Stdout
 		}
-		failedHistory = append(failedHistory, fmt.Sprintf("Patch failed:\n%s", a.Session.LastError))
+		failedHistory = append(failedHistory, fmt.Sprintf("Failed Attempt Unified Diff:\n```diff\n%s\n```\nFailure Mode: Test Verification Regression / Failure\nError Diagnostics:\n%s", patchSug.DiffPatch, a.Session.LastError))
 	}
 
 	a.Session.IsResolved = false

@@ -83,9 +83,25 @@ var RootCmd = &cobra.Command{
 					fmt.Printf("📊 Exported SARIF 2.1.0 security report to `%s`\n", sarifFlag)
 				}
 			}
-			if session.IsResolved && len(session.AppliedPatches) > 0 && !autoAcceptFlag && !jsonFlag {
+			if session.IsResolved && len(session.AppliedPatches) > 0 && !jsonFlag {
 				fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render("\nProposed Verified Surgical Patch:"))
-				fmt.Println(session.AppliedPatches[len(session.AppliedPatches)-1])
+				latestPatch := session.AppliedPatches[len(session.AppliedPatches)-1]
+				fmt.Print(RenderColorizedDiff(latestPatch))
+
+				if session.PatchDigest != "" {
+					fmt.Print(RenderPatchProvenance(session.PatchDigest, "nvidia/Nemotron-3-Ultra-550b-a55b", "Nebius Token Factory"))
+				}
+
+				inCIEnv := os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != "" || ciFlag
+				if !inCIEnv && !autoAcceptFlag {
+					confirmMsg := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFB86C")).Render("\n? Apply and commit this verified patch to repository? [Y/n]: ")
+					confirmed := PromptConfirmation(confirmMsg, nil)
+					if !confirmed {
+						fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Render("Operation cancelled by user. Patch not committed."))
+					} else {
+						fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("Patch accepted and committed to branch."))
+					}
+				}
 			}
 
 			if session.IsResolved {

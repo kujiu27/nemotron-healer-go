@@ -69,6 +69,7 @@ type HealingSession struct {
 	DurationSeconds    float64            `json:"duration_seconds"`
 	RegressionTestFile string             `json:"regression_test_file,omitempty"`
 	ThoughtChain       string             `json:"thought_chain,omitempty"`
+	PatchDigest        string             `json:"patch_digest,omitempty"`
 	History            []HealingStepEvent `json:"history"`
 }
 
