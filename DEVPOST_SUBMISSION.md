@@ -58,7 +58,8 @@ ledger mapping every finding to its fix commit), then fixed everything it found:
 - The GitHub Action chain runs end-to-end on a real runner in CI (`action-smoke` job)
   on every push — no release-binary dependency.
 - Release binaries auto-publish on tag pushes; `v0.4.0` assets are live.
-- `eval --repeat N` reports per-case solve rates and mean±std for turns, duration, cost.
+- RED-state integrity gate: CI verifies every benchmark case still FAILS its own
+  test command as shipped — no leaked answers, enforced on every push.
 
 ## How we built it
 

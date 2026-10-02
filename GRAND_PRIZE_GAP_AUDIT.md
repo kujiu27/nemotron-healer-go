@@ -164,7 +164,14 @@ DESIGN 还宣称 R>0.7 时 "restricts unified diffs to non-signature-breaking op
 | Tier-3 兜底把全部 hunk 拼一块、多 hunk 必败 | 致命 | 逐 hunk 应用,no-newline 标记处理,5 新单测 | 2f29e08 |
 | 沙箱 sh -c 全权限 | 重伤 | 环境凭证过滤(sanitizeEnvironment);README 明示信任边界 | c6a30b0 前后 |
 | 无视频/Devpost 描述 | 致命 | Devpost 描述草稿就绪(DEVPOST_SUBMISSION.md);**视频待录**(人力项) | 995d953 |
+| README "measured" 性能无收据 | 重伤 | `make bench` → docs/PERF.md 提交收据 | ae780f0 |
+| Action 零 runner 执行证据 / 无 path 输入 / README 无 uses 示例 | 致命 | action-smoke 真 runner 每 push 实证;path 输入;README 用法;@v0.4.0 | 58817a0 系 |
+| eval --repeat 无聚合统计 | 重伤 | per-case 胜率 + turns/duration/cost 均值±总体标准差,JSON/MD 导出 | 45007c8 |
+| Devpost 草稿未携带证据链 | 重伤 | "Evidence you can verify in 60 seconds" 段落 | 76e95f6 |
+| 样本被治愈污染基准无复发防护 | 重伤 | 红态完整性门禁:verify_red.sh + CI benchmark-red job + 收据 | 5edd0a2/4d9a242 |
+| AHB-07 挂起类在 CI 触发 job 级击杀 | 重伤 | GOMEMLIMIT=256MiB 自困,坏树有界 FAIL,好树 0.6s | 5edd0a2 |
 
+> 后续追加轮(9-13)发现与修复已并入上表;主 README 的 "Evidence & Verification" 一节给全部收据入口。
 ### Remediation Status (for judges)
 
 This repo carries its own adversarial self-audit (above, 10 interrogation
