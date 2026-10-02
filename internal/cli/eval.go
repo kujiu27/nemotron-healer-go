@@ -36,9 +36,9 @@ var (
 
 var evalCmd = &cobra.Command{
 	Use:   "eval",
-	Short: "Run the in-repo Autonomous Healer Benchmark (AHB-6) with sandboxed isolation, A/B ablation, and repeat runs",
+	Short: "Run the in-repo Autonomous Healer Benchmark (AHB-7) with sandboxed isolation, A/B ablation, and repeat runs",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ AHB-6 In-Repo Benchmark & Ablation Engine"))
+		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ AHB-7 In-Repo Benchmark & Ablation Engine"))
 		fmt.Printf("Repeats per case: %d\n\n", max(1, repeatFlag))
 		fmt.Println("Grounded against Concurrency, API Breaking Migrations, and Re-entrancy Traps")
 		fmt.Println()
@@ -116,6 +116,14 @@ var evalCmd = &cobra.Command{
 				Command:     "go test ./diffmatchpatch/ -run TestDiffLinesToChars",
 				Archetype:   "InterfaceBreaking (Real Upstream Bug)",
 				Description: "Real reverted fix from sergi/go-diff commit 6dbe13c: shared lineHash regression test fails on buggy code.",
+			},
+			{
+				ID:          "AHB-07",
+				Name:        "External: go-toml recursive embedding",
+				Path:        "samples/external_go_toml",
+				Command:     "go test . -run TestUnmarshalRecursiveEmbedded -count=1",
+				Archetype:   "ResourceLeak/InfiniteRecursion (Real Upstream Bug)",
+				Description: "Real reverted fix from pelletier/go-toml commit 6fa69af: unmarshal into a self/mutually embedded struct hangs in infinite recursion.",
 			},
 		}
 
@@ -200,7 +208,7 @@ var evalCmd = &cobra.Command{
 		}
 
 		// Print Comparative A/B Ablation Scorecard Table
-		fmt.Println("\n" + lipgloss.NewStyle().Bold(true).Render("📊 AHB-6 Ablation Scorecard (NVIDIA x Nebius x Tavily)"))
+		fmt.Println("\n" + lipgloss.NewStyle().Bold(true).Render("📊 AHB-7 Ablation Scorecard (NVIDIA x Nebius x Tavily)"))
 		fmt.Println("=====================================================================================================")
 		fmt.Printf("%-8s | %-24s | %-16s | %-12s | %-12s | %-6s | %-8s\n",
 			"Case ID", "Benchmark Scenario", "Defect Archetype", "Baseline LLM", "Full System", "Turns", "Cost ($)")
@@ -241,7 +249,7 @@ var evalCmd = &cobra.Command{
 		if exportJSONFlag != "" {
 			payload := map[string]interface{}{
 				"timestamp":           time.Now().UTC().Format(time.RFC3339),
-				"benchmark":           "AHB-6",
+				"benchmark":           "AHB-7",
 				"total_runs":          len(results),
 				"baseline_solve_rate": baseRate,
 				"full_solve_rate":     fullRate,
@@ -256,7 +264,7 @@ var evalCmd = &cobra.Command{
 
 		if exportMDFlag != "" {
 			var mdSb strings.Builder
-			mdSb.WriteString("## 📊 AHB-6 Benchmark & Ablation Scorecard\n\n")
+			mdSb.WriteString("## 📊 AHB-7 Benchmark & Ablation Scorecard\n\n")
 			mdSb.WriteString(fmt.Sprintf("*Evaluated on %s against NVIDIA Nemotron & Nebius Token Factory*\n\n", time.Now().Format("2006-01-02 15:04:05")))
 			mdSb.WriteString("| Case ID | Benchmark Scenario | Defect Archetype | Baseline LLM | Nemotron-Healer | Turns | Run Cost |\n")
 			mdSb.WriteString("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
@@ -351,7 +359,7 @@ func max(a, b int) int {
 func init() {
 	evalCmd.Flags().BoolVar(&ablationFlag, "ablation", true, "Perform side-by-side A/B ablation against baseline ungrounded model")
 	evalCmd.Flags().IntVar(&repeatFlag, "repeat", 1, "Repeat each benchmark case N times to expose variance")
-	evalCmd.Flags().StringVar(&caseFilterFlag, "case", "", "Filter benchmark cases by ID (e.g. AHB-05, AHB-06)")
+	evalCmd.Flags().StringVar(&caseFilterFlag, "case", "", "Filter benchmark cases by ID (e.g. AHB-06, AHB-07)")
 	evalCmd.Flags().StringVar(&archFilterFlag, "archetype", "", "Filter benchmark cases by defect archetype name")
 	evalCmd.Flags().StringVar(&exportJSONFlag, "export-json", "", "Export benchmark ablation results to JSON file")
 	evalCmd.Flags().StringVar(&exportMDFlag, "export-md", "", "Export benchmark ablation scorecard to Markdown file")
