@@ -1,4 +1,4 @@
-.PHONY: all build test bench check clean cross
+.PHONY: all build test bench check eval-mock clean cross
 
 BINARY_NAME=nemotron-healer
 VERSION=0.5.0
@@ -15,6 +15,11 @@ test:
 bench:
 	bash scripts/bench.sh
 
+# Offline end-to-end pipeline run against the LABELED mock
+# (scripts/mock_nebius.py). Every response carries X-Nemotron-Healer: MOCK.
+# Writes NO receipts — this is a wiring demo, not evidence.
+eval-mock:
+	@bash scripts/run_eval_mock.sh
 cross:
 	@mkdir -p dist
 	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/$(BINARY_NAME)_darwin_arm64 ./cmd/$(BINARY_NAME)
