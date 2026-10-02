@@ -406,15 +406,10 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				falsifyStatus = "SKIPPED — " + falsifyRes.Reason
 			}
 
-			// Quantitative Multi-Tier Economics
+			// Quantitative Economics (Token Factory catalog prices, streamed usage)
 			pTok := a.Session.TokenLedger.PromptTokens
 			cTok := a.Session.TokenLedger.CompletionTokens
 			nebiusCost := a.Session.TokenLedger.EstimatedCostUSD
-			cloudCost := (float64(pTok)*5.0 + float64(cTok)*15.0) / 1_000_000.0
-			cloudSavingsPct := 0.0
-			if cloudCost > 0 {
-				cloudSavingsPct = ((cloudCost - nebiusCost) / cloudCost) * 100.0
-			}
 
 			regressionGuardSection := "- **Regression Guard**: Counter-example verified in sandbox ephemeral test."
 			if a.Session.RegressionTestFile != "" {
@@ -452,7 +447,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 ---
 
 ### 🛡️ Adversarial Falsification & Permanent Regression Guard
-- **Status**: %s (Confidence: %.2f)
+- **Status**: %s
 - **Arena Defense**: %s
 %s
 %s
@@ -470,7 +465,6 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 | Infrastructure Tier | Model / Agent | Pricing Rate (Prompt / Completion) | Estimated Run Cost | Savings vs Baseline |
 | :--- | :--- | :--- | :--- | :--- |
 | ⚡ **Nebius Token Factory** | **NVIDIA Nemotron 3 Ultra** | **$1.00 / $3.00 per 1M** | **$%.6f USD** | — (Our Platform) |
-| ☁️ Proprietary Cloud Baseline | Standard GPT-4o API | $5.00 / $15.00 per 1M | $%.6f USD | **-%.1f%%%% Cost Reduction** |
 | 🧑‍💻 Senior Staff Engineer | 30-min Manual Triage ($50/hr) | Fixed Engineering Salary | $25.00 USD | **-%.1f%%%% Net Savings** |
 
 **Nebius High-Performance Streaming Metrics:**
@@ -482,10 +476,10 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				archetype.Archetype, archetype.Severity, archetype.Description,
 				blastReport.ModifiedSymbol, len(blastReport.AffectedFiles), strings.Join(blastReport.AffectedFiles, ", "),
 				len(blastReport.TransitiveDependents), blastReport.RiskScore,
-				tavilyCitationTable.String(), falsifyStatus, falsifyRes.ConfidenceScore, arenaNotes,
+				tavilyCitationTable.String(), falsifyStatus, arenaNotes,
 				regressionGuardSection, reasoningSection,
 				patchDigest, a.Nebius.Model,
-				nebiusCost, cloudCost, cloudSavingsPct, a.Session.TokenLedger.SavingsPercentage,
+				nebiusCost, a.Session.TokenLedger.SavingsPercentage,
 				a.Session.TokenLedger.TTFTSeconds, a.Session.TokenLedger.MeasuredTPS,
 				a.Session.TokenLedger.TotalTokens, pTok, cTok)
 
@@ -504,12 +498,12 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			}
 
 			a.notify(StateSucceeded, fmt.Sprintf("🎉 Verification + Adversarial Falsification PASSED on Turn %d! Branch `%s` created.", turn, branchName), map[string]interface{}{
-				"duration_seconds":         a.Session.DurationSeconds,
-				"token_ledger":             a.Session.TokenLedger,
-				"falsification_confidence": falsifyRes.ConfidenceScore,
-				"blast_report":             blastReport,
-				"regression_file":          a.Session.RegressionTestFile,
-				"patch_digest":             patchDigest,
+				"duration_seconds":     a.Session.DurationSeconds,
+				"token_ledger":         a.Session.TokenLedger,
+				"falsification_passed": falsifyRes.Passed,
+				"blast_report":         blastReport,
+				"regression_file":      a.Session.RegressionTestFile,
+				"patch_digest":         patchDigest,
 			})
 			return a.Session, nil
 		}
