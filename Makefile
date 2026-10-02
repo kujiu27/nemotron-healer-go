@@ -1,4 +1,4 @@
-.PHONY: all build test clean cross
+.PHONY: all build test bench clean cross
 
 BINARY_NAME=nemotron-healer
 VERSION=0.3.0
@@ -11,6 +11,9 @@ build:
 
 test:
 	go test -v -race ./...
+
+bench:
+	bash scripts/bench.sh
 
 cross:
 	@mkdir -p dist

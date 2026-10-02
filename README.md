@@ -35,9 +35,9 @@ When CI tests fail or breaking changes break your codebase, developers waste hou
 
 | Metric | Legacy Python Approach | **Nemotron-Healer (Go)** |
 | :--- | :--- | :--- |
-| **Hot Start Latency** | ~450ms (interpreter + imports) | **< 10ms measured** (`/usr/bin/time`, darwin/arm64) |
-| **Memory Footprint** | ~65MB | **~12.3MB RSS measured** |
-| **Distribution** | Requires Python 3.11+, pip, venv | **Single Static Binary (~7.3MB, `-s -w`)** |
+| **Hot Start Latency** | ~450ms (interpreter + imports) | **< 10ms measured** (`/usr/bin/time -p`, 5 runs — [receipt](docs/PERF.md)) |
+| **Memory Footprint** | ~65MB | **~12MB RSS measured** (5-run avg — [receipt](docs/PERF.md)) |
+| **Distribution** | Requires Python 3.11+, pip, venv | **Single Static Binary (7.5MB stripped — [receipt](docs/PERF.md))** |
 | **CI Setup Time** | 30s ~ 60s (`setup-python`, `pip install`) | **~15s (`actions/setup-go` + `go build`, no releases needed)** |
 | **Terminal UX** | Basic text logs | **Cyberpunk TUI (`bubbletea` + `lipgloss`)** |
 
