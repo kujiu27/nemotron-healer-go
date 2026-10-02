@@ -112,7 +112,12 @@ jobs:
         with:
           go-version: 'stable'
 
-      - name: Set up Python deps (pytest, pydantic)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python deps (pytest, pydantic)
         run: python3 -m pip install --quiet pytest pydantic
 
       - name: Verify every AHB case ships RED (no leaked answers)
