@@ -133,5 +133,9 @@ jobs:
             cat docs/BENCHMARK_RED_MATRIX.md 2>/dev/null || echo '(no matrix written)'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$RC" -ne 0 ]; then
+            echo "::error title=verify_red trace::$(tail -c 500 /tmp/vr.err | tr '\n' '~')"
+            echo "::error title=verify_red matrix::$(grep -E 'AHB-0|CORRUPT' docs/BENCHMARK_RED_MATRIX.md 2>/dev/null | tr '\n' '~' | tail -c 500)"
+          fi
           exit $RC
 
