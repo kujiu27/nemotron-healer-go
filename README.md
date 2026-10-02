@@ -56,7 +56,9 @@ cd nemotron-healer-go && make build   # produces ./bin/nemotron-healer
 ```
 
 Pre-compiled binaries are attached to [Releases](https://github.com/kujiu27/nemotron-healer-go/releases)
-(auto-published by CI on every `v*` tag push).
+(auto-published by CI on every `v*` tag push). The Windows build is provided
+for use inside a POSIX shell (Git Bash / WSL); the healer executes test
+commands via `sh -c`.
 
 ### 2. Verify Environment
 ```bash
