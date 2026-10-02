@@ -125,6 +125,7 @@ func sanitizeEnvironment() []string {
 		"VIRTUAL_ENV": true, "PYTHONPATH": true, "PYTHONUNBUFFERED": true,
 		"GOPATH": true, "GOROOT": true, "GOFLAGS": true, "GOPROXY": true,
 		"GOSUMDB": true, "GONOSUMDB": true, "GO111MODULE": true, "GOTOOLCHAIN": true,
+		"GOPRIVATE": true, "GOINSECURE": true,
 		"CI": true, "GITHUB_ACTIONS": true,
 	}
 	var safeEnv []string

@@ -36,7 +36,7 @@ var (
 
 var evalCmd = &cobra.Command{
 	Use:   "eval",
-	Short: "Run the in-repo Autonomous Healer Benchmark (AHB-7) with sandboxed isolation, A/B ablation, and repeat runs",
+	Short: "Run the in-repo Autonomous Healer Benchmark (AHB-9) with sandboxed isolation, A/B ablation, and repeat runs",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ AHB-9 In-Repo Benchmark & Ablation Engine"))
 		fmt.Printf("Repeats per case: %d\n\n", max(1, repeatFlag))
@@ -178,21 +178,23 @@ var evalCmd = &cobra.Command{
 					fmt.Printf("  ⚠️ Could not sandbox %s: %v (skipping)\n", c.Path, err)
 					continue
 				}
-				defer os.RemoveAll(tmpDir)
 
 				baseDir, err := createIsolatedSandbox(c.Path)
 				if err != nil {
 					fmt.Printf("  ⚠️ Could not sandbox baseline %s: %v (skipping)\n", c.Path, err)
+					os.RemoveAll(tmpDir)
 					continue
 				}
-				defer os.RemoveAll(baseDir)
 
 				// Step 2: Measured baseline — single-turn greedy LLM loop, no Tavily grounding, no archetype constraints
-				baseAgent := engine.NewAgent(baseDir, c.Command, 1, nil, nil)
-				baseAgent.EnableArena = false
-				baseAgent.DisableGrounding = true
-				baseSession, _ := baseAgent.Run(context.Background())
-				baselinePass := baseSession.IsResolved
+				baselinePass := false
+				if ablationFlag {
+					baseAgent := engine.NewAgent(baseDir, c.Command, 1, nil, nil)
+					baseAgent.EnableArena = false
+					baseAgent.DisableGrounding = true
+					baseSession, _ := baseAgent.Run(context.Background())
+					baselinePass = baseSession.IsResolved
+				}
 
 				// Step 3: Run Full Nemotron-Healer System in the fresh isolated sandbox
 				start := time.Now()
@@ -211,6 +213,10 @@ var evalCmd = &cobra.Command{
 					DurationS:    dur,
 					CostUSD:      session.TokenLedger.EstimatedCostUSD,
 				})
+				// Per-iteration cleanup: defers inside the repeat loop previously
+				// kept up to 18*N full-repo sandboxes alive until process exit.
+				os.RemoveAll(tmpDir)
+				os.RemoveAll(baseDir)
 			}
 		}
 
@@ -278,14 +284,16 @@ var evalCmd = &cobra.Command{
 				"per_case":            perCase,
 			}
 			if d, err := json.MarshalIndent(payload, "", "  "); err == nil {
-				_ = os.WriteFile(exportJSONFlag, d, 0644)
+				if wErr := os.WriteFile(exportJSONFlag, d, 0644); wErr != nil {
+					return fmt.Errorf("export JSON write failed: %w", wErr)
+				}
 				fmt.Printf("📄 Exported benchmark ablation JSON to `%s`\n", exportJSONFlag)
 			}
 		}
 
 		if exportMDFlag != "" {
 			var mdSb strings.Builder
-			mdSb.WriteString("## 📊 AHB-7 Benchmark & Ablation Scorecard\n\n")
+			mdSb.WriteString("## 📊 AHB-9 Benchmark & Ablation Scorecard\n\n")
 			mdSb.WriteString(fmt.Sprintf("*Evaluated on %s against NVIDIA Nemotron & Nebius Token Factory*\n\n", time.Now().Format("2006-01-02 15:04:05")))
 			mdSb.WriteString("| Case ID | Benchmark Scenario | Defect Archetype | Baseline LLM | Nemotron-Healer | Turns | Run Cost |\n")
 			mdSb.WriteString("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
@@ -314,7 +322,9 @@ var evalCmd = &cobra.Command{
 						s.TurnsMean, s.TurnsStd, s.DurationMean, s.DurationStd, s.CostMean, s.CostStd))
 				}
 			}
-			_ = os.WriteFile(exportMDFlag, []byte(mdSb.String()), 0644)
+			if wErr := os.WriteFile(exportMDFlag, []byte(mdSb.String()), 0644); wErr != nil {
+				return fmt.Errorf("export Markdown write failed: %w", wErr)
+			}
 			fmt.Printf("📝 Exported benchmark ablation Markdown scorecard to `%s`\n", exportMDFlag)
 		}
 
@@ -378,13 +388,6 @@ func copyFileDirect(src, dst string) error {
 
 	_, err = io.Copy(out, in)
 	return err
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func init() {

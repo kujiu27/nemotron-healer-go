@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kujiu27/nemotron-healer-go/internal/arena"
@@ -40,6 +41,10 @@ type Agent struct {
 	Falsifier         *falsify.Falsifier
 	OnEvent           EventCallback
 	OnStreamToken     TokenCallback
+	// eventMu serializes Session transitions + event callbacks: parallel DHS
+	// rollout goroutines all funnel through notify, and TransitionTo mutates
+	// CurrentState / appends History unsynchronized (data race, found by review).
+	eventMu sync.Mutex
 }
 
 func NewAgent(workDir, testCommand string, maxTurns int, onEvent EventCallback, onToken TokenCallback) *Agent {
@@ -79,6 +84,8 @@ func NewAgent(workDir, testCommand string, maxTurns int, onEvent EventCallback, 
 }
 
 func (a *Agent) notify(state HealingState, summary string, details map[string]interface{}) {
+	a.eventMu.Lock()
+	defer a.eventMu.Unlock()
 	event := a.Session.TransitionTo(state, summary, details)
 	if a.OnEvent != nil {
 		a.OnEvent(event)
@@ -206,8 +213,13 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		turn := a.Session.CurrentTurn
 		a.notify(StateDiagnosing, fmt.Sprintf("Starting Healing Turn %d/%d...", turn, a.Session.MaxTurns), nil)
 
-		// 1. Transaction Checkpoint
-		cpID, _ := a.Checkpointer.CreateCheckpoint()
+		// 1. Transaction Checkpoint — without it every later Rollback is a
+		// silent no-op and dirty state leaks across turns.
+		cpID, cpErr := a.Checkpointer.CreateCheckpoint()
+		if cpErr != nil {
+			a.notify(StateFailed, fmt.Sprintf("Turn %d: checkpoint creation failed, aborting turn to avoid unrollbackable changes: %v", turn, cpErr), nil)
+			continue
+		}
 
 		// 2. Resolve Target Location & Compute AST Blast Radius
 		loc := ResolveTargetLocation(a.WorkDir, a.Session.LastError, a.CodeGraph)
@@ -523,7 +535,9 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			if a.Session.RegressionTestFile != "" {
 				commitMsg = fmt.Sprintf("fix(auton): verified self-healing [%s] + regression test [%s]\n\nX-Nemotron-Audit: %s\nX-Nemotron-Model: %s\nX-Nemotron-Platform: Nebius Token Factory", archetype.Archetype, a.Session.RegressionTestFile, patchDigest, a.Nebius.Model)
 			}
-			_ = a.Checkpointer.CreateGitPRBranchWithAudit(branchName, commitMsg, auditReport)
+			if brErr := a.Checkpointer.CreateGitPRBranchWithAudit(branchName, commitMsg, auditReport); brErr != nil {
+				a.notify(StateFailed, fmt.Sprintf("Fix branch creation FAILED; workspace changes remain uncommitted for manual review: %v", brErr), nil)
+			}
 
 			// Step Summary Hook for GitHub Actions Native CI/CD
 			if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {

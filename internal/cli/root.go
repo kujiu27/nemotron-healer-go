@@ -103,12 +103,12 @@ var RootCmd = &cobra.Command{
 
 				inCIEnv := os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != "" || ciFlag
 				if !inCIEnv && !autoAcceptFlag {
-					confirmMsg := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFB86C")).Render("\n? Apply and commit this verified patch to repository? [Y/n]: ")
+					confirmMsg := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFB86C")).Render("\n? Keep the verified fix branch (patch already committed to it)? [Y/n]: ")
 					confirmed := PromptConfirmation(confirmMsg, nil)
 					if !confirmed {
-						fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Render("Operation cancelled by user. Patch not committed."))
+						fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Render("Declined — fix branch remains available for review; nothing further applied."))
 					} else {
-						fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("Patch accepted and committed to branch."))
+						fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("Fix branch retained with the verified patch."))
 					}
 				}
 			}
