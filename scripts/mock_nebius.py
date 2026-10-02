@@ -15,7 +15,7 @@ Usage: make eval-mock
 """
 import json
 import re
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 GJSON_FIX = """```diff
 --- a/gjson.go
@@ -106,4 +106,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(__import__("sys").argv[1]) if len(__import__("sys").argv) > 1 else 18080
     print(f"MOCK Nebius/Tavily on http://127.0.0.1:{port} (X-Nemotron-Healer: MOCK)")
-    HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    # Threaded: the DHS search path fires concurrent inference calls.
+    ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
