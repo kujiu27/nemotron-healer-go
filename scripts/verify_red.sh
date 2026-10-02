@@ -103,6 +103,16 @@ mkdir -p docs
   cat /tmp/red_matrix_table.md
 } > docs/BENCHMARK_RED_MATRIX.md
 
+# Receipt-sibling guard: three separate incidents deleted docs/PERF.md via
+# 'rm -rf docs' + regenerating only this file. If a receipt that git tracks
+# has vanished from the working tree, say so loudly — 'make check' and CI
+# will fail on it; this warning catches it at the source.
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  while read -r gone; do
+    echo "WARNING: tracked receipt missing from working tree: $gone — run 'make bench' (or the right generator) before committing." >&2
+  done < <(git ls-files docs/ | while read -r f; do [ -f "$f" ] || echo "$f"; done)
+fi
+
 cat docs/BENCHMARK_RED_MATRIX.md
 [ "$ALL_RED" -eq 1 ] || { echo "BENCHMARK CORRUPTION: at least one case is GREEN"; exit 1; }
 echo "All cases RED — benchmark integrity verified."
