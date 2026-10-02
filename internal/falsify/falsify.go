@@ -13,13 +13,12 @@ import (
 )
 
 type FalsificationResult struct {
-	Passed          bool    `json:"passed"`
-	Skipped         bool    `json:"skipped,omitempty"`
-	Reason          string  `json:"reason,omitempty"`
-	IsMalformedTest bool    `json:"is_malformed_test,omitempty"`
-	GeneratedTest   string  `json:"generated_test"`
-	FailureOutput   string  `json:"failure_output,omitempty"`
-	ConfidenceScore float64 `json:"confidence_score"`
+	Passed          bool   `json:"passed"`
+	Skipped         bool   `json:"skipped,omitempty"`
+	Reason          string `json:"reason,omitempty"`
+	IsMalformedTest bool   `json:"is_malformed_test,omitempty"`
+	GeneratedTest   string `json:"generated_test"`
+	FailureOutput   string `json:"failure_output,omitempty"`
 }
 
 type Falsifier struct {
@@ -43,9 +42,8 @@ func (f *Falsifier) StressTest(ctx context.Context, targetFile, patchDiff string
 	contentBytes, err := os.ReadFile(fullPath)
 	if err != nil {
 		return &FalsificationResult{
-			Passed:          false,
-			Reason:          fmt.Sprintf("target file unreadable: %v", err),
-			ConfidenceScore: 0.0,
+			Passed: false,
+			Reason: fmt.Sprintf("target file unreadable: %v", err),
 		}, err
 	}
 
@@ -73,20 +71,18 @@ RULES:
 	resp, _, _, err := f.Nebius.StreamCompletion(ctx, messages, nil)
 	if err != nil {
 		return &FalsificationResult{
-			Passed:          true,
-			Skipped:         true,
-			Reason:          fmt.Sprintf("adversarial generator unavailable: %v", err),
-			ConfidenceScore: 0.50,
+			Passed:  true,
+			Skipped: true,
+			Reason:  fmt.Sprintf("adversarial generator unavailable: %v", err),
 		}, nil
 	}
 
 	testCode := extractTestCode(resp, lang)
 	if testCode == "" {
 		return &FalsificationResult{
-			Passed:          true,
-			Skipped:         true,
-			Reason:          "model did not produce extractable test block",
-			ConfidenceScore: 0.50,
+			Passed:  true,
+			Skipped: true,
+			Reason:  "model did not produce extractable test block",
 		}, nil
 	}
 
@@ -95,9 +91,8 @@ RULES:
 	testFilePath := filepath.Join(f.WorkDir, testFileName)
 	if err := os.WriteFile(testFilePath, []byte(testCode), 0644); err != nil {
 		return &FalsificationResult{
-			Passed:          false,
-			Reason:          fmt.Sprintf("failed writing test file: %v", err),
-			ConfidenceScore: 0.0,
+			Passed: false,
+			Reason: fmt.Sprintf("failed writing test file: %v", err),
 		}, err
 	}
 	defer os.Remove(testFilePath)
@@ -117,22 +112,19 @@ RULES:
 				Reason:          "synthesized test had invalid syntax/imports; skipped to prevent false-negative rollback",
 				GeneratedTest:   testCode,
 				FailureOutput:   output,
-				ConfidenceScore: 0.60,
 			}, nil
 		}
 
 		return &FalsificationResult{
-			Passed:          false,
-			GeneratedTest:   testCode,
-			FailureOutput:   output,
-			ConfidenceScore: 0.10,
+			Passed:        false,
+			GeneratedTest: testCode,
+			FailureOutput: output,
 		}, nil
 	}
 
 	return &FalsificationResult{
-		Passed:          true,
-		GeneratedTest:   testCode,
-		ConfidenceScore: 0.98,
+		Passed:        true,
+		GeneratedTest: testCode,
 	}, nil
 }
 

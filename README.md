@@ -113,9 +113,9 @@ nemotron-healer . --command "go test ./..." --no-tui
 
 At the end of every healing session, `nemotron-healer` prints an auditable telemetry ledger:
 - **Prompt / Completion Tokens**: Exact count streamed via Nebius Token Factory.
-- **TTFT (Time To First Token)**: Sub-second streaming responsiveness.
+- **TTFT (Time To First Token)**: Measured and reported per session.
 - **Measured TPS (Tokens Per Second)**: Real-time throughput.
-- **Cost Reduction**: Over 99.8% dollar savings compared to human engineering triage.
+- **Cost Reduction**: Per-session run cost computed from the exact streamed token usage at Token Factory catalog prices ($1.00/$3.00 per 1M); savings vs an assumed $25 human-triage baseline are printed per session.
 
 ---
 

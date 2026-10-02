@@ -35,6 +35,6 @@
 ---
 
 ### [1:40 - 2:00] Economic Telemetry & Closing
-- **Visual:** Zoom in on the Economic & Token Consumption Ledger table showing sub-second TTFT, TPS, and 99.8% cost reduction. Cut to GitHub Releases and `action.yml`.
+- **Visual:** Zoom in on the Economic & Token Consumption Ledger table showing measured TTFT, TPS, and per-session run cost computed from streamed token usage. Cut to `action.yml`.
 - **Voiceover:**  
-  *"On Nebius Token Factory, streaming Nemotron 3 Ultra resolves complex incidents at just $0.0004 per fix—slashing triage costs by 99.8%. Packaged as a 6.9MB binary and a one-line GitHub Action, Nemotron-Healer turns unlimited compute into autonomous engineering excellence. Thank you."*
+  *"On Nebius Token Factory, streaming Nemotron 3 Ultra prices a full healing session at cents — computed from the exact streamed token count at catalog prices, printed in every audit card. Packaged as a single static binary and a one-line GitHub Action, Nemotron-Healer turns unlimited compute into autonomous engineering excellence. Thank you."*
