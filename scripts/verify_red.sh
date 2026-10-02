@@ -54,11 +54,14 @@ ALL_RED=1
   echo "| Case | Sample | Command | State |"
   echo "| :--- | :--- | :--- | :--- |"
   while IFS='|' read -r state id src cmd rest; do
-    if [ "$state" = "RED" ]; then
-      echo "| $id | \`$src\` | \`$cmd\` | RED as shipped ($rest) |"
-    else
+    # Skip blank/malformed rows: leaked stray output (e.g. a lone newline from
+    # a toolchain download) must never be parsed as a verdict.
+    [ -z "${state//[[:space:]]/}" ] && continue
+    if [ "$state" = "GREEN" ]; then
       echo "| $id | \`$src\` | \`$cmd\` | GREEN — CORRUPTED (answer shipped?) |"
       ALL_RED=0
+    else
+      echo "| $id | \`$src\` | \`$cmd\` | RED as shipped ($rest) |"
     fi
   done
 } < <(
