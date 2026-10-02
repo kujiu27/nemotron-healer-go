@@ -144,16 +144,7 @@ var evalCmd = &cobra.Command{
 			cases = filtered
 		}
 
-		type EvalRunResult struct {
-			CaseID       string
-			Name         string
-			Archetype    string
-			BaselinePass bool
-			FullPass     bool
-			TurnsTaken   int
-			DurationS    float64
-			CostUSD      float64
-		}
+		// EvalRunResult is declared at package level (eval_stats.go).
 
 		results := make([]EvalRunResult, 0)
 
@@ -246,6 +237,20 @@ var evalCmd = &cobra.Command{
 			fmt.Sprintf("• Empirical Grounding Delta (Tavily + AST) : +%.1f%% Accuracy Lift\n", delta),
 		))
 
+		perCase := aggregateByCase(results)
+		if totalRuns > 1 {
+			fmt.Println("\n📈 Per-Case Statistics across repeats (mean ± population std):")
+			fmt.Printf("%-8s | %-12s | %-12s | %-16s | %-16s | %-16s\n",
+				"Case ID", "Baseline", "Full System", "Turns", "Duration (s)", "Cost ($)")
+			for _, s := range perCase {
+				fmt.Printf("%-8s | %-12s | %-12s | %6.1f ± %-5.1f | %6.1f ± %-5.1f | %6.5f ± %-7.5f\n",
+					s.CaseID,
+					fmt.Sprintf("%d/%d", s.BaselineWins, s.Repeats),
+					fmt.Sprintf("%d/%d", s.FullWins, s.Repeats),
+					s.TurnsMean, s.TurnsStd, s.DurationMean, s.DurationStd, s.CostMean, s.CostStd)
+			}
+		}
+
 		if exportJSONFlag != "" {
 			payload := map[string]interface{}{
 				"timestamp":           time.Now().UTC().Format(time.RFC3339),
@@ -254,7 +259,7 @@ var evalCmd = &cobra.Command{
 				"baseline_solve_rate": baseRate,
 				"full_solve_rate":     fullRate,
 				"empirical_lift":      delta,
-				"results":             results,
+				"per_case":            perCase,
 			}
 			if d, err := json.MarshalIndent(payload, "", "  "); err == nil {
 				_ = os.WriteFile(exportJSONFlag, d, 0644)
@@ -283,6 +288,16 @@ var evalCmd = &cobra.Command{
 			mdSb.WriteString(fmt.Sprintf("\n- **Baseline Solve Rate**: %.1f%%\n", baseRate))
 			mdSb.WriteString(fmt.Sprintf("- **Nemotron-Healer Solve Rate**: **%.1f%%**\n", fullRate))
 			mdSb.WriteString(fmt.Sprintf("- **Empirical Grounding Delta**: **+%.1f%% Accuracy Lift**\n", delta))
+			if totalRuns > 1 {
+				mdSb.WriteString("\n### Per-Case Statistics across repeats (mean ± population std)\n\n")
+				mdSb.WriteString("| Case ID | Baseline | Full System | Turns | Duration (s) | Cost ($) |\n")
+				mdSb.WriteString("| :--- | :--- | :--- | :--- | :--- | :--- |\n")
+				for _, s := range perCase {
+					mdSb.WriteString(fmt.Sprintf("| %s | %d/%d | %d/%d | %.1f ± %.1f | %.1f ± %.1f | %.5f ± %.5f |\n",
+						s.CaseID, s.BaselineWins, s.Repeats, s.FullWins, s.Repeats,
+						s.TurnsMean, s.TurnsStd, s.DurationMean, s.DurationStd, s.CostMean, s.CostStd))
+				}
+			}
 			_ = os.WriteFile(exportMDFlag, []byte(mdSb.String()), 0644)
 			fmt.Printf("📝 Exported benchmark ablation Markdown scorecard to `%s`\n", exportMDFlag)
 		}
