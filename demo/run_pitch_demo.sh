@@ -19,14 +19,23 @@ echo -e "${PURPLE}==============================================================
 sleep 1
 
 echo -e "${YELLOW}[SCENARIO] Production Incident: CI Test Suite Failed on Multi-Module Service!${NC}"
-echo -e "Executing test command: pytest samples/hard_concurrency_cascade/test_cascade.py\n"
+echo -e "Executing test command: pytest test_cascade.py (isolated workspace copy)\n"
 sleep 1
 
-# Reset broken state
-cp samples/hard_concurrency_cascade/engine.py.orig samples/hard_concurrency_cascade/engine.py
+# Heal an ISOLATED copy of the sample — never the tracked repo tree.
+# Mirror of eval.go's .orig-restore semantics: the .orig (broken) file
+# becomes the working file; answer files are not shipped.
+DEMO_DIR=$(mktemp -d /tmp/nemotron-demo-XXXX)
+trap 'rm -rf "$DEMO_DIR"' EXIT
+abs_src=$(cd samples/hard_concurrency_cascade && pwd)
+(cd samples/hard_concurrency_cascade && /usr/bin/find . -type f ! -name '*.orig' | while read -r f; do
+   mkdir -p "$DEMO_DIR/$(dirname "$f")"
+   if [ -f "$abs_src/$f.orig" ]; then cp "$abs_src/$f.orig" "$DEMO_DIR/$f"; else cp "$abs_src/$f" "$DEMO_DIR/$f"; fi
+ done)
+cd "$DEMO_DIR"
 
 # Show the red failure
-python3 -m pytest samples/hard_concurrency_cascade/test_cascade.py || true
+python3 -m pytest test_cascade.py || true
 echo -e "\n${RED}✘ FATAL: 2 failed, 1 passed. Concurrency race condition & re-entrancy deadlock detected!${NC}\n"
 sleep 2
 
@@ -34,9 +43,11 @@ echo -e "${BLUE}▶ Launching Nemotron-Healer In-Situ Autonomous Repair Engine (
 sleep 1
 
 # Build fresh binary from source if missing (bin/ is gitignored)
-if [ ! -x ./bin/nemotron-healer ]; then
-  echo -e "${YELLOW}[SETUP] Building ./bin/nemotron-healer from source...${NC}"
-  go build -o ./bin/nemotron-healer ./cmd/nemotron-healer || { echo -e "${RED}✘ Build failed. Is Go 1.26+ installed?${NC}"; exit 1; }
+HEALER="$OLDPWD/bin/nemotron-healer"
+REPO_ROOT="$OLDPWD"
+if [ ! -x "$HEALER" ]; then
+  echo -e "${YELLOW}[SETUP] Building the healer from source...${NC}"
+  (cd "$REPO_ROOT" && go build -o bin/nemotron-healer ./cmd/nemotron-healer) || { echo -e "${RED}✘ Build failed. Is Go 1.26+ installed?${NC}"; exit 1; }
 fi
 
 if [ -z "${NEBIUS_API_KEY}" ] || [ -z "${TAVILY_API_KEY}" ]; then
@@ -44,8 +55,8 @@ if [ -z "${NEBIUS_API_KEY}" ] || [ -z "${TAVILY_API_KEY}" ]; then
   exit 1
 fi
 
-# Execute self-healing (real run; abort on failure instead of faking GREEN)
-./bin/nemotron-healer samples/hard_concurrency_cascade --command "pytest" --turns 4 --no-tui || {
+# Execute self-healing in the isolated copy (real run; abort on failure)
+"$HEALER" . --command "pytest" --turns 4 --no-tui || {
   echo -e "\n${RED}✘ Healing run FAILED — demo aborted honestly. See diagnostics above.${NC}"
   exit 1
 }
