@@ -34,6 +34,7 @@ type EventMsg engine.HealingStepEvent
 type TokenMsg string
 
 type Model struct {
+	Agent   *engine.Agent
 	Session *engine.HealingSession
 	Logs    []string
 	Diff    string
@@ -42,9 +43,10 @@ type Model struct {
 	Done    bool
 }
 
-func NewModel(session *engine.HealingSession) Model {
+func NewModel(agent *engine.Agent) Model {
 	return Model{
-		Session: session,
+		Agent:   agent,
+		Session: agent.Session,
 		Logs:    make([]string, 0),
 		Diff:    "",
 	}
@@ -82,9 +84,11 @@ func (m Model) View() string {
 	b.WriteString(titleStyle.Render("⚡ NEMOTRON-HEALER (Go Edition) - Autonomous Self-Healing CLI"))
 	b.WriteString("\n\n")
 
-	// Render session status
+	// Render from a locked snapshot: the agent goroutine keeps mutating the
+	// live session (data race found in review).
+	snap := m.Agent.SessionSnapshot()
 	status := fmt.Sprintf("State: %s | Turn: %d/%d | Duration: %.1fs",
-		m.Session.CurrentState, m.Session.CurrentTurn, m.Session.MaxTurns, m.Session.DurationSeconds)
+		snap.CurrentState, snap.CurrentTurn, snap.MaxTurns, snap.DurationSeconds)
 	b.WriteString(badgeStyle.Render("● ACTIVE") + infoStyle.Render(status) + "\n\n")
 
 	// Render last 8 event logs
@@ -98,7 +102,7 @@ func (m Model) View() string {
 	}
 
 	// Render Token Ledger
-	ledger := m.Session.TokenLedger
+	ledger := snap.TokenLedger
 	ledgerBox := fmt.Sprintf(
 		"Tokens: %d in / %d out | TTFT: %.2fs | TPS: %.1f | Cost: $%.6f | Saved: %.1f%%",
 		ledger.PromptTokens, ledger.CompletionTokens, ledger.TTFTSeconds, ledger.MeasuredTPS, ledger.EstimatedCostUSD, ledger.SavingsPercentage,

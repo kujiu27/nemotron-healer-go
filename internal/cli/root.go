@@ -136,7 +136,7 @@ var RootCmd = &cobra.Command{
 		agent.EnableSearch = searchFlag
 		agent.EnableArena = arenaFlag
 
-		m := tui.NewModel(agent.Session)
+		m := tui.NewModel(agent)
 		p = tea.NewProgram(m)
 
 		// Run agent in background goroutine

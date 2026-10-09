@@ -33,8 +33,8 @@ func BuildGroundingQuery(workDir, targetFile string, archetype ArchetypeAnalysis
 	// 1. Pydantic v2 breaking migration
 	if strings.Contains(lastError, "PydanticDeprecatedSince20") || strings.Contains(lastError, "@validator") || strings.Contains(lowerErr, "pydantic") {
 		versionTag := "v2"
-		if libVersion != "" && strings.Contains(libVersion, "pydantic") {
-			versionTag = libVersion
+		if strings.Contains(libVersion, "v1") {
+			versionTag = "v1"
 		}
 		if strings.Contains(lastError, "@validator") {
 			return fmt.Sprintf("pydantic %s migrate validator to field_validator official docs", versionTag)
@@ -116,9 +116,9 @@ func detectLibraryVersion(workDir, lastError string) string {
 
 		if strings.Contains(lowerErr, "pydantic") && strings.Contains(content, "pydantic") {
 			if strings.Contains(content, "pydantic>=2") || strings.Contains(content, "pydantic==2") || strings.Contains(content, "pydantic ~=") {
-				return "v2"
+				return "pydantic v2"
 			}
-			return "v2"
+			return "pydantic v1"
 		}
 		if strings.Contains(lowerErr, "fastapi") && strings.Contains(content, "fastapi") {
 			return "fastapi"
