@@ -173,7 +173,14 @@ DESIGN 还宣称 R>0.7 时 "restricts unified diffs to non-signature-breaking op
 
 
 | 专职安全审查:PersistRegressionTest 路径穿越(HIGH)、嵌套 .git/符号链接逃逸、DSN 型密钥泄漏、/tmp 快照全局可读、分支碰撞误提交、action 输入注入 | 重伤×6 | 全部修复 + 5 个安全回归测试;env 改默认拒绝白名单;git 错误强制传播;会话 ID 改 crypto/rand | fix/security-hardening |
-> 后续追加轮(9-13)发现与修复已并入上表;主 README 的 "Evidence & Verification" 一节给全部收据入口。
+| 安全修复未随 pin 发布(v0.5.0 带洞) | 重伤 | v0.6.0 发布 + staticcheck 清零 | a3aa6aa 系 |
+| 首次质量审查:数据竞争、对抗门打错靶、checkpoint 静默失效、死 flag、假话术等 10 项 | 重伤 | 全修 + 已接受债务(Run 巨型函数、DHS 双路径重复)入档 | fix/quality-review |
+| 不可信输入解析器零崩溃覆盖 | 中伤 | 敌意语料 3 包 + FuzzApplyPatch(3821 execs 零失败) | test/hostile-input-fuzz |
+| 工具链 13 个 stdlib CVE 命中调用路径 | 重伤 | go 1.26.9 + CI govulncheck 门禁 + v0.6.1 | 3002ab2 系 |
+| 评委扫读零显式差异化(vs SweAgent/OpenHands) | 中伤 | closed-loop vs open-loop 明示(Devpost+README) | docs/differentiation-blade |
+| 残留盲区 993 行:arena 判定污染(-m pytest 丢失)、TUI 数据竞争、pydantic v1 死代码 | 重伤×3 | 全修 + 3 回归测试(78 tests) | fix/residual-quality |
+| 账本/计数陈旧(r25 停更、46→78、2→4 外部案例) | 中伤 | 本行起账本与七门禁/78 tests/9 case/4 外部 bug 同步 | chore/ledger-sync-v0.7.0 |
+> 后续追加轮(9-32)发现与修复已并入上表;主 README 的 "Evidence & Verification" 一节给全部收据入口。
 ### Remediation Status (for judges)
 
 This repo carries its own adversarial self-audit (above, 10 interrogation
@@ -182,6 +189,6 @@ verified — the table maps each finding to its fix commit on `main`. The two
 remaining open items are human tasks: a recorded real-API eval run
 (`scripts/run_real_eval.sh` → `docs/EVAL_RESULTS.md`) and the 3-minute demo
 video. Offline-verifiable evidence committed in-repo: performance receipts
-(`docs/PERF.md`, regenerate via `make bench`), red/green proofs for both
-real upstream-bug benchmark cases (`samples/external_*/README.md`), and 46
-unit tests plus CI on every push.
+(`docs/PERF.md`, regenerate via `make bench`), red/green proofs for all four
+real upstream-bug benchmark cases (9 cases total, CI-enforced red state) (`samples/external_*/README.md`), and 78
+unit tests plus seven CI gates on every push.
