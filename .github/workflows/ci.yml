@@ -170,3 +170,24 @@ jobs:
       # a judge ever runs the real thing.
       - name: Run make eval-mock
         run: make eval-mock
+
+  vulncheck:
+    name: govulncheck (called-path CVEs)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      # Round-29 lesson: the pinned toolchain (go 1.26.5) carried 13 stdlib
+      # CVEs on called paths (net/http, crypto/tls, mime, asn1). This gate
+      # fails the build whenever a called dependency or the toolchain floor
+      # regresses against the Go vuln DB.
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          $(go env GOPATH)/bin/govulncheck ./...
