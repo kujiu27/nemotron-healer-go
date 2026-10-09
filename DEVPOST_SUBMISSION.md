@@ -26,6 +26,12 @@ LLM coding assistants operate open-loop: they patch the symptom, hallucinate API
 training cutoff, and overfit tests (hardcoded returns, deleted assertions). Nothing verifies
 the fix survived contact with edge cases. Engineers still triage broken builds by hand.
 
+**Why not just use an existing coding agent?** Swe-agent/OpenHands/Aider-class tools generate
+a patch and stop — the commit decision is blind trust. Nemotron-Healer is closed-loop: the
+patch is not committed until an adversarially generated counter-example FAILS to break it,
+and every number in its audit card is measured, not claimed. That verification gate, plus
+in-situ operation on your own test command, is the product.
+
 ## What it does
 
 1. **Reproduce** — runs your failing test command, captures exit code and parsed tracebacks.

@@ -15,7 +15,7 @@
 ## 🎯 What is Nemotron-Healer?
 
 When CI tests fail or breaking changes break your codebase, developers waste hours reading outdated StackOverflow answers.  
-**Nemotron-Healer** is an in-situ autonomous agent that runs directly in your terminal or GitHub Actions:
+**Nemotron-Healer** is an in-situ autonomous agent that runs directly in your terminal or GitHub Actions — closed-loop where generic coding agents are open-loop: a patch is committed only after an adversarial counter-example FAILS to break it:
 
 1. **Reproduction (Red State)**: Executes the failing test command and isolates the precise execution trace.
 2. **Symbol Graph Blast Radius Analysis**: Maps the codebase symbol graph (Go via `go/parser` AST; Python/TS/JS via line grammars) and scores downstream blast radius across files.
