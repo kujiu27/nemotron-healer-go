@@ -128,8 +128,7 @@ INSTRUCTIONS:
 
 				rawResp, pTok, cTok, err := a.Nebius.StreamCompletion(ctx, promptMessages, nil)
 				mu.Lock()
-				a.Session.TokenLedger.PromptTokens += pTok
-				a.Session.TokenLedger.CompletionTokens += cTok
+				a.addTokens(pTok, cTok)
 				a.Session.TokenLedger.CalculateCost()
 				nodesCreated++
 				mu.Unlock()
@@ -233,8 +232,7 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 
 					refineResp, rpTok, rcTok, rErr := a.Nebius.StreamCompletion(ctx, refinePrompt, nil)
 					mu.Lock()
-					a.Session.TokenLedger.PromptTokens += rpTok
-					a.Session.TokenLedger.CompletionTokens += rcTok
+					a.addTokens(rpTok, rcTok)
 					a.Session.TokenLedger.CalculateCost()
 					nodesCreated++
 					mu.Unlock()
@@ -395,8 +393,7 @@ INSTRUCTIONS:
 		}
 
 		rawResp, pTok, cTok, err := a.Nebius.StreamCompletion(ctx, promptMessages, a.OnStreamToken)
-		a.Session.TokenLedger.PromptTokens += pTok
-		a.Session.TokenLedger.CompletionTokens += cTok
+		a.addTokens(pTok, cTok)
 		a.Session.TokenLedger.CalculateCost()
 
 		diffPatch := ""
@@ -503,8 +500,7 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 			}
 
 			refineResp, rpTok, rcTok, rErr := a.Nebius.StreamCompletion(ctx, refinePrompt, a.OnStreamToken)
-			a.Session.TokenLedger.PromptTokens += rpTok
-			a.Session.TokenLedger.CompletionTokens += rcTok
+			a.addTokens(rpTok, rcTok)
 			a.Session.TokenLedger.CalculateCost()
 
 			if rErr == nil {

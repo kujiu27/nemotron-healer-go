@@ -83,6 +83,24 @@ func NewAgent(workDir, testCommand string, maxTurns int, onEvent EventCallback, 
 	}
 }
 
+// addTokens accumulates streamed usage under eventMu so renderers
+// (TUI SessionSnapshot) never read torn counters.
+func (a *Agent) addTokens(prompt, completion int) {
+	a.eventMu.Lock()
+	a.Session.TokenLedger.PromptTokens += prompt
+	a.Session.TokenLedger.CompletionTokens += completion
+	a.eventMu.Unlock()
+}
+
+// SessionSnapshot returns a consistent copy of the session for renderers;
+// the agent goroutine keeps mutating the original.
+func (a *Agent) SessionSnapshot() HealingSession {
+	a.eventMu.Lock()
+	defer a.eventMu.Unlock()
+	cp := *a.Session
+	return cp
+}
+
 func (a *Agent) notify(state HealingState, summary string, details map[string]interface{}) {
 	a.eventMu.Lock()
 	defer a.eventMu.Unlock()
@@ -264,8 +282,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		if a.Nebius.FastModel != "" && !a.DisableGrounding {
 			triage, ftP, ftC, ftErr := a.Nebius.FastTriage(ctx, a.Session.LastError)
 			if ftErr == nil && triage != nil {
-				a.Session.TokenLedger.PromptTokens += ftP
-				a.Session.TokenLedger.CompletionTokens += ftC
+				a.addTokens(ftP, ftC)
 				if triage.HypothesizedRootCause != "" {
 					a.notify(StateDiagnosing, fmt.Sprintf("Tier-1 Fast Triage (%s): %s", a.Nebius.FastModel, triage.HypothesizedRootCause), nil)
 				}
@@ -312,8 +329,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		a.notify(StateSynthesizingPatch, fmt.Sprintf("Synthesizing Unified Diff patch with NVIDIA Nemotron (%s)...", a.Nebius.Model), nil)
 		patchSug, pTokens, cTokens, err := a.Nebius.DiagnoseAndPatch(ctx, a.TestCommand, initRes.Stdout, a.Session.LastError, codeCtx, docsCtx, archetypeContext, failedHistory, a.OnStreamToken)
 		// Ledger telemetry
-		a.Session.TokenLedger.PromptTokens += pTokens
-		a.Session.TokenLedger.CompletionTokens += cTokens
+		a.addTokens(pTokens, cTokens)
 		a.Session.TokenLedger.TTFTSeconds = a.Nebius.LastTTFT
 		a.Session.TokenLedger.MeasuredTPS = a.Nebius.LastTPS
 		a.Session.TokenLedger.CalculateCost()

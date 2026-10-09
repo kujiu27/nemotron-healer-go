@@ -95,7 +95,9 @@ RULES:
 		// Execute Red's attack against the current code
 		testFileName := lang.AttackFileName
 		testFilePath := filepath.Join(a.WorkDir, testFileName)
-		_ = os.WriteFile(testFilePath, []byte(attackTestCode), 0644)
+		if wErr := os.WriteFile(testFilePath, []byte(attackTestCode), 0644); wErr != nil {
+			return nil, false, fmt.Errorf("attack test write failed: %w", wErr)
+		}
 
 		testCmd := a.buildTestCmd(lang, testFileName)
 		attackExec, _ := a.Runner.Run(testCmd)
@@ -157,7 +159,9 @@ Output the exact unified diff inside a `+"```diff"+` block.`, currentCode, attac
 		}
 
 		// Re-verify against Red attack test AND base tests
-		_ = os.WriteFile(testFilePath, []byte(attackTestCode), 0644)
+		if wErr := os.WriteFile(testFilePath, []byte(attackTestCode), 0644); wErr != nil {
+			return nil, false, fmt.Errorf("attack test write failed: %w", wErr)
+		}
 		reAttackExec, _ := a.Runner.Run(testCmd)
 		baseExec, _ := a.Runner.Run(a.TestCommand)
 		_ = os.Remove(testFilePath)
@@ -221,6 +225,14 @@ func (a *Arena) buildTestCmd(lang ArenaLangConfig, testFileName string) string {
 	}
 	if strings.Contains(a.TestCommand, "pytest") {
 		tokens := strings.Fields(a.TestCommand)
+		// Preserve the module form: "python3 -m pytest" must keep -m pytest,
+		// otherwise the file runs as a plain script and no test executes
+		// (arena verdicts were corrupted both directions).
+		for i, t := range tokens {
+			if t == "-m" && i+1 < len(tokens) && tokens[i+1] == "pytest" {
+				return fmt.Sprintf("%s -m pytest %s", tokens[0], testFileName)
+			}
+		}
 		return fmt.Sprintf("%s %s", tokens[0], testFileName)
 	}
 	return fmt.Sprintf("%s %s", a.TestCommand, testFileName)
