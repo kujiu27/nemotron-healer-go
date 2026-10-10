@@ -1,18 +1,20 @@
 package cli
 
 import (
-	"context"
 	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kujiu27/nemotron-healer-go/internal/engine"
+	"github.com/kujiu27/nemotron-healer-go/internal/sandbox"
 	"github.com/spf13/cobra"
-	"encoding/json"
 )
 var autoHealFlag bool
 
@@ -134,17 +136,24 @@ var hookRunCmd = &cobra.Command{
 		}
 
 		fmt.Fprintf(humanErr, "⚡ [Nemotron-Healer Hook] Running %s check: `%s`...\n", eco, testCmd)
-		c := exec.Command("sh", "-c", testCmd)
-		c.Dir = absDir
-		c.Stdout = humanOut
-		c.Stderr = humanErr
-		if err := c.Run(); err != nil {
+		runner := sandbox.NewRunner(absDir, 60*time.Second)
+		res, rErr := runner.Run(testCmd)
+		if rErr != nil || !res.IsSuccess {
+			if res != nil {
+				if res.Stdout != "" {
+					fmt.Fprint(humanOut, res.Stdout)
+				}
+				if res.Stderr != "" {
+					fmt.Fprint(humanErr, res.Stderr)
+				}
+			}
 			if autoHealFlag {
 				fmt.Fprintln(humanErr, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render(
 					"⚡ [Shift-Left Autonomous Self-Healing] Launching in-situ repair before push..."))
 				agent := engine.NewAgent(absDir, testCmd, 3, func(event engine.HealingStepEvent) {
 					fmt.Fprintf(humanErr, "[%s] %s\n", event.State, event.Summary)
 				}, nil)
+				agent.DisableStepSummary = true
 				session, hErr := agent.Run(context.Background())
 				if hErr == nil && session.IsResolved {
 					if jsonFlag {
