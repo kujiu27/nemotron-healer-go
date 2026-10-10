@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kujiu27/nemotron-healer-go/internal/engine"
@@ -43,6 +44,11 @@ func TestExportSarif(t *testing.T) {
 	if len(report.Runs) == 0 || report.Runs[0].Tool.Driver.Name != "Nemotron-Healer" {
 		t.Fatalf("tool driver name mismatch: %+v", report.Runs)
 	}
+	expectedVersion := strings.TrimPrefix(Version, "v")
+	if report.Runs[0].Tool.Driver.Version != expectedVersion {
+		t.Fatalf("expected tool driver version %s, got %s", expectedVersion, report.Runs[0].Tool.Driver.Version)
+	}
+
 
 	if len(report.Runs[0].Results) == 0 || report.Runs[0].Results[0].Level != "warning" {
 		t.Fatalf("unexpected result level: %+v", report.Runs[0].Results)

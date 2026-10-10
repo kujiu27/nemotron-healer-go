@@ -64,6 +64,9 @@ type HealingSession struct {
 	LastError          string             `json:"last_error"`
 	AppliedPatches     []string           `json:"applied_patches"`
 	TavilyQueries      []string           `json:"tavily_queries"`
+	TavilyAnswer       string             `json:"tavily_answer,omitempty"`
+	TavilyExtractURL   string             `json:"tavily_extract_url,omitempty"`
+	TavilyExtractBytes int                `json:"tavily_extract_bytes,omitempty"`
 	TokenLedger        TokenLedger        `json:"token_ledger"`
 	IsResolved         bool               `json:"is_resolved"`
 	DurationSeconds    float64            `json:"duration_seconds"`

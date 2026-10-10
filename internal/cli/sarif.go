@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/kujiu27/nemotron-healer-go/internal/engine"
 )
@@ -94,7 +95,7 @@ func ExportSarif(session *engine.HealingSession, outputPath string) error {
 						Rules          []SarifRule `json:"rules"`
 					}{
 						Name:           "Nemotron-Healer",
-						Version:        "0.2.0",
+						Version:        strings.TrimPrefix(Version, "v"),
 						InformationURI: "https://github.com/kujiu27/nemotron-healer-go",
 						Rules: []SarifRule{
 							{

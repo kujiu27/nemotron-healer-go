@@ -63,8 +63,13 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 		docsCtx = a.Tavily.FormatContext(tavilyResp)
 		if tavilyResp != nil && len(tavilyResp.Results) > 0 {
 			a.lastTavilyResults = tavilyResp.Results
+			if tavilyResp.Answer != "" {
+				a.Session.TavilyAnswer = tavilyResp.Answer
+			}
 			top := tavilyResp.Results[0]
 			if excerpt, exErr := a.Tavily.Extract(ctx, top.URL); exErr == nil && excerpt != "" {
+				a.Session.TavilyExtractURL = top.URL
+				a.Session.TavilyExtractBytes = len(excerpt)
 				docsCtx += fmt.Sprintf("\n[FULL TEXT EXCERPT — %s]\n%s\n", top.URL, excerpt)
 			}
 		}

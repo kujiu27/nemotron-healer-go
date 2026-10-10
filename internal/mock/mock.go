@@ -30,7 +30,7 @@ func StartServer() *Server {
 		if r.Method == http.MethodPost && (path == "/search" || path == "/v1/search") {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"results":[{"title":"tidwall/gjson Documentation","url":"https://github.com/tidwall/gjson","content":"GJSON path syntax supports empty string queries and comparisons.","score":0.95}]}`))
+			_, _ = w.Write([]byte(`{"answer":"GJSON path syntax supports empty string queries and comparisons via the array-path operator.","results":[{"title":"tidwall/gjson Documentation","url":"https://github.com/tidwall/gjson","content":"GJSON path syntax supports empty string queries and comparisons.","score":0.95}]}`))
 			return
 		}
 

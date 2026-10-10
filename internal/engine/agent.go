@@ -310,10 +310,15 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			docsCtx = a.Tavily.FormatContext(tavilyResp)
 			if tavilyResp != nil && len(tavilyResp.Results) > 0 {
 				a.lastTavilyResults = tavilyResp.Results
+				if tavilyResp.Answer != "" {
+					a.Session.TavilyAnswer = tavilyResp.Answer
+				}
 				// Extract full text of the top hit for deeper grounding;
 				// honest degrade to snippets on any error.
 				top := tavilyResp.Results[0]
 				if extracted, exErr := a.Tavily.Extract(ctx, top.URL); exErr == nil && extracted != "" {
+					a.Session.TavilyExtractURL = top.URL
+					a.Session.TavilyExtractBytes = len(extracted)
 					excerpt := extracted
 					if len(excerpt) > 4000 {
 						excerpt = excerpt[:4000]
@@ -498,9 +503,15 @@ func (a *Agent) finalizeSuccessfulHealing(
 	var tavilyCitationTable strings.Builder
 	if !a.DisableGrounding && len(a.Session.TavilyQueries) > 0 {
 		tavilyCitationTable.WriteString(fmt.Sprintf("- **Tavily Query**: `%s`\n", a.Session.TavilyQueries[len(a.Session.TavilyQueries)-1]))
+		if a.Session.TavilyAnswer != "" {
+			tavilyCitationTable.WriteString(fmt.Sprintf("- **Tavily AI Synthesized Summary**: *\"%s\"*\n", a.Session.TavilyAnswer))
+		}
+		if a.Session.TavilyExtractURL != "" && a.Session.TavilyExtractBytes > 0 {
+			tavilyCitationTable.WriteString(fmt.Sprintf("- **Tavily Extract API (Deep Full-Text Grounding)**: Enriched with %d bytes of live documentation from [%s](%s)\n",
+				a.Session.TavilyExtractBytes, a.Session.TavilyExtractURL, a.Session.TavilyExtractURL))
+		}
 		if len(a.lastTavilyResults) > 0 {
 			tavilyCitationTable.WriteString("\n| # | Source Reference | Verifiable URL | Relevance | Ground-Truth Excerpt |\n")
-			tavilyCitationTable.WriteString("| :--- | :--- | :--- | :--- | :--- |\n")
 			for cIdx, item := range a.lastTavilyResults {
 				snippet := strings.ReplaceAll(item.Content, "\n", " ")
 				if len(snippet) > 85 {
