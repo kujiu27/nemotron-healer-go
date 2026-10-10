@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -21,7 +22,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.28"
+var Version = "v0.7.29"
 
 var (
 	testCmdFlag    string
@@ -115,51 +116,15 @@ var RootCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			if jsonFlag {
-				data, _ := json.MarshalIndent(session, "", "  ")
-				fmt.Println(string(data))
-			}
-			if sarifFlag != "" {
-				if sErr := ExportSarif(session, sarifFlag); sErr == nil {
-					fmt.Fprintf(human, "📊 Exported SARIF 2.1.0 security report to `%s`\n", sarifFlag)
-				}
-			}
-			if session.IsResolved && len(session.AppliedPatches) > 0 && !jsonFlag {
-				fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render("\nProposed Verified Surgical Patch:"))
-				latestPatch := session.AppliedPatches[len(session.AppliedPatches)-1]
-				fmt.Print(RenderColorizedDiff(latestPatch))
-
-				if session.PatchDigest != "" {
-					fmt.Print(RenderPatchProvenance(session.PatchDigest, agent.Nebius.Model, "Nebius Token Factory"))
-				}
-
-				inCIEnv := os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != "" || ciFlag
-				if !inCIEnv && !autoAcceptFlag {
-					confirmMsg := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFB86C")).Render("\n? Stay on the verified fix branch (patch committed to it)? [Y/n]: ")
-					confirmed := PromptConfirmation(confirmMsg, nil)
-					if !confirmed {
-						if origBranch != "" && origBranch != "HEAD" {
-							checkoutCmd := exec.Command("git", "checkout", origBranch)
-							checkoutCmd.Dir = absDir
-							_ = checkoutCmd.Run()
-						}
-						fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Render(fmt.Sprintf("Declined — restored to '%s'; fix branch remains available for review.", origBranch)))
-					} else {
-						fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("Fix branch retained with the verified patch."))
-					}
-				}
-			}
-
-			if session.IsResolved {
-				fmt.Fprintf(human, "::notice title=Nemotron Self-Healing Succeeded::Verified fix generated in %.2fs (Turn %d)\n", session.DurationSeconds, session.CurrentTurn)
-			} else {
-				fmt.Fprintf(human, "::error title=Nemotron Self-Healing Failed::Could not verify fix within %d turns\n", session.MaxTurns)
-				os.Exit(1)
-			}
-			return nil
+			return handlePostSession(session, agent, absDir, origBranch, human)
 		}
 
 		// Interactive TUI Mode
+		origBranchCmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+		origBranchCmd.Dir = absDir
+		origBranchOut, _ := origBranchCmd.Output()
+		origBranch := strings.TrimSpace(string(origBranchOut))
+
 		var p *tea.Program
 		agent := engine.NewAgent(absDir, testCmdFlag, turnsFlag, func(event engine.HealingStepEvent) {
 			if p != nil {
@@ -176,17 +141,74 @@ var RootCmd = &cobra.Command{
 		m := tui.NewModel(agent)
 		p = tea.NewProgram(m)
 
+		var runSession *engine.HealingSession
+		var runErr error
+		agentDone := make(chan struct{})
+
 		// Run agent in background goroutine
 		go func() {
-			_, _ = agent.Run(context.Background())
+			runSession, runErr = agent.Run(context.Background())
+			close(agentDone)
 		}()
 
 		if _, err := p.Run(); err != nil {
 			return err
 		}
+		<-agentDone
+		if runErr != nil {
+			return runErr
+		}
+		if runSession != nil {
+			return handlePostSession(runSession, agent, absDir, origBranch, human)
+		}
 
 		return nil
 	},
+}
+
+func handlePostSession(session *engine.HealingSession, agent *engine.Agent, absDir, origBranch string, human io.Writer) error {
+	if jsonFlag {
+		data, _ := json.MarshalIndent(session, "", "  ")
+		fmt.Println(string(data))
+	}
+	if sarifFlag != "" {
+		if sErr := ExportSarif(session, sarifFlag); sErr == nil {
+			fmt.Fprintf(human, "📊 Exported SARIF 2.1.0 security report to `%s`\n", sarifFlag)
+		}
+	}
+	if session.IsResolved && len(session.AppliedPatches) > 0 && !jsonFlag {
+		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render("\nProposed Verified Surgical Patch:"))
+		latestPatch := session.AppliedPatches[len(session.AppliedPatches)-1]
+		fmt.Print(RenderColorizedDiff(latestPatch))
+
+		if session.PatchDigest != "" {
+			fmt.Print(RenderPatchProvenance(session.PatchDigest, agent.Nebius.Model, "Nebius Token Factory"))
+		}
+
+		inCIEnv := os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != "" || ciFlag
+		if !inCIEnv && !autoAcceptFlag {
+			confirmMsg := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFB86C")).Render("\n? Stay on the verified fix branch (patch committed to it)? [Y/n]: ")
+			confirmed := PromptConfirmation(confirmMsg, nil)
+			if !confirmed {
+				if origBranch != "" && origBranch != "HEAD" {
+					checkoutCmd := exec.Command("git", "checkout", origBranch)
+					checkoutCmd.Dir = absDir
+					_ = checkoutCmd.Run()
+				}
+				fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Render(fmt.Sprintf("Declined — restored to '%s'; fix branch remains available for review.", origBranch)))
+			} else {
+				fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("Fix branch retained with the verified patch."))
+			}
+		}
+	}
+
+	if session.IsResolved {
+		fmt.Fprintf(human, "::notice title=Nemotron Self-Healing Succeeded::Verified fix generated in %.2fs (Turn %d)\n", session.DurationSeconds, session.CurrentTurn)
+	} else {
+		fmt.Fprintf(human, "::error title=Nemotron Self-Healing Failed::Could not verify fix within %d turns\n", session.MaxTurns)
+		os.Exit(1)
+	}
+	return nil
 }
 
 var doctorCmd = &cobra.Command{
