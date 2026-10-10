@@ -90,8 +90,9 @@ func (g *CodeGraph) BuildGraph() error {
 		if rel == "." {
 			return nil
 		}
-		if (strings.HasPrefix(rel, ".") && rel != ".") || strings.Contains(rel, "/.") ||
-			strings.Contains(rel, "venv") || strings.Contains(rel, "node_modules") {
+		slashRel := filepath.ToSlash(rel)
+		if (strings.HasPrefix(slashRel, ".") && slashRel != ".") || strings.Contains(slashRel, "/.") ||
+			strings.Contains(slashRel, "venv") || strings.Contains(slashRel, "node_modules") {
 			if info.IsDir() {
 				return filepath.SkipDir
 			}

@@ -28,6 +28,22 @@ func TestDetectTestCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("Detect Go package tests without go.mod", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		_ = os.WriteFile(filepath.Join(tmpDir, "lib.go"), []byte("package lib\n"), 0644)
+		_ = os.WriteFile(filepath.Join(tmpDir, "lib_test.go"), []byte("package lib\nimport \"testing\"\nfunc TestLib(t *testing.T){}\n"), 0644)
+		cmd, eco, err := DetectTestCommand(tmpDir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cmd != "go test ." {
+			t.Fatalf("expected 'go test .', got %q", cmd)
+		}
+		if !strings.Contains(eco, "Go") {
+			t.Fatalf("expected Go ecosystem, got %q", eco)
+		}
+	})
+
 	t.Run("Detect Python project", func(t *testing.T) {
 		tmpDir, err := os.MkdirTemp("", "detect_py_*")
 		if err != nil {

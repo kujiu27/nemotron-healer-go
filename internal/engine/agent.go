@@ -148,8 +148,9 @@ func (a *Agent) collectSourceContext(priorityFiles ...string) string {
 			return nil
 		}
 		rel, _ := filepath.Rel(a.WorkDir, path)
-		lower := strings.ToLower(rel)
-		if strings.HasPrefix(rel, ".") ||
+		slashRel := filepath.ToSlash(rel)
+		lower := strings.ToLower(slashRel)
+		if strings.HasPrefix(slashRel, ".") ||
 			strings.Contains(lower, "venv") ||
 			strings.Contains(lower, "node_modules") ||
 			strings.Contains(lower, "__pycache__") ||
