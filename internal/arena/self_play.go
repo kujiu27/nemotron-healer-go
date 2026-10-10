@@ -97,13 +97,20 @@ RULES:
 		}
 
 		// Execute Red's attack against the current code
+		targetDir := filepath.Dir(targetFile)
 		testFileName := lang.AttackFileName
-		testFilePath := filepath.Join(a.WorkDir, testFileName)
+		var testFilePath string
+		if targetDir == "." || targetDir == "" {
+			testFilePath = filepath.Join(a.WorkDir, testFileName)
+		} else {
+			testFilePath = filepath.Join(a.WorkDir, targetDir, testFileName)
+			_ = os.MkdirAll(filepath.Dir(testFilePath), 0755)
+		}
 		if wErr := os.WriteFile(testFilePath, []byte(attackTestCode), 0644); wErr != nil {
 			return nil, false, fmt.Errorf("attack test write failed: %w", wErr)
 		}
 
-		testCmd := a.buildTestCmd(lang, testFileName)
+		testCmd := a.buildTestCmd(lang, testFileName, targetDir)
 		attackExec, _ := a.Runner.Run(testCmd)
 		_ = os.Remove(testFilePath)
 
@@ -225,23 +232,32 @@ func detectArenaLang(targetFile, testCmd string, round int) ArenaLangConfig {
 	}
 }
 
-func (a *Arena) buildTestCmd(lang ArenaLangConfig, testFileName string) string {
+func (a *Arena) buildTestCmd(lang ArenaLangConfig, testFileName string, targetDir ...string) string {
+	dir := "."
+	if len(targetDir) > 0 && targetDir[0] != "" && targetDir[0] != "." {
+		dir = targetDir[0]
+	}
 	if lang.Name == "Go" {
-		return "go test -v -run TestRedAttack ."
+		targetPkg := "."
+		if dir != "." {
+			targetPkg = "./" + filepath.ToSlash(dir)
+		}
+		return fmt.Sprintf("go test -v -run TestRedAttack %s", targetPkg)
+	}
+	targetPath := testFileName
+	if dir != "." {
+		targetPath = filepath.ToSlash(filepath.Join(dir, testFileName))
 	}
 	if strings.Contains(a.TestCommand, "pytest") {
 		tokens := strings.Fields(a.TestCommand)
-		// Preserve the module form: "python3 -m pytest" must keep -m pytest,
-		// otherwise the file runs as a plain script and no test executes
-		// (arena verdicts were corrupted both directions).
 		for i, t := range tokens {
 			if t == "-m" && i+1 < len(tokens) && tokens[i+1] == "pytest" {
-				return fmt.Sprintf("%s -m pytest %s", tokens[0], testFileName)
+				return fmt.Sprintf("%s -m pytest %s", tokens[0], targetPath)
 			}
 		}
-		return fmt.Sprintf("%s %s", tokens[0], testFileName)
+		return fmt.Sprintf("%s %s", tokens[0], targetPath)
 	}
-	return fmt.Sprintf("%s %s", a.TestCommand, testFileName)
+	return fmt.Sprintf("%s %s", a.TestCommand, targetPath)
 }
 
 func extractAttackCode(text string, lang ArenaLangConfig) string {

@@ -47,3 +47,28 @@ func TestPersistRegressionTest(t *testing.T) {
 		t.Fatalf("unexpected py regression test path: %s", relPy)
 	}
 }
+
+func TestBuildTestCmd_SubpackageColocation(t *testing.T) {
+	f := &Falsifier{TestCommand: "go test ./..."}
+	langGo := detectLanguage("pkg/auth/token.go", "go test ./...")
+
+	// 1. Subpackage Go target
+	cmdGo := f.buildTestCmd(langGo, "adversarial_falsify_test.go", "pkg/auth")
+	if cmdGo != "go test -v -run TestAdversarialFalsify ./pkg/auth" {
+		t.Errorf("expected targeted subpackage test command, got %q", cmdGo)
+	}
+
+	// 2. Root Go target
+	cmdRoot := f.buildTestCmd(langGo, "adversarial_falsify_test.go", ".")
+	if cmdRoot != "go test -v -run TestAdversarialFalsify ." {
+		t.Errorf("expected root test command, got %q", cmdRoot)
+	}
+
+	// 3. Subpackage Python target
+	fPy := &Falsifier{TestCommand: "python3 -m pytest"}
+	langPy := detectLanguage("backend/service.py", "python3 -m pytest")
+	cmdPy := fPy.buildTestCmd(langPy, "test__adversarial_falsify.py", "backend")
+	if cmdPy != "python3 -m pytest backend/test__adversarial_falsify.py" {
+		t.Errorf("expected colocated pytest path, got %q", cmdPy)
+	}
+}
