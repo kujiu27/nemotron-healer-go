@@ -37,7 +37,6 @@ type Model struct {
 	Agent   *engine.Agent
 	Session *engine.HealingSession
 	Logs    []string
-	Diff    string
 	Width   int
 	Height  int
 	Done    bool
@@ -48,7 +47,6 @@ func NewModel(agent *engine.Agent) Model {
 		Agent:   agent,
 		Session: agent.Session,
 		Logs:    make([]string, 0),
-		Diff:    "",
 	}
 }
 
@@ -73,7 +71,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Done = true
 		}
 	case TokenMsg:
-		m.Diff += string(msg)
+		// Streamed tokens were accumulated into a never-rendered m.Diff —
+		// unbounded memory growth for nothing. The message type stays so the
+		// streaming callback keeps a cheap keepalive signal.
+		_ = msg
 	}
 	return m, nil
 }
