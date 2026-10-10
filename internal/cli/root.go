@@ -20,7 +20,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.2"
+var Version = "v0.7.3"
 
 var (
 	testCmdFlag    string
