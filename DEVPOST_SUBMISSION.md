@@ -16,7 +16,7 @@ Nemotron-Healer — an in-situ autonomous code self-healing agent that verifies 
 When CI goes red, Nemotron-Healer reproduces the failure, maps the symbol-graph blast radius,
 retrieves live official docs via Tavily, synthesizes a surgical unified diff with NVIDIA
 Nemotron 3 Ultra on Nebius Token Factory, then attacks its own patch with adversarial
-counter-example tests before committing a fix branch with a full audit card. Single 7.5MB
+counter-example tests before committing a fix branch with a full audit card. Single 8.0MB
 static Go binary, ~12MB RSS, hot start under 10ms — drop-in as a CLI or a one-line GitHub
 Action that is smoke-tested on a real runner on every push.
 
@@ -56,14 +56,14 @@ in-situ operation on your own test command, is the product.
 We shipped an adversarial self-audit first (`GRAND_PRIZE_GAP_AUDIT.md`, with a remediation
 ledger mapping every finding to its fix commit), then fixed everything it found:
 
-- `make bench` regenerates `docs/PERF.md` — committed receipts for the 7.5MB binary,
+- `make bench` regenerates `docs/PERF.md` — committed receipts for the 8.0MB binary,
   ~12MB RSS, sub-10ms start. No API keys needed.
 - Two benchmark cases are REAL upstream bugs with red/green proofs in-repo:
   sergi/go-diff `6dbe13c` (AHB-06) and pelletier/go-toml `6fa69af` (AHB-07) —
   buggy tree fails, the upstream 17-line fix passes.
 - The GitHub Action chain runs end-to-end on a real runner in CI (`action-smoke` job)
   on every push — no release-binary dependency.
-- Release binaries auto-publish on tag pushes; `v0.7.25` assets are live.
+- Release binaries auto-publish on tag pushes; `v0.7.26` assets are live.
 - RED-state integrity gate: CI verifies every benchmark case still FAILS its own
   test command as shipped — no leaked answers, enforced on every push.
 
@@ -116,7 +116,7 @@ export TAVILY_API_KEY=...   # tavily.com
 nemotron-healer . --command "pytest" --no-tui
 ```
 
-Or as a one-line GitHub Action (`uses: kujiu27/nemotron-healer-go@v0.7.25`) — see README.
+Or as a one-line GitHub Action (`uses: kujiu27/nemotron-healer-go@v0.7.26`) — see README.
 
 ## Video
 
