@@ -204,6 +204,18 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 	if initRes.IsSuccess {
 		a.Session.IsResolved = true
 		a.Session.DurationSeconds = time.Since(startTime).Seconds()
+		a.Session.BranchName = ""
+		cleanReport := fmt.Sprintf(`## ⚡ Nemotron-Healer Status: Repository Clean
+*All tests passed on initial reproduction check — no autonomous code repair required.*
+
+### 📋 Clean Execution Summary
+- **Target Directory**: `+"`%s`"+`
+- **Test Command**: `+"`%s`"+`
+- **Status**: ✅ **PASSED (0 turns, %.2fs)**
+- **Patches Applied**: 0
+`, a.WorkDir, a.TestCommand, a.Session.DurationSeconds)
+		a.Session.AuditReport = cleanReport
+		writeStepSummary(cleanReport)
 		a.notify(StateSucceeded, "All tests pass! Repository is already clean.", map[string]interface{}{
 			"stdout": initRes.Stdout,
 		})
@@ -365,9 +377,12 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				a.notify(StateFailed, fmt.Sprintf("Unrecoverable authentication error on Turn %d (%v). Aborting healing loop: please set NEBIUS_API_KEY or use --mock.", turn, err), nil)
 				a.Session.IsResolved = false
 				a.Session.DurationSeconds = time.Since(startTime).Seconds()
+				a.Session.BranchName = ""
+				failReport := a.renderFailureAuditReport()
+				a.Session.AuditReport = failReport
+				writeStepSummary(failReport)
 				return a.Session, fmt.Errorf("nebius authentication failed: %w", err)
 			}
-
 			continue
 		}
 
@@ -474,6 +489,10 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 
 	a.Session.IsResolved = false
 	a.Session.DurationSeconds = time.Since(startTime).Seconds()
+	a.Session.BranchName = ""
+	failReport := a.renderFailureAuditReport()
+	a.Session.AuditReport = failReport
+	writeStepSummary(failReport)
 	a.notify(StateFailed, fmt.Sprintf("Self-healing budget exhausted after %d turns.", a.Session.MaxTurns), nil)
 	return a.Session, nil
 }
@@ -672,17 +691,13 @@ func (a *Agent) finalizeSuccessfulHealing(
 	if a.Session.RegressionTestFile != "" {
 		commitMsg = fmt.Sprintf("fix(auton): verified self-healing [%s] + regression test [%s] %s\n\nX-Nemotron-Audit: %s\nX-Nemotron-Model: %s\nX-Nemotron-Platform: Nebius Token Factory", archetype.Archetype, a.Session.RegressionTestFile, commitPrefix, patchDigest, a.Nebius.Model)
 	}
+	a.Session.AuditReport = auditReport
 	if brErr := a.Checkpointer.CreateGitPRBranchWithAudit(branchName, commitMsg, auditReport); brErr != nil {
 		a.notify(StateFailed, fmt.Sprintf("Fix branch creation FAILED; workspace changes remain uncommitted for manual review: %v", brErr), nil)
 	}
 
 	// Step Summary Hook for GitHub Actions Native CI/CD
-	if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
-		if f, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-			_, _ = f.WriteString("\n" + auditReport + "\n")
-			_ = f.Close()
-		}
-	}
+	writeStepSummary(auditReport)
 
 	turnReport := turn
 	if a.Session.CurrentTurn < turn {
@@ -715,4 +730,92 @@ func isAuthError(err error) bool {
 		strings.Contains(msg, "forbidden") ||
 		strings.Contains(msg, "couldn't authenticate") ||
 		strings.Contains(msg, "token is not present")
+}
+
+func writeStepSummary(report string) {
+	if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
+		if f, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			_, _ = f.WriteString("\n" + report + "\n")
+			_ = f.Close()
+		}
+	}
+}
+
+func (a *Agent) renderFailureAuditReport() string {
+	errTrace := a.Session.LastError
+	if errTrace == "" {
+		errTrace = a.Session.InitialError
+	}
+	if len(errTrace) > 2000 {
+		errTrace = errTrace[:2000] + "\n... [Truncated for brevity] ..."
+	}
+
+	var tavilyInfo string
+	if !a.DisableGrounding && len(a.Session.TavilyQueries) > 0 {
+		tavilyInfo = fmt.Sprintf("- **Tavily Query**: `%s`\n", a.Session.TavilyQueries[len(a.Session.TavilyQueries)-1])
+		if a.Session.TavilyAnswer != "" {
+			tavilyInfo += fmt.Sprintf("- **Tavily AI Synthesized Summary**: *\"%s\"*\n", a.Session.TavilyAnswer)
+		}
+		if a.Session.TavilyExtractURL != "" && a.Session.TavilyExtractBytes > 0 {
+			tavilyInfo += fmt.Sprintf("- **Tavily Extract API**: Enriched with %d bytes from [%s](%s)\n",
+				a.Session.TavilyExtractBytes, a.Session.TavilyExtractURL, a.Session.TavilyExtractURL)
+		}
+	} else {
+		tavilyInfo = "- **Knowledge Grounding**: None or disabled.\n"
+	}
+
+	archetype := a.Session.DefectArchetype
+	if archetype == "" {
+		archetype = "GeneralAssertion / Unclassified"
+	}
+
+	totalTokens := a.Session.TokenLedger.TotalTokens
+	pTok := a.Session.TokenLedger.PromptTokens
+	cTok := a.Session.TokenLedger.CompletionTokens
+	cost := a.Session.TokenLedger.EstimatedCostUSD
+
+	modelName := "nvidia/Nemotron-3-Ultra-550b-a55b"
+	if a.Nebius != nil && a.Nebius.Model != "" {
+		modelName = a.Nebius.Model
+	}
+
+	return fmt.Sprintf(`## ⚡ Nemotron-Healer Failure Diagnostic Report
+*Autonomous self-healing could not verify a complete fix within %d turns.*
+
+### 📋 Failure Summary
+- **Target Repository**: `+"`%s`"+`
+- **Test Command**: `+"`%s`"+`
+- **Healing Outcome**: ❌ **FAILED after %d turns (%.2fs)**
+- **Inference Model**: `+"`%s`"+`
+- **Defect Archetype**: **%s**
+
+---
+
+### 🔍 Error Diagnostics & Traceback
+`+"```text\n%s\n```"+`
+
+---
+
+### 🌐 Dynamic Knowledge Grounding (Tavily Search API)
+%s
+
+---
+
+### 💰 Resource & Token Ledger
+- **Total Tokens Consumed**: %d (Prompt: %d, Completion: %d)
+- **Estimated Run Cost**: $%.6f USD
+
+---
+
+### 🛠️ Recommended Developer Actions
+- Review the error traceback and archetype constraints above.
+- Verify environment setup and test prerequisites in the target directory.
+- Consider increasing healing budget with `+"`--turns`"+` or enabling Test-Time Compute hypothesis search with `+"`--search`"+`.
+`,
+		a.Session.MaxTurns,
+		a.WorkDir, a.TestCommand,
+		a.Session.CurrentTurn, a.Session.DurationSeconds,
+		modelName, archetype,
+		errTrace, tavilyInfo,
+		totalTokens, pTok, cTok, cost)
 }
