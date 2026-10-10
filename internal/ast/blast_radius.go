@@ -350,7 +350,13 @@ class Visitor(ast.NodeVisitor):
 Visitor().visit(tree)
 print(json.dumps(symbols))
 `
-	cmd := exec.Command("python3", "-c", script, path)
+	pyBin := "python3"
+	if _, err := exec.LookPath("python3"); err != nil {
+		if _, errPy := exec.LookPath("python"); errPy == nil {
+			pyBin = "python"
+		}
+	}
+	cmd := exec.Command(pyBin, "-c", script, path)
 	var outBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	if err := cmd.Run(); err != nil {

@@ -33,8 +33,14 @@ func PreFlightSyntaxCheck(workDir, relFilePath string) (bool, string) {
 			return false, fmt.Sprintf("Go Syntax Error in %s: %v", relFilePath, err)
 		}
 	case ".py":
+		pyBin := "python3"
+		if _, err := exec.LookPath("python3"); err != nil {
+			if _, errPy := exec.LookPath("python"); errPy == nil {
+				pyBin = "python"
+			}
+		}
 		script := "import ast, sys; ast.parse(open(sys.argv[1], 'rb').read())"
-		cmd := exec.Command("python3", "-c", script, fullPath)
+		cmd := exec.Command(pyBin, "-c", script, fullPath)
 		var errBuf bytes.Buffer
 		cmd.Stderr = &errBuf
 		if err := cmd.Run(); err != nil {
