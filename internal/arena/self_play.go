@@ -113,7 +113,6 @@ RULES:
 		testCmd := a.buildTestCmd(lang, testFileName, targetDir)
 		attackExec, _ := a.Runner.Run(testCmd)
 		_ = os.Remove(testFilePath)
-
 		if attackExec.IsSuccess {
 			// The current code already survived Red's attack!
 			results = append(results, AdversarialRoundResult{
@@ -126,6 +125,18 @@ RULES:
 			return results, true, nil
 		}
 
+		// Filter out malformed syntax/compilation errors in Red's generated test
+		attackOutput := attackExec.Stdout + "\n" + attackExec.Stderr
+		if isAttackSyntaxOrImportError(attackOutput, lang.Name) {
+			results = append(results, AdversarialRoundResult{
+				Round:              round,
+				RedAttackVector:    "Red synthesized invalid test syntax/import; treated as invalid attack.",
+				RedAttackCode:      attackTestCode,
+				AttackSucceeded:    false,
+				EquilibriumReached: true,
+			})
+			return results, true, nil
+		}
 		// Red successfully broke the code! Now Blue must harden it.
 		bluePrompt := fmt.Sprintf(`[ROLE: BLUE TEAM DEFENSIVE HARDENER]
 Red Team successfully broke your code with an adversarial invariant attack!
@@ -287,4 +298,27 @@ func extractDiffBlock(text string) string {
 		return strings.TrimSpace(m[1])
 	}
 	return ""
+}
+
+func isAttackSyntaxOrImportError(output, lang string) bool {
+	lower := strings.ToLower(output)
+	if lang == "Python" {
+		return strings.Contains(lower, "syntaxerror") ||
+			strings.Contains(lower, "indentationerror") ||
+			strings.Contains(lower, "modulenotfounderror") ||
+			strings.Contains(lower, "import error") ||
+			strings.Contains(lower, "importerror") ||
+			strings.Contains(lower, "fixture") && strings.Contains(lower, "not found")
+	}
+	if lang == "Go" {
+		return strings.Contains(lower, "[build failed]") ||
+			strings.Contains(lower, "syntax error") ||
+			strings.Contains(lower, "undefined:") ||
+			strings.Contains(lower, "cannot find package")
+	}
+	if lang == "TypeScript/JavaScript" {
+		return strings.Contains(lower, "syntaxerror") ||
+			strings.Contains(lower, "cannot find module")
+	}
+	return false
 }
