@@ -50,3 +50,26 @@ func TestTavilyExtractHTTPError(t *testing.T) {
 		t.Fatalf("Extract = %q, %v; want error on 429", got, err)
 	}
 }
+
+func TestTavilyRetrySuccess(t *testing.T) {
+	attempts := 0
+	c := newTestTavily(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Write([]byte(`{"results":[{"url":"https://example.com","raw_content":"success after retry"}]}`))
+	})
+
+	got, err := c.Extract(context.Background(), "https://example.com")
+	if err != nil {
+		t.Fatalf("expected retry success, got: %v", err)
+	}
+	if got != "success after retry" {
+		t.Errorf("expected 'success after retry', got: %q", got)
+	}
+	if attempts < 2 {
+		t.Errorf("expected at least 2 attempts, got: %d", attempts)
+	}
+}
