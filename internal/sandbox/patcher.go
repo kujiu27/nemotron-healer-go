@@ -65,6 +65,16 @@ func PreFlightSyntaxCheck(workDir, relFilePath string) (bool, string) {
 	return true, ""
 }
 
+// PreFlightSyntaxCheckFiles verifies all modified files in sub-50ms static syntax checks.
+func PreFlightSyntaxCheckFiles(workDir string, files []string) (bool, string) {
+	for _, f := range files {
+		if ok, err := PreFlightSyntaxCheck(workDir, f); !ok {
+			return false, err
+		}
+	}
+	return true, ""
+}
+
 type Patcher struct {
 	WorkDir string
 }
