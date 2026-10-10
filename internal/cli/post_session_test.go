@@ -43,3 +43,51 @@ func TestHandlePostSession_SarifExport(t *testing.T) {
 		t.Fatalf("expected sarif file exported to %s, got err: %v", sarifPath, statErr)
 	}
 }
+
+func TestHandlePostSession_GitHubOutput(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "github_output.txt")
+	t.Setenv("GITHUB_OUTPUT", outputFile)
+
+	session := &engine.HealingSession{
+		SessionID:       "test-session-123",
+		IsResolved:      true,
+		DurationSeconds: 2.34,
+		CurrentTurn:     1,
+		MaxTurns:        3,
+		AppliedPatches:  []string{"--- a/code.go\n+++ b/code.go\n"},
+		PatchDigest:     "sha256:abc12345",
+		DefectArchetype: "ResourceLeak",
+		TargetFile:      "code.go",
+	}
+
+	agent := &engine.Agent{
+		Nebius: &client.NebiusClient{Model: "nvidia/Nemotron-3-Ultra-550b-a55b"},
+	}
+
+	var humanBuf bytes.Buffer
+	err := handlePostSession(session, agent, tmpDir, "main", &humanBuf)
+	if err != nil {
+		t.Fatalf("unexpected error from handlePostSession: %v", err)
+	}
+
+	data, err := os.ReadFile(outputFile)
+	if err != nil {
+		t.Fatalf("failed to read GITHUB_OUTPUT: %v", err)
+	}
+	content := string(data)
+	expectedSubstrings := []string{
+		"is_resolved=true",
+		"branch_name=fix/nemotron-heal-test-session-123",
+		"turns_used=1",
+		"patch_digest=sha256:abc12345",
+		"defect_archetype=ResourceLeak",
+		"duration_seconds=2.34",
+		"patches_count=1",
+	}
+	for _, sub := range expectedSubstrings {
+		if !bytes.Contains(data, []byte(sub)) {
+			t.Errorf("expected GITHUB_OUTPUT to contain %q, got:\n%s", sub, content)
+		}
+	}
+}

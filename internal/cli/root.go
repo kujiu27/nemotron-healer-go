@@ -22,7 +22,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.30"
+var Version = "v0.7.31"
 
 var (
 	testCmdFlag    string
@@ -201,6 +201,29 @@ func handlePostSession(session *engine.HealingSession, agent *engine.Agent, absD
 			} else {
 				fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("Fix branch retained with the verified patch."))
 			}
+		}
+	}
+	// Emit GitHub Actions step outputs if running inside GitHub Actions runner
+	if outputFile := os.Getenv("GITHUB_OUTPUT"); outputFile != "" {
+		if f, oErr := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); oErr == nil {
+			branchName := ""
+			if session.IsResolved && session.SessionID != "" {
+				branchName = fmt.Sprintf("fix/nemotron-heal-%s", session.SessionID)
+			}
+			patchCount := len(session.AppliedPatches)
+			lines := []string{
+				fmt.Sprintf("is_resolved=%t\n", session.IsResolved),
+				fmt.Sprintf("branch_name=%s\n", branchName),
+				fmt.Sprintf("turns_used=%d\n", session.CurrentTurn),
+				fmt.Sprintf("patch_digest=%s\n", session.PatchDigest),
+				fmt.Sprintf("defect_archetype=%s\n", session.DefectArchetype),
+				fmt.Sprintf("duration_seconds=%.2f\n", session.DurationSeconds),
+				fmt.Sprintf("patches_count=%d\n", patchCount),
+			}
+			for _, line := range lines {
+				_, _ = f.WriteString(line)
+			}
+			_ = f.Close()
 		}
 	}
 

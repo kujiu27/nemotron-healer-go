@@ -33,6 +33,25 @@ inputs:
     description: "GitHub token for creating PR comments"
     required: false
     default: ${{ github.token }}
+outputs:
+  is_resolved:
+    description: "Whether the issue was autonomously resolved and verified"
+    value: ${{ steps.heal.outputs.is_resolved }}
+  branch_name:
+    description: "Git branch containing the verified fix commit and audit card"
+    value: ${{ steps.heal.outputs.branch_name }}
+  turns_used:
+    description: "Number of healing turns attempted"
+    value: ${{ steps.heal.outputs.turns_used }}
+  patch_digest:
+    description: "SHA-256 cryptographic provenance digest of the verified patch"
+    value: ${{ steps.heal.outputs.patch_digest }}
+  defect_archetype:
+    description: "Classified defect archetype"
+    value: ${{ steps.heal.outputs.defect_archetype }}
+  duration_seconds:
+    description: "Total self-healing runtime in seconds"
+    value: ${{ steps.heal.outputs.duration_seconds }}
 
 runs:
   using: "composite"
@@ -60,6 +79,7 @@ runs:
         nemotron-healer version
 
     - name: Run Autonomous Self-Healing Pipeline
+      id: heal
       shell: bash
       env:
         # Inputs are passed via env, never interpolated into the script body:
