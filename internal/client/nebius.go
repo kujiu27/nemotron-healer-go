@@ -12,6 +12,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kujiu27/nemotron-healer-go/internal/sandbox"
@@ -24,6 +25,7 @@ type NebiusClient struct {
 	FastModel        string
 	ReasoningModel   string
 	HTTP             *http.Client
+	mu               sync.RWMutex
 	LastTTFT         float64
 	LastTPS          float64
 	LastThoughtChain string
@@ -218,7 +220,9 @@ func (c *NebiusClient) StreamCompletionWithTemp(ctx context.Context, messages []
 	tokenCount := 0
 	var fullText strings.Builder
 	var thoughtText strings.Builder
+	c.mu.Lock()
 	c.LastThoughtChain = ""
+	c.mu.Unlock()
 	serverPromptTokens := 0
 	serverCompletionTokens := 0
 
@@ -265,7 +269,9 @@ func (c *NebiusClient) StreamCompletionWithTemp(ctx context.Context, messages []
 				if content != "" {
 					if firstTokenTime.IsZero() {
 						firstTokenTime = time.Now()
+						c.mu.Lock()
 						c.LastTTFT = time.Since(startTime).Seconds()
+						c.mu.Unlock()
 					}
 					fullText.WriteString(content)
 					tokenCount++
@@ -281,12 +287,13 @@ func (c *NebiusClient) StreamCompletionWithTemp(ctx context.Context, messages []
 	}
 
 
+	c.mu.Lock()
 	c.LastThoughtChain = strings.TrimSpace(thoughtText.String())
-
 	totalDuration := time.Since(startTime).Seconds()
 	if totalDuration > 0 && tokenCount > 0 {
 		c.LastTPS = float64(tokenCount) / totalDuration
 	}
+	c.mu.Unlock()
 
 	promptTokens := serverPromptTokens
 	if promptTokens == 0 {
