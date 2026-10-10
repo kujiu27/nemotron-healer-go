@@ -50,8 +50,8 @@ func TestArenaBuildTestCmd_SubpackageColocation(t *testing.T) {
 	aRust := &Arena{TestCommand: "cargo test"}
 	langRust := detectArenaLang("src/lib.rs", "cargo test", 1)
 	cmdRust := aRust.buildTestCmd(langRust, "red_attack_r1_test.rs", "src")
-	if cmdRust != "cargo test" {
-		t.Errorf("expected 'cargo test', got %q", cmdRust)
+	if cmdRust != "cargo test --test red_attack_r1_test" {
+		t.Errorf("expected 'cargo test --test red_attack_r1_test', got %q", cmdRust)
 	}
 }
 
