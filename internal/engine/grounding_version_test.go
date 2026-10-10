@@ -29,3 +29,11 @@ func TestBuildGroundingQueryUsesPinnedVersion(t *testing.T) {
 		t.Fatalf("query must honor pinned v1, got: %q", q)
 	}
 }
+
+func TestDetectLibraryVersionCargoToml(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("[dependencies]\npydantic = \"1.0\"\n"), 0644)
+	if v := detectLibraryVersion(dir, "pydantic error"); v != "pydantic v1" {
+		t.Fatalf("expected pydantic v1 from Cargo.toml, got %q", v)
+	}
+}

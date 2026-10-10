@@ -29,4 +29,28 @@ func TestBuildGroundingQuery(t *testing.T) {
 	if !strings.Contains(q3, "parameterized query") {
 		t.Fatalf("expected sql parameterized query, got: %s", q3)
 	}
+
+	// Rust concurrency case
+	q4 := BuildGroundingQuery(".", "lib.rs", archRace, "cannot borrow as mutable deadlock")
+	if !strings.Contains(q4, "rust") || !strings.Contains(q4, "Mutex") {
+		t.Fatalf("expected Rust concurrency query, got: %s", q4)
+	}
+
+	// TypeScript concurrency case
+	q5 := BuildGroundingQuery(".", "App.tsx", archRace, "deadlock")
+	if !strings.Contains(q5, "typescript") || !strings.Contains(q5, "mutex") {
+		t.Fatalf("expected TypeScript concurrency query, got: %s", q5)
+	}
+
+	// TypeScript null/undefined error case
+	q6 := BuildGroundingQuery(".", "index.ts", ArchetypeAnalysis{Archetype: ArchetypeNullTypeError}, "TypeError: Cannot read properties of undefined")
+	if !strings.Contains(q6, "typescript") || !strings.Contains(q6, "optional chaining") {
+		t.Fatalf("expected TypeScript optional chaining query, got: %s", q6)
+	}
+
+	// Rust Option unwrap error case
+	q7 := BuildGroundingQuery(".", "main.rs", ArchetypeAnalysis{Archetype: ArchetypeNullTypeError}, "called `Option::unwrap()` on a `None` value")
+	if !strings.Contains(q7, "rust") || !strings.Contains(q7, "Option unwrap") {
+		t.Fatalf("expected Rust Option unwrap query, got: %s", q7)
+	}
 }
