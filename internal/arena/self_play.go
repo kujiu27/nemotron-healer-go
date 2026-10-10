@@ -171,6 +171,15 @@ Output the exact unified diff inside a `+"```diff"+` block.`, currentCode, attac
 			return results, false, fmt.Errorf("failed to apply blue defense patch in round %d", round)
 		}
 
+		// Fast Pre-Flight Syntax Gate (<50ms)
+		modFiles := sandbox.ExtractModifiedFiles(patchDiff)
+		if len(modFiles) == 0 && targetFile != "" {
+			modFiles = []string{targetFile}
+		}
+		if ok, sErr := sandbox.PreFlightSyntaxCheckFiles(a.WorkDir, modFiles); !ok {
+			return results, false, fmt.Errorf("blue defense failed syntax check in round %d: %s", round, sErr)
+		}
+
 		// Re-verify against Red attack test AND base tests
 		if wErr := os.WriteFile(testFilePath, []byte(attackTestCode), 0644); wErr != nil {
 			return nil, false, fmt.Errorf("attack test write failed: %w", wErr)
