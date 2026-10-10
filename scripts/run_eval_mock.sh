@@ -36,10 +36,19 @@ run_json_mode() {
   echo "=== [json-purity] exit code: $rc ==="
   return $rc
 }
+run_eval_benchmark_mode() {
+  echo "=== MOCK pipeline run [eval-ablation]: AHB-9 benchmark ablation ==="
+  local rc=0
+  "$REPO/bin/nemotron-healer" eval --mock --case AHB-08 || rc=$?
+  echo "=== [eval-ablation] exit code: $rc ==="
+  return $rc
+}
+
 
 rc=0
 run_mode plain || rc=$?
 run_mode search --search || rc=$?
 run_mode arena --arena || rc=$?
 run_json_mode || rc=$?
+run_eval_benchmark_mode || rc=$?
 exit $rc
