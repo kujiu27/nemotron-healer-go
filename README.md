@@ -33,7 +33,7 @@ When CI tests fail or breaking changes break your codebase, developers waste hou
 
 | Claim | Receipt |
 | :--- | :--- |
-| Performance (7.5MB binary, ~12MB RSS, <10ms start) | [`docs/PERF.md`](docs/PERF.md) — regenerate: `make bench` |
+| Performance (8.0MB binary, ~12MB RSS, <10ms start) | [`docs/PERF.md`](docs/PERF.md) — regenerate: `make bench` |
 | All 9 benchmark cases ship genuinely RED (no leaked answers) | [`docs/BENCHMARK_RED_MATRIX.md`](docs/BENCHMARK_RED_MATRIX.md) — regenerate: `bash scripts/verify_red.sh`; enforced by CI on every push |
 | Real upstream bugs, not self-authored cases | [`samples/external_go_diff/README.md`](samples/external_go_diff/README.md) (sergi/go-diff `6dbe13c`) · [`samples/external_go_toml/README.md`](samples/external_go_toml/README.md) (pelletier/go-toml `6fa69af`) · [`samples/external_gjson/README.md`](samples/external_gjson/README.md) (tidwall/gjson `0b52f9a`) · [`samples/external_jwt/README.md`](samples/external_jwt/README.md) (golang-jwt/jwt `1a11d37`) — red/green proofs included |
 | Adversarial self-audit with every finding fixed | [`GRAND_PRIZE_GAP_AUDIT.md`](GRAND_PRIZE_GAP_AUDIT.md) — remediation ledger maps each finding to its fix commit |
@@ -50,7 +50,7 @@ When CI tests fail or breaking changes break your codebase, developers waste hou
 | :--- | :--- | :--- |
 | **Hot Start Latency** | ~450ms (interpreter + imports) | **< 10ms measured** (`/usr/bin/time -p`, 5 runs — [receipt](docs/PERF.md)) |
 | **Memory Footprint** | ~65MB | **~12MB RSS measured** (5-run avg — [receipt](docs/PERF.md)) |
-| **Distribution** | Requires Python 3.11+, pip, venv | **Single Static Binary (7.5MB stripped — [receipt](docs/PERF.md))** |
+| **Distribution** | Requires Python 3.11+, pip, venv | **Single Static Binary (8.0MB stripped — [receipt](docs/PERF.md))** |
 | **CI Setup Time** | 30s ~ 60s (`setup-python`, `pip install`) | **~15s (`actions/setup-go` + `go build`, no releases needed)** |
 | **Terminal UX** | Basic text logs | **Cyberpunk TUI (`bubbletea` + `lipgloss`)** |
 
@@ -100,7 +100,7 @@ nemotron-healer samples/external_gjson --mock --command "go test . -run TestEmpt
 ### 4. Use as a GitHub Action
 ```yaml
 - name: Autonomous Self-Healing CI
-  uses: kujiu27/nemotron-healer-go@v0.7.25
+  uses: kujiu27/nemotron-healer-go@v0.7.26
   with:
     path: .                    # directory to heal (default: repo root)
     command: go test ./...     # the failing test command
