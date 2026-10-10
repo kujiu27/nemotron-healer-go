@@ -441,3 +441,25 @@ func TestPreFlightSyntaxCheck(t *testing.T) {
 		t.Fatalf("expected JSON Syntax Error message, got: %s", badJSONMsg)
 	}
 }
+
+func TestPreFlightSyntaxCheckFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	f1 := filepath.Join(tmpDir, "good.go")
+	_ = os.WriteFile(f1, []byte("package main\n\nfunc A() {}\n"), 0644)
+
+	f2 := filepath.Join(tmpDir, "bad.go")
+	_ = os.WriteFile(f2, []byte("package main\n\nfunc B( {}\n"), 0644)
+
+	ok1, _ := PreFlightSyntaxCheckFiles(tmpDir, []string{"good.go"})
+	if !ok1 {
+		t.Fatalf("expected good.go to pass")
+	}
+
+	okBoth, msg := PreFlightSyntaxCheckFiles(tmpDir, []string{"good.go", "bad.go"})
+	if okBoth {
+		t.Fatalf("expected bad.go in file list to fail")
+	}
+	if !strings.Contains(msg, "Go Syntax Error") {
+		t.Fatalf("expected Go Syntax Error in msg, got: %s", msg)
+	}
+}

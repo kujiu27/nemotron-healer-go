@@ -197,8 +197,12 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 					return
 				}
 
-				// Fast Pre-Flight Syntax Gate (<50ms)
-				if ok, _ := sandbox.PreFlightSyntaxCheck(wt.WorkDir, targetFile); !ok {
+				// Fast Pre-Flight Syntax Gate (<50ms) across all modified files
+				modFiles := sandbox.ExtractModifiedFiles(diffPatch)
+				if len(modFiles) == 0 && targetFile != "" {
+					modFiles = []string{targetFile}
+				}
+				if ok, _ := sandbox.PreFlightSyntaxCheckFiles(wt.WorkDir, modFiles); !ok {
 					child.Backpropagate(-0.7)
 					return
 				}
@@ -271,8 +275,12 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 
 							applied2, _ := wtPatcher.ApplyPatch(refineDiff, targetFile)
 							if applied2 {
-								// Fast Pre-Flight Syntax Gate (<50ms)
-								if ok, _ := sandbox.PreFlightSyntaxCheck(wt.WorkDir, targetFile); !ok {
+								// Fast Pre-Flight Syntax Gate (<50ms) across all modified files
+								refineModFiles := sandbox.ExtractModifiedFiles(refineDiff)
+								if len(refineModFiles) == 0 && targetFile != "" {
+									refineModFiles = []string{targetFile}
+								}
+								if ok, _ := sandbox.PreFlightSyntaxCheckFiles(wt.WorkDir, refineModFiles); !ok {
 									child2.Backpropagate(-0.7)
 									return
 								}
@@ -447,8 +455,12 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 			_ = a.Checkpointer.Rollback(cpID)
 			continue
 		}
-		// Fast Pre-Flight Syntax Gate (<50ms)
-		if ok, sErr := sandbox.PreFlightSyntaxCheck(a.WorkDir, targetFile); !ok {
+		// Fast Pre-Flight Syntax Gate (<50ms) across all modified files
+		seqModFiles := sandbox.ExtractModifiedFiles(diffPatch)
+		if len(seqModFiles) == 0 && targetFile != "" {
+			seqModFiles = []string{targetFile}
+		}
+		if ok, sErr := sandbox.PreFlightSyntaxCheckFiles(a.WorkDir, seqModFiles); !ok {
 			a.notify(StateRollingBack, fmt.Sprintf("DHS [%s] syntax check failed (%s). Pruning branch...", childID, sErr), nil)
 			child.Backpropagate(-0.7)
 			_ = a.Checkpointer.Rollback(cpID)
@@ -542,8 +554,12 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 					_ = a.Checkpointer.Rollback(cpID)
 					applied2, _ := a.Patcher.ApplyPatch(refineDiff, targetFile)
 					if applied2 {
-						// Fast Pre-Flight Syntax Gate (<50ms)
-						if ok, _ := sandbox.PreFlightSyntaxCheck(a.WorkDir, targetFile); !ok {
+						// Fast Pre-Flight Syntax Gate (<50ms) across all modified files
+						seqRefineModFiles := sandbox.ExtractModifiedFiles(refineDiff)
+						if len(seqRefineModFiles) == 0 && targetFile != "" {
+							seqRefineModFiles = []string{targetFile}
+						}
+						if ok, _ := sandbox.PreFlightSyntaxCheckFiles(a.WorkDir, seqRefineModFiles); !ok {
 							child2.Backpropagate(-0.7)
 							_ = a.Checkpointer.Rollback(cpID)
 							continue

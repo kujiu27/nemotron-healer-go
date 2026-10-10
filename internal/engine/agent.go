@@ -428,19 +428,11 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		}
 
 		// 5.5 Fast Pre-Flight Syntax Gate (<50ms)
-		syntaxOK := true
-		var syntaxErrMsg string
 		targetsToCheck := patchSug.TargetFiles
 		if len(targetsToCheck) == 0 && targetFile != "" {
 			targetsToCheck = []string{targetFile}
 		}
-		for _, tf := range targetsToCheck {
-			if ok, sErr := sandbox.PreFlightSyntaxCheck(a.WorkDir, tf); !ok {
-				syntaxOK = false
-				syntaxErrMsg = sErr
-				break
-			}
-		}
+		syntaxOK, syntaxErrMsg := sandbox.PreFlightSyntaxCheckFiles(a.WorkDir, targetsToCheck)
 		if !syntaxOK {
 			a.notify(StateDiagnosing, fmt.Sprintf("⚡ Instant Syntax Gate (<50ms) rejected patch: %s", syntaxErrMsg), map[string]interface{}{
 				"syntax_error": syntaxErrMsg,
