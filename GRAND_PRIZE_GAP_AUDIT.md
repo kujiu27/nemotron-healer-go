@@ -184,7 +184,12 @@ DESIGN 还宣称 R>0.7 时 "restricts unified diffs to non-signature-breaking op
 | DHS 双路径 ~200 行逐字重复(入档债务) | 中伤 | 三 helper 六调用点收敛,净删 30 行;78 tests + mock 四模式锁定 | refactor/dhs-dedup |
 | 终局盘点:工程侧开放项归零 | — | 36 轮无变更验收关账(唯人力项存续) | 记录(无 commit) |
 | hook install/uninstall 无条件覆盖/删除外来 pre-push(r31 被 [skip]) | 重伤 | 所有权标记:拒装外来钩子、只卸自家;3 回归测试(81 tests) | fix/hook-ownership |
-> 后续追加轮(9-38)发现与修复已并入上表;主 README 的 "Evidence & Verification" 一节给全部收据入口。
+| 账本滞后两轮(r36-37 缺行)+ pin 缺 r37 行为修复 | 中伤 | 行补齐;v0.7.2 发布 | chore/ledger-r36-37 |
+> 后续追加轮(9-39)发现与修复已并入上表;主 README 的 "Evidence & Verification" 一节给全部收据入口。
+>
+> **账本封账(2026-10-10)**:本表为 2026-10-01 至 10-10 十轮初审 + 追加拷问的静态快照,行数止于 r39。
+> 此后一切变更以 git log 为准(每 commit 自带发现/修复/验证三要素),不再回写本表 —— 避免每次同步
+> 轮又需为自身补行的无限递归。收据文件由 CI 链接门禁保证存在。
 ### Remediation Status (for judges)
 
 This repo carries its own adversarial self-audit (above, 10 interrogation
