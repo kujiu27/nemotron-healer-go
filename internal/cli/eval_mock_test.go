@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,5 +91,44 @@ func TestEvalCmd_NestedExportDirs(t *testing.T) {
 	}
 	if _, err := os.Stat(mdPath); err != nil {
 		t.Fatalf("expected export md created at %s, got: %v", mdPath, err)
+	}
+}
+
+func TestEvalCmd_JSONPure(t *testing.T) {
+	origMock := mockFlag
+	mockFlag = true
+	defer func() { mockFlag = origMock }()
+
+	cleanup := initMockServerIfEnabled()
+	defer cleanup()
+
+	origCase := caseFilterFlag
+	caseFilterFlag = "AHB-08"
+	defer func() { caseFilterFlag = origCase }()
+
+	origRepeat := repeatFlag
+	repeatFlag = 1
+	defer func() { repeatFlag = origRepeat }()
+
+	origJSON := jsonFlag
+	jsonFlag = true
+	defer func() { jsonFlag = origJSON }()
+
+	out := captureStdout(func() {
+		_ = evalCmd.RunE(evalCmd, []string{})
+	})
+
+	var res struct {
+		Benchmark         string  `json:"benchmark"`
+		TotalRuns         int     `json:"total_runs"`
+		BaselineSolveRate float64 `json:"baseline_solve_rate"`
+		FullSolveRate     float64 `json:"full_solve_rate"`
+		EmpiricalLift     float64 `json:"empirical_lift"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("eval --json stdout not pure JSON: %v, raw:\n%s", err, out)
+	}
+	if res.Benchmark != "AHB-9" || res.TotalRuns != 1 {
+		t.Errorf("unexpected eval json payload: %+v", res)
 	}
 }
