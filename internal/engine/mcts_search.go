@@ -110,6 +110,7 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 
 		var wg sync.WaitGroup
 		var mu sync.Mutex
+		var authErr error
 
 		// Concurrency semaphore: cap concurrent in-flight Nebius inference requests
 		maxConcurrency := 3
@@ -145,10 +146,22 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 
 				rawResp, pTok, cTok, err := a.Nebius.StreamCompletion(ctx, promptMessages, nil)
 				mu.Lock()
+				if err != nil && isAuthError(err) {
+					authErr = err
+				}
 				a.addTokens(pTok, cTok)
 				a.Session.TokenLedger.CalculateCost()
 				nodesCreated++
 				mu.Unlock()
+
+				if err != nil && isAuthError(err) {
+					child := mcts.NewNode(cID, root, "", targetHint, h.Name)
+					mu.Lock()
+					root.Children = append(root.Children, child)
+					mu.Unlock()
+					child.Backpropagate(-1.0)
+					return
+				}
 
 				diffPatch, targetFile := targetHint, targetHint
 				if err == nil {
@@ -306,6 +319,9 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 
 		wg.Wait()
 
+		if authErr != nil {
+			return nil, fmt.Errorf("nebius authentication failed: %w", authErr)
+		}
 		// Select best branch from parallel rollouts
 		var winningBranch *branchResult
 		highestReward := -1.0

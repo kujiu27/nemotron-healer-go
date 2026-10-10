@@ -242,6 +242,16 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 	// Step 2: If Test-Time Compute (TTC) Divergent Hypothesis Search is enabled, explore hypothesis branches
 	if a.EnableSearch {
 		mctsRes, err := a.RunMCTSSearch(ctx, a.Session.LastError, 6)
+		if err != nil && isAuthError(err) {
+			a.notify(StateFailed, fmt.Sprintf("Unrecoverable authentication error during DHS search (%v). Aborting healing loop: please set NEBIUS_API_KEY or use --mock.", err), nil)
+			a.Session.IsResolved = false
+			a.Session.DurationSeconds = time.Since(startTime).Seconds()
+			a.Session.BranchName = ""
+			failReport := a.renderFailureAuditReport()
+			a.Session.AuditReport = failReport
+			a.writeStepSummary(failReport)
+			return a.Session, fmt.Errorf("nebius authentication failed: %w", err)
+		}
 		if err == nil && mctsRes.Resolved {
 			return a.Session, nil
 		}
