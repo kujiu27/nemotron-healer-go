@@ -1,7 +1,7 @@
 .PHONY: all build test bench check eval-mock demo clean cross
 
 BINARY_NAME=nemotron-healer
-VERSION=0.7.21
+VERSION=0.7.22
 
 all: test build
 

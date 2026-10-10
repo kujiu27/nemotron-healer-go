@@ -1,10 +1,12 @@
 package sandbox
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -46,6 +48,33 @@ func NewWorktreeSandbox(baseRepoDir string, prefix string) (*WorktreeSandbox, er
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("git worktree add failed (%s): %w", string(out), err)
+	}
+
+	// Synchronize uncommitted tracked changes from baseRepoDir so the worktree
+	// mirrors the active working tree rather than a stale historical HEAD commit.
+	diffCmd := exec.Command("git", "diff", "HEAD")
+	diffCmd.Dir = baseRepoDir
+	if diffOut, dErr := diffCmd.Output(); dErr == nil && len(diffOut) > 0 {
+		applyCmd := exec.Command("git", "apply", "--whitespace=fix", "-")
+		applyCmd.Dir = worktreePath
+		applyCmd.Stdin = bytes.NewReader(diffOut)
+		_ = applyCmd.Run()
+	}
+
+	// Synchronize untracked files from baseRepoDir (excluding .git and ignored files)
+	untrackedCmd := exec.Command("git", "ls-files", "--others", "--exclude-standard")
+	untrackedCmd.Dir = baseRepoDir
+	if untrackedOut, uErr := untrackedCmd.Output(); uErr == nil {
+		for _, file := range strings.Split(strings.TrimSpace(string(untrackedOut)), "\n") {
+			trimmed := strings.TrimSpace(file)
+			if trimmed == "" {
+				continue
+			}
+			srcPath := filepath.Join(baseRepoDir, trimmed)
+			dstPath := filepath.Join(worktreePath, trimmed)
+			_ = os.MkdirAll(filepath.Dir(dstPath), 0755)
+			_ = copyFile(srcPath, dstPath)
+		}
 	}
 
 	return &WorktreeSandbox{
