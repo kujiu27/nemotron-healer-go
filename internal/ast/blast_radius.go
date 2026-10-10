@@ -77,9 +77,9 @@ func (g *CodeGraph) BuildGraph() error {
 
 	pyFuncRegex := regexp.MustCompile(`^(?:async\s+)?def\s+([a-zA-Z0-9_]+)\s*\(`)
 	pyClassRegex := regexp.MustCompile(`^class\s+([a-zA-Z0-9_]+)\b`)
-	tsFuncRegex := regexp.MustCompile(`^(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z0-9_]+)\s*\(`)
-	tsClassRegex := regexp.MustCompile(`^(?:export\s+)?class\s+([a-zA-Z0-9_]+)\b`)
-	tsArrowRegex := regexp.MustCompile(`^(?:export\s+)?const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(`)
+	tsFuncRegex := regexp.MustCompile(`^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([a-zA-Z0-9_]+)\s*\(`)
+	tsClassRegex := regexp.MustCompile(`^(?:export\s+)?(?:default\s+)?class\s+([a-zA-Z0-9_]+)\b`)
+	tsArrowRegex := regexp.MustCompile(`^(?:export\s+)?(?:const|let)\s+([a-zA-Z0-9_]+)(?:\s*:[^=]+)?\s*=\s*(?:async\s*)?\(`)
 	rustFuncRegex := regexp.MustCompile(`^(?:pub(?:\([^)]+\))?\s+)?(?:async\s+)?fn\s+([a-zA-Z0-9_]+)\b`)
 	rustTypeRegex := regexp.MustCompile(`^(?:pub(?:\([^)]+\))?\s+)?(?:struct|enum|trait)\s+([a-zA-Z0-9_]+)\b`)
 
@@ -106,8 +106,11 @@ func (g *CodeGraph) BuildGraph() error {
 			return nil
 		}
 
-		ext := filepath.Ext(path)
-		if ext != ".py" && ext != ".go" && ext != ".ts" && ext != ".js" && ext != ".rs" {
+		ext := strings.ToLower(filepath.Ext(path))
+		switch ext {
+		case ".py", ".go", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".rs":
+			// supported
+		default:
 			return nil
 		}
 
@@ -158,7 +161,7 @@ func (g *CodeGraph) BuildGraph() error {
 					}
 					kind = "function"
 				}
-			} else if ext == ".ts" || ext == ".js" {
+			} else if ext == ".ts" || ext == ".tsx" || ext == ".js" || ext == ".jsx" || ext == ".mjs" || ext == ".cjs" {
 				if m := tsClassRegex.FindStringSubmatch(trimmed); len(m) > 1 {
 					name = m[1]
 					kind = "class"

@@ -163,3 +163,42 @@ pub fn execute_task() -> bool {
 		t.Fatalf("expected at least 1 affected file, got 0")
 	}
 }
+
+func TestTSXASTExtraction(t *testing.T) {
+	tmpDir := t.TempDir()
+	tsxCode := `export default function App() {
+    return renderContent()
+}
+
+export const Header = () => {
+    return true
+}
+
+function renderContent() {
+    return true
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "App.tsx"), []byte(tsxCode), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	graph := NewCodeGraph(tmpDir)
+	if err := graph.BuildGraph(); err != nil {
+		t.Fatalf("build graph failed: %v", err)
+	}
+
+	if _, ok := graph.Symbols["App.tsx::App"]; !ok {
+		t.Fatalf("expected App.tsx::App extracted, got: %+v", graph.Symbols)
+	}
+	if _, ok := graph.Symbols["App.tsx::Header"]; !ok {
+		t.Fatalf("expected App.tsx::Header extracted, got: %+v", graph.Symbols)
+	}
+	if _, ok := graph.Symbols["App.tsx::renderContent"]; !ok {
+		t.Fatalf("expected App.tsx::renderContent extracted, got: %+v", graph.Symbols)
+	}
+
+	report := graph.AnalyzeBlastRadius("App.tsx", "renderContent")
+	if len(report.AffectedFiles) == 0 {
+		t.Fatalf("expected at least 1 affected file, got 0")
+	}
+}
