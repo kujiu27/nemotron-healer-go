@@ -228,7 +228,15 @@ func detectArenaLang(targetFile, testCmd string, round int) ArenaLangConfig {
 	ext := strings.ToLower(filepath.Ext(targetFile))
 	lowerCmd := strings.ToLower(testCmd)
 
-	if ext == ".go" || strings.Contains(lowerCmd, "go test") {
+	if ext == ".rs" || strings.Contains(lowerCmd, "cargo test") {
+		return ArenaLangConfig{
+			Name:           "Rust",
+			Fence:          "rust",
+			AttackFileName: fmt.Sprintf("arena_red_attack_r%d_test.rs", round),
+			Rules:          fmt.Sprintf("1. Output ONLY valid, runnable Rust test code inside a ```rust block.\n2. Use standard `#[test]` attribute."),
+		}
+	}
+	if ext == ".go" || strings.HasPrefix(lowerCmd, "go test") || strings.Contains(lowerCmd, " go test") {
 		return ArenaLangConfig{
 			Name:           "Go",
 			Fence:          "go",
@@ -263,6 +271,9 @@ func (a *Arena) buildTestCmd(lang ArenaLangConfig, testFileName string, targetDi
 			targetPkg = "./" + filepath.ToSlash(dir)
 		}
 		return fmt.Sprintf("go test -v -run TestRedAttack %s", targetPkg)
+	}
+	if lang.Name == "Rust" {
+		return "cargo test"
 	}
 	targetPath := testFileName
 	if dir != "." {
@@ -319,6 +330,12 @@ func isAttackSyntaxOrImportError(output, lang string) bool {
 	if lang == "TypeScript/JavaScript" {
 		return strings.Contains(lower, "syntaxerror") ||
 			strings.Contains(lower, "cannot find module")
+	}
+	if lang == "Rust" {
+		return strings.Contains(lower, "error[e") ||
+			strings.Contains(lower, "could not compile") ||
+			strings.Contains(lower, "unresolved import") ||
+			strings.Contains(lower, "syntax error")
 	}
 	return false
 }

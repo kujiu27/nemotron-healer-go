@@ -20,6 +20,12 @@ func TestDetectArenaLang(t *testing.T) {
 	if cfgTS.Name != "TypeScript/JavaScript" {
 		t.Fatalf("expected TS/JS, got %s", cfgTS.Name)
 	}
+
+	// Rust
+	cfgRust := detectArenaLang("src/main.rs", "cargo test", 1)
+	if cfgRust.Name != "Rust" {
+		t.Fatalf("expected Rust, got %s", cfgRust.Name)
+	}
 }
 
 func TestArenaBuildTestCmd_SubpackageColocation(t *testing.T) {
@@ -38,6 +44,14 @@ func TestArenaBuildTestCmd_SubpackageColocation(t *testing.T) {
 	cmdPy := aPy.buildTestCmd(langPy, "test__red_attack_r1.py", "service")
 	if cmdPy != "python3 -m pytest service/test__red_attack_r1.py" {
 		t.Errorf("expected colocated pytest path, got %q", cmdPy)
+	}
+
+	// 3. Rust
+	aRust := &Arena{TestCommand: "cargo test"}
+	langRust := detectArenaLang("src/lib.rs", "cargo test", 1)
+	cmdRust := aRust.buildTestCmd(langRust, "red_attack_r1_test.rs", "src")
+	if cmdRust != "cargo test" {
+		t.Errorf("expected 'cargo test', got %q", cmdRust)
 	}
 }
 
