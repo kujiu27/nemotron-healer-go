@@ -45,10 +45,12 @@ func DetectTestCommand(workDir string) (command string, ecosystem string, err er
 	if hasPyMarker {
 		pytestCmd := "pytest"
 		if _, lookErr := exec.LookPath("pytest"); lookErr != nil {
-			// Check local virtual environments
+			// Check local virtual environments (Unix bin/pytest and Windows Scripts/pytest.exe)
 			venvCandidates := []string{
 				filepath.Join(absWorkDir, ".venv", "bin", "pytest"),
 				filepath.Join(absWorkDir, "venv", "bin", "pytest"),
+				filepath.Join(absWorkDir, ".venv", "Scripts", "pytest.exe"),
+				filepath.Join(absWorkDir, "venv", "Scripts", "pytest.exe"),
 			}
 			foundVenv := false
 			for _, v := range venvCandidates {
@@ -59,7 +61,13 @@ func DetectTestCommand(workDir string) (command string, ecosystem string, err er
 				}
 			}
 			if !foundVenv {
-				pytestCmd = "python3 -m pytest"
+				if _, lookPy3 := exec.LookPath("python3"); lookPy3 == nil {
+					pytestCmd = "python3 -m pytest"
+				} else if _, lookPy := exec.LookPath("python"); lookPy == nil {
+					pytestCmd = "python -m pytest"
+				} else {
+					pytestCmd = "python3 -m pytest"
+				}
 			}
 		}
 		return pytestCmd, "Python (Pytest / Virtualenv)", nil

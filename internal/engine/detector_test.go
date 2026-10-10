@@ -64,6 +64,26 @@ func TestDetectTestCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("Detect Python project with Windows Scripts/pytest.exe", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		_ = os.WriteFile(filepath.Join(tmpDir, "pyproject.toml"), []byte("[tool.pytest]\n"), 0644)
+		scriptsDir := filepath.Join(tmpDir, ".venv", "Scripts")
+		_ = os.MkdirAll(scriptsDir, 0755)
+		pytestExe := filepath.Join(scriptsDir, "pytest.exe")
+		_ = os.WriteFile(pytestExe, []byte("fake"), 0755)
+
+		cmd, eco, err := DetectTestCommand(tmpDir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(cmd, "pytest") {
+			t.Fatalf("expected pytest in command, got %q", cmd)
+		}
+		if !strings.Contains(eco, "Python") {
+			t.Fatalf("expected Python ecosystem, got %q", eco)
+		}
+	})
+
 	t.Run("Detect Rust project", func(t *testing.T) {
 		tmpDir, err := os.MkdirTemp("", "detect_rs_*")
 		if err != nil {
