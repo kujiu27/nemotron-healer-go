@@ -271,6 +271,11 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 
 							applied2, _ := wtPatcher.ApplyPatch(refineDiff, targetFile)
 							if applied2 {
+								// Fast Pre-Flight Syntax Gate (<50ms)
+								if ok, _ := sandbox.PreFlightSyntaxCheck(wt.WorkDir, targetFile); !ok {
+									child2.Backpropagate(-0.7)
+									return
+								}
 								v2, _ := wtRunner.Run(a.TestCommand)
 								adv2 := false
 								advSkipped2 := false
@@ -442,6 +447,14 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 			_ = a.Checkpointer.Rollback(cpID)
 			continue
 		}
+		// Fast Pre-Flight Syntax Gate (<50ms)
+		if ok, sErr := sandbox.PreFlightSyntaxCheck(a.WorkDir, targetFile); !ok {
+			a.notify(StateRollingBack, fmt.Sprintf("DHS [%s] syntax check failed (%s). Pruning branch...", childID, sErr), nil)
+			child.Backpropagate(-0.7)
+			_ = a.Checkpointer.Rollback(cpID)
+			continue
+		}
+
 
 		// Rollout: Run verification test in sandbox
 		verifyRes, _ := a.Runner.Run(a.TestCommand)
@@ -529,6 +542,12 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 					_ = a.Checkpointer.Rollback(cpID)
 					applied2, _ := a.Patcher.ApplyPatch(refineDiff, targetFile)
 					if applied2 {
+						// Fast Pre-Flight Syntax Gate (<50ms)
+						if ok, _ := sandbox.PreFlightSyntaxCheck(a.WorkDir, targetFile); !ok {
+							child2.Backpropagate(-0.7)
+							_ = a.Checkpointer.Rollback(cpID)
+							continue
+						}
 						verifyRes2, _ := a.Runner.Run(a.TestCommand)
 						advPass2 := false
 						advSkipped2 := false
