@@ -3,6 +3,7 @@ package ast
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -100,5 +101,24 @@ func Run() {
 	report := graph.AnalyzeBlastRadius("engine.go", "Engine.boot")
 	if report.RiskScore == 0 {
 		t.Logf("Engine.boot risk score: %f", report.RiskScore)
+	}
+}
+
+func TestBuildGraph_LongLineFileSurvivesScannerBuffer(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Generate a JavaScript file with a line exceeding 64KB (e.g. 100KB minified code or long comment)
+	longComment := "// " + strings.Repeat("x", 100*1024)
+	jsCode := longComment + "\nfunction processLargePayload() { return true; }\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "bundle.js"), []byte(jsCode), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	graph := NewCodeGraph(tmpDir)
+	if err := graph.BuildGraph(); err != nil {
+		t.Fatalf("BuildGraph failed on >64KB line in JS bundle: %v", err)
+	}
+
+	if _, ok := graph.Symbols["bundle.js::processLargePayload"]; !ok {
+		t.Fatalf("expected bundle.js::processLargePayload extracted after long line, symbols: %+v", graph.Symbols)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	goast "go/ast"
 	"go/parser"
 	"go/token"
@@ -127,6 +128,8 @@ func (g *CodeGraph) BuildGraph() error {
 		defer file.Close()
 
 		scanner := bufio.NewScanner(file)
+		// Allocate 64KB initial buffer with 4MB max capacity to handle minified or long single-line files
+		scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 		lineNum := 0
 
 		var currentSym *SymbolNode
@@ -198,6 +201,11 @@ func (g *CodeGraph) BuildGraph() error {
 		if currentSym != nil {
 			currentSym.LineEnd = lineNum
 		}
+		if scanErr := scanner.Err(); scanErr != nil {
+			// Return error from WalkFunc so caller is alerted of file read truncation
+			return fmt.Errorf("reading %s: %w", rel, scanErr)
+		}
+
 
 		return nil
 	})
