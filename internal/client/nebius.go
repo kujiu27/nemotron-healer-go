@@ -234,6 +234,9 @@ func (c *NebiusClient) StreamCompletionWithTemp(ctx context.Context, messages []
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
+	// Allocate 64KB initial buffer with 4MB max capacity to survive large unified diffs
+	// and lengthy deep-reasoning traces (>64KB default bufio.MaxScanTokenSize)
+	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {
@@ -273,6 +276,10 @@ func (c *NebiusClient) StreamCompletionWithTemp(ctx context.Context, messages []
 			}
 		}
 	}
+	if scanErr := scanner.Err(); scanErr != nil {
+		return fullText.String(), 0, 0, fmt.Errorf("streaming sse read error: %w", scanErr)
+	}
+
 
 	c.LastThoughtChain = strings.TrimSpace(thoughtText.String())
 
