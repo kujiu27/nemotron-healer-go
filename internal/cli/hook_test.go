@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -39,5 +40,24 @@ func TestGitHookInstallAndUninstall(t *testing.T) {
 
 	if _, err := os.Stat(hookPath); !os.IsNotExist(err) {
 		t.Fatal("hook file still exists after uninstall")
+	}
+}
+
+func TestGitHookAutoHealFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	gitDir := filepath.Join(tmpDir, ".git")
+	_ = os.MkdirAll(gitDir, 0755)
+
+	hookPath, err := InstallGitHook(tmpDir, true)
+	if err != nil {
+		t.Fatalf("InstallGitHook with autoHeal failed: %v", err)
+	}
+
+	content, err := os.ReadFile(hookPath)
+	if err != nil {
+		t.Fatalf("failed reading hook file: %v", err)
+	}
+	if !strings.Contains(string(content), "nemotron-healer hook run . --auto-heal") {
+		t.Errorf("expected --auto-heal in hook script, got:\n%s", string(content))
 	}
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"bytes"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/kujiu27/nemotron-healer-go/internal/engine"
 	"github.com/spf13/cobra"
 )
+var autoHealFlag bool
 
 var hookCmd = &cobra.Command{
 	Use:   "hook",
@@ -31,14 +33,18 @@ var hookInstallCmd = &cobra.Command{
 			return err
 		}
 
-		hookPath, err := InstallGitHook(absDir)
+		hookPath, err := InstallGitHook(absDir, autoHealFlag)
 		if err != nil {
 			return err
 		}
 
+		modeMsg := "Broken commits will now be intercepted prior to `git push`."
+		if autoHealFlag {
+			modeMsg = "Broken commits will be intercepted and autonomously self-healed in-situ prior to `git push`."
+		}
 		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render(
 			fmt.Sprintf("✅ Shift-Left Git Hook successfully installed at `%s`", hookPath)))
-		fmt.Println("Broken commits will now be intercepted prior to `git push`.")
+		fmt.Println(modeMsg)
 		return nil
 	},
 }
@@ -68,9 +74,11 @@ var hookUninstallCmd = &cobra.Command{
 }
 
 var hookRunCmd = &cobra.Command{
-	Use:   "run [target_dir]",
-	Short: "Execute pre-push verification and report regression status",
-	Args:  cobra.MaximumNArgs(1),
+	Use:           "run [target_dir]",
+	Short:         "Execute pre-push verification and report regression status",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	Args:          cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		targetDir := "."
 		if len(args) > 0 {
@@ -95,8 +103,25 @@ var hookRunCmd = &cobra.Command{
 		if err := c.Run(); err != nil {
 			fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5555")).Render(
 				"\n❌ Pre-push verification test failed! Push blocked."))
-			fmt.Println("💡 Run `nemotron-healer` to autonomously repair this repository before pushing.")
-			os.Exit(1)
+
+			if autoHealFlag {
+				fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render(
+					"⚡ [Shift-Left Autonomous Self-Healing] Launching in-situ repair before push..."))
+				agent := engine.NewAgent(absDir, testCmd, 3, func(event engine.HealingStepEvent) {
+					fmt.Printf("[%s] %s\n", event.State, event.Summary)
+				}, nil)
+				session, hErr := agent.Run(context.Background())
+				if hErr == nil && session.IsResolved {
+					fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render(
+						fmt.Sprintf("🎉 Shift-Left Self-Healing SUCCEEDED in %.2fs! Verified fix branch created.", session.DurationSeconds)))
+					return fmt.Errorf("pre-push regression intercepted and healed autonomously; review fix branch before pushing")
+				}
+				fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")).Render(
+					"⚠️ Autonomous repair did not achieve verified pass."))
+			} else {
+				fmt.Println("💡 Run `nemotron-healer` (or install hook with `--auto-heal`) to autonomously repair this repository before pushing.")
+			}
+			return fmt.Errorf("pre-push verification test failed; push blocked")
 		}
 
 		fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("✅ Pre-push verification passed."))
@@ -104,12 +129,12 @@ var hookRunCmd = &cobra.Command{
 	},
 }
 
-const prePushScriptContent = `#!/usr/bin/env bash
+const prePushScriptTemplate = `#!/usr/bin/env bash
 # [Nemotron-Healer] Autonomous Pre-Push Verification Hook
 # Intercepts regressions before remote branch contamination
 
 if command -v nemotron-healer >/dev/null 2>&1; then
-    nemotron-healer hook run .
+    %s
     EXIT_CODE=$?
     if [ $EXIT_CODE -ne 0 ]; then
         exit 1
@@ -121,7 +146,7 @@ exit 0
 `
 
 // InstallGitHook creates the executable pre-push hook in .git/hooks
-func InstallGitHook(repoDir string) (string, error) {
+func InstallGitHook(repoDir string, autoHeal ...bool) (string, error) {
 	gitDir := filepath.Join(repoDir, ".git")
 	if _, err := os.Stat(gitDir); err != nil {
 		return "", fmt.Errorf("not a git repository (missing .git directory in %s)", repoDir)
@@ -140,7 +165,12 @@ func InstallGitHook(repoDir string) (string, error) {
 			return "", fmt.Errorf("refusing to overwrite existing pre-push hook not owned by nemotron-healer: %s (back it up or remove it first, or merge the 'nemotron-healer hook run .' call into it manually)", prePushPath)
 		}
 	}
-	if err := os.WriteFile(prePushPath, []byte(prePushScriptContent), 0755); err != nil {
+	runCmd := "nemotron-healer hook run ."
+	if len(autoHeal) > 0 && autoHeal[0] {
+		runCmd = "nemotron-healer hook run . --auto-heal"
+	}
+	content := fmt.Sprintf(prePushScriptTemplate, runCmd)
+	if err := os.WriteFile(prePushPath, []byte(content), 0755); err != nil {
 		return "", err
 	}
 	return prePushPath, nil
@@ -165,6 +195,8 @@ func UninstallGitHook(repoDir string) error {
 }
 
 func init() {
+	hookInstallCmd.Flags().BoolVar(&autoHealFlag, "auto-heal", false, "Enable autonomous in-situ self-healing when pre-push verification fails")
+	hookRunCmd.Flags().BoolVar(&autoHealFlag, "auto-heal", false, "Launch autonomous in-situ self-healing when pre-push verification fails")
 	hookCmd.AddCommand(hookInstallCmd)
 	hookCmd.AddCommand(hookUninstallCmd)
 	hookCmd.AddCommand(hookRunCmd)
