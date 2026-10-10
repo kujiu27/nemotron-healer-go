@@ -60,9 +60,16 @@ func TestExportSarif(t *testing.T) {
 	}
 
 	// Verify precise ruleId matching archetype
+	// Verify precise ruleId matching archetype and compliance fields
 	res := report.Runs[0].Results[0]
 	if res.RuleID != "NH-CONCURRENCYRACE" {
 		t.Errorf("expected RuleID NH-CONCURRENCYRACE, got %s", res.RuleID)
+	}
+	if res.RuleIndex != 0 {
+		t.Errorf("expected RuleIndex 0, got %d", res.RuleIndex)
+	}
+	if len(report.Runs[0].Tool.Driver.Rules) == 0 || report.Runs[0].Tool.Driver.Rules[0].HelpURI == "" {
+		t.Errorf("expected rule helpUri to be populated")
 	}
 
 	// Verify precise location mapping
@@ -98,5 +105,40 @@ func TestExportSarif_NestedDirectory(t *testing.T) {
 
 	if _, err := os.Stat(sarifPath); err != nil {
 		t.Fatalf("nested sarif file was not created: %v", err)
+	}
+}
+
+func TestExportSarif_SpecialCharArchetypeSanitization(t *testing.T) {
+	tmpDir := t.TempDir()
+	sarifPath := filepath.Join(tmpDir, "sanitized.sarif")
+
+	session := &engine.HealingSession{
+		SessionID:       "sanitize-test",
+		IsResolved:      false,
+		LastError:       "deadlock timeout error trace",
+		DefectArchetype: "ConcurrencyRace (Hard) / Mutex-Leak",
+		TargetFile:      "src/lib.rs",
+		TargetLine:      10,
+	}
+
+	if err := ExportSarif(session, sarifPath); err != nil {
+		t.Fatalf("ExportSarif failed: %v", err)
+	}
+
+	data, err := os.ReadFile(sarifPath)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	var report SarifReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	ruleID := report.Runs[0].Results[0].RuleID
+	if ruleID != "NH-CONCURRENCYRACE-HARD-MUTEX-LEAK" {
+		t.Errorf("expected sanitized ruleID NH-CONCURRENCYRACE-HARD-MUTEX-LEAK, got %s", ruleID)
+	}
+	if report.Runs[0].Results[0].Level != "error" {
+		t.Errorf("expected level error for unresolved session, got %s", report.Runs[0].Results[0].Level)
 	}
 }
