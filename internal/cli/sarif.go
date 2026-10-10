@@ -142,10 +142,14 @@ func ExportSarif(session *engine.HealingSession, outputPath string) error {
 			},
 		},
 	}
-
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err
+	}
+	if dir := filepath.Dir(outputPath); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory for sarif report %q: %w", outputPath, err)
+		}
 	}
 	return os.WriteFile(outputPath, data, 0644)
 }

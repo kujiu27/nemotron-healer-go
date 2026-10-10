@@ -77,3 +77,26 @@ func TestExportSarif(t *testing.T) {
 		t.Errorf("expected StartLine 42, got %d", loc.PhysicalLocation.Region.StartLine)
 	}
 }
+
+func TestExportSarif_NestedDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	sarifPath := filepath.Join(tmpDir, "nested", "sub", "report.sarif")
+
+	session := &engine.HealingSession{
+		SessionID:       "nested-test",
+		IsResolved:      true,
+		DurationSeconds: 0.5,
+		CurrentTurn:     1,
+		MaxTurns:        1,
+		TargetFile:      "main.go",
+	}
+
+	err := ExportSarif(session, sarifPath)
+	if err != nil {
+		t.Fatalf("ExportSarif to nested directory failed: %v", err)
+	}
+
+	if _, err := os.Stat(sarifPath); err != nil {
+		t.Fatalf("nested sarif file was not created: %v", err)
+	}
+}
