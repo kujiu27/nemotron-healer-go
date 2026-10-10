@@ -126,6 +126,8 @@ func sanitizeEnvironment() []string {
 		"GOPATH": true, "GOROOT": true, "GOFLAGS": true, "GOPROXY": true,
 		"GOSUMDB": true, "GONOSUMDB": true, "GO111MODULE": true, "GOTOOLCHAIN": true,
 		"GOPRIVATE": true, "GOINSECURE": true,
+		"GOMEMLIMIT": true, "GOCACHE": true, "GOTMPDIR": true, "GOENV": true, "GODEBUG": true,
+		"NODE_PATH": true, "NODE_ENV": true, "CARGO_HOME": true, "RUSTUP_HOME": true,
 		"CI": true, "GITHUB_ACTIONS": true,
 	}
 	var safeEnv []string

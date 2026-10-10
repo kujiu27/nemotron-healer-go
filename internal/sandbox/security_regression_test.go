@@ -53,6 +53,29 @@ func TestSanitizeEnvironmentDefaultDeny(t *testing.T) {
 	}
 }
 
+func TestSanitizeEnvironmentRetainsMemoryContainment(t *testing.T) {
+	t.Setenv("GOMEMLIMIT", "256MiB")
+	t.Setenv("GOCACHE", "/tmp/gocache")
+	t.Setenv("NODE_ENV", "test")
+	t.Setenv("SECRET_TOKEN", "super-secret-123")
+
+	env := sanitizeEnvironment()
+	joined := strings.Join(env, "\n")
+
+	if !strings.Contains(joined, "GOMEMLIMIT=256MiB") {
+		t.Errorf("GOMEMLIMIT must survive allowlist for OOM containment, got: %s", joined)
+	}
+	if !strings.Contains(joined, "GOCACHE=/tmp/gocache") {
+		t.Errorf("GOCACHE must survive allowlist, got: %s", joined)
+	}
+	if !strings.Contains(joined, "NODE_ENV=test") {
+		t.Errorf("NODE_ENV must survive allowlist, got: %s", joined)
+	}
+	if strings.Contains(joined, "SECRET_TOKEN") {
+		t.Errorf("SECRET_TOKEN must be stripped by default-deny, got: %s", joined)
+	}
+}
+
 func TestCheckpointDirPrivate(t *testing.T) {
 	dir := t.TempDir()
 	cm := NewCheckpointManager(dir)
