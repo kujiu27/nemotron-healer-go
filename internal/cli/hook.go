@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -132,17 +133,33 @@ func InstallGitHook(repoDir string) (string, error) {
 	}
 
 	prePushPath := filepath.Join(hooksDir, "pre-push")
+	// Ownership guard: never clobber a foreign pre-push hook (husky, lefthook,
+	// custom user scripts). Round-37: this silently destroyed user hooks.
+	if existing, err := os.ReadFile(prePushPath); err == nil {
+		if !bytes.Contains(existing, []byte(hookOwnershipMarker)) {
+			return "", fmt.Errorf("refusing to overwrite existing pre-push hook not owned by nemotron-healer: %s (back it up or remove it first, or merge the 'nemotron-healer hook run .' call into it manually)", prePushPath)
+		}
+	}
 	if err := os.WriteFile(prePushPath, []byte(prePushScriptContent), 0755); err != nil {
 		return "", err
 	}
 	return prePushPath, nil
 }
 
-// UninstallGitHook removes the pre-push hook if it exists
+const hookOwnershipMarker = "[Nemotron-Healer] Autonomous Pre-Push Verification Hook"
+
+// UninstallGitHook removes OUR pre-push hook; a foreign hook is left untouched.
 func UninstallGitHook(repoDir string) error {
 	prePushPath := filepath.Join(repoDir, ".git", "hooks", "pre-push")
-	if _, err := os.Stat(prePushPath); os.IsNotExist(err) {
+	existing, err := os.ReadFile(prePushPath)
+	if os.IsNotExist(err) {
 		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !bytes.Contains(existing, []byte(hookOwnershipMarker)) {
+		return fmt.Errorf("refusing to remove pre-push hook not owned by nemotron-healer: %s", prePushPath)
 	}
 	return os.Remove(prePushPath)
 }
