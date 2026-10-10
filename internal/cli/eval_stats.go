@@ -12,8 +12,12 @@ type EvalRunResult struct {
 	TurnsTaken   int
 	DurationS    float64
 	CostUSD      float64
+	TotalTokens  int
+	PromptTokens int
+	CompTokens   int
+	TTFTSeconds  float64
+	MeasuredTPS  float64
 }
-
 // CaseStats aggregates EvalRunResult across --repeat runs of one case.
 type CaseStats struct {
 	CaseID       string
@@ -28,8 +32,11 @@ type CaseStats struct {
 	DurationStd  float64
 	CostMean     float64
 	CostStd      float64
+	TokensMean   float64
+	TokensStd    float64
+	TTFTMean     float64
+	TPSMean      float64
 }
-
 func meanStd(vs []float64) (float64, float64) {
 	if len(vs) == 0 {
 		return 0, 0
@@ -72,6 +79,9 @@ func aggregateByCase(results []EvalRunResult) []CaseStats {
 		turns := make([]float64, 0, len(rows))
 		durs := make([]float64, 0, len(rows))
 		costs := make([]float64, 0, len(rows))
+		toks := make([]float64, 0, len(rows))
+		ttfts := make([]float64, 0, len(rows))
+		tpss := make([]float64, 0, len(rows))
 		for _, r := range rows {
 			if r.BaselinePass {
 				s.BaselineWins++
@@ -82,12 +92,17 @@ func aggregateByCase(results []EvalRunResult) []CaseStats {
 			turns = append(turns, float64(r.TurnsTaken))
 			durs = append(durs, r.DurationS)
 			costs = append(costs, r.CostUSD)
+			toks = append(toks, float64(r.TotalTokens))
+			ttfts = append(ttfts, r.TTFTSeconds)
+			tpss = append(tpss, r.MeasuredTPS)
 		}
 		s.TurnsMean, s.TurnsStd = meanStd(turns)
 		s.DurationMean, s.DurationStd = meanStd(durs)
 		s.CostMean, s.CostStd = meanStd(costs)
+		s.TokensMean, s.TokensStd = meanStd(toks)
+		s.TTFTMean, _ = meanStd(ttfts)
+		s.TPSMean, _ = meanStd(tpss)
 	}
-
 	stats := make([]CaseStats, 0, len(order))
 	for _, id := range order {
 		stats = append(stats, *byCase[id])

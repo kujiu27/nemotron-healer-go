@@ -220,6 +220,11 @@ var evalCmd = &cobra.Command{
 					TurnsTaken:   session.CurrentTurn,
 					DurationS:    dur,
 					CostUSD:      session.TokenLedger.EstimatedCostUSD,
+					TotalTokens:  session.TokenLedger.TotalTokens,
+					PromptTokens: session.TokenLedger.PromptTokens + session.TokenLedger.FastPromptTokens,
+					CompTokens:   session.TokenLedger.CompletionTokens + session.TokenLedger.FastCompTokens,
+					TTFTSeconds:  session.TokenLedger.TTFTSeconds,
+					MeasuredTPS:  session.TokenLedger.MeasuredTPS,
 				})
 				// Per-iteration cleanup: defers inside the repeat loop previously
 				// kept up to 18*N full-repo sandboxes alive until process exit.
@@ -270,14 +275,15 @@ var evalCmd = &cobra.Command{
 		perCase := aggregateByCase(results)
 		if totalRuns > 1 {
 			fmt.Println("\n📈 Per-Case Statistics across repeats (mean ± population std):")
-			fmt.Printf("%-8s | %-12s | %-12s | %-16s | %-16s | %-16s\n",
-				"Case ID", "Baseline", "Full System", "Turns", "Duration (s)", "Cost ($)")
+			fmt.Printf("%-8s | %-12s | %-12s | %-14s | %-14s | %-14s | %-16s\n",
+				"Case ID", "Baseline", "Full System", "Turns", "Duration (s)", "Tokens", "Cost ($)")
 			for _, s := range perCase {
-				fmt.Printf("%-8s | %-12s | %-12s | %6.1f ± %-5.1f | %6.1f ± %-5.1f | %6.5f ± %-7.5f\n",
+				fmt.Printf("%-8s | %-12s | %-12s | %5.1f ± %-4.1f | %5.1f ± %-4.1f | %6.0f ± %-5.0f | %6.5f ± %-7.5f\n",
 					s.CaseID,
 					fmt.Sprintf("%d/%d", s.BaselineWins, s.Repeats),
 					fmt.Sprintf("%d/%d", s.FullWins, s.Repeats),
-					s.TurnsMean, s.TurnsStd, s.DurationMean, s.DurationStd, s.CostMean, s.CostStd)
+					s.TurnsMean, s.TurnsStd, s.DurationMean, s.DurationStd,
+					s.TokensMean, s.TokensStd, s.CostMean, s.CostStd)
 			}
 		}
 
@@ -322,12 +328,13 @@ var evalCmd = &cobra.Command{
 			mdSb.WriteString(fmt.Sprintf("- **Empirical Grounding Delta**: **+%.1f%% Accuracy Lift**\n", delta))
 			if totalRuns > 1 {
 				mdSb.WriteString("\n### Per-Case Statistics across repeats (mean ± population std)\n\n")
-				mdSb.WriteString("| Case ID | Baseline | Full System | Turns | Duration (s) | Cost ($) |\n")
-				mdSb.WriteString("| :--- | :--- | :--- | :--- | :--- | :--- |\n")
+				mdSb.WriteString("| Case ID | Baseline | Full System | Turns | Duration (s) | Tokens | Cost ($) |\n")
+				mdSb.WriteString("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
 				for _, s := range perCase {
-					mdSb.WriteString(fmt.Sprintf("| %s | %d/%d | %d/%d | %.1f ± %.1f | %.1f ± %.1f | %.5f ± %.5f |\n",
+					mdSb.WriteString(fmt.Sprintf("| %s | %d/%d | %d/%d | %.1f ± %.1f | %.1f ± %.1f | %.0f ± %.0f | %.5f ± %.5f |\n",
 						s.CaseID, s.BaselineWins, s.Repeats, s.FullWins, s.Repeats,
-						s.TurnsMean, s.TurnsStd, s.DurationMean, s.DurationStd, s.CostMean, s.CostStd))
+						s.TurnsMean, s.TurnsStd, s.DurationMean, s.DurationStd,
+						s.TokensMean, s.TokensStd, s.CostMean, s.CostStd))
 				}
 			}
 			if wErr := os.WriteFile(exportMDFlag, []byte(mdSb.String()), 0644); wErr != nil {
