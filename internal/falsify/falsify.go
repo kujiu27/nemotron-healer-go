@@ -19,6 +19,8 @@ type FalsificationResult struct {
 	IsMalformedTest bool   `json:"is_malformed_test,omitempty"`
 	GeneratedTest   string `json:"generated_test"`
 	FailureOutput   string `json:"failure_output,omitempty"`
+	PromptTokens     int    `json:"prompt_tokens,omitempty"`
+	CompletionTokens int    `json:"completion_tokens,omitempty"`
 }
 
 type Falsifier struct {
@@ -68,21 +70,25 @@ RULES:
 		{Role: "user", Content: prompt},
 	}
 
-	resp, _, _, err := f.Nebius.StreamCompletion(ctx, messages, nil)
+	resp, pTok, cTok, err := f.Nebius.StreamCompletion(ctx, messages, nil)
 	if err != nil {
 		return &FalsificationResult{
-			Passed:  true,
-			Skipped: true,
-			Reason:  fmt.Sprintf("adversarial generator unavailable: %v", err),
+			Passed:           true,
+			Skipped:          true,
+			Reason:           fmt.Sprintf("adversarial generator unavailable: %v", err),
+			PromptTokens:     pTok,
+			CompletionTokens: cTok,
 		}, nil
 	}
 
 	testCode := extractTestCode(resp, lang)
 	if testCode == "" {
 		return &FalsificationResult{
-			Passed:  true,
-			Skipped: true,
-			Reason:  "model did not produce extractable test block",
+			Passed:           true,
+			Skipped:          true,
+			Reason:           "model did not produce extractable test block",
+			PromptTokens:     pTok,
+			CompletionTokens: cTok,
 		}, nil
 	}
 
@@ -91,8 +97,10 @@ RULES:
 	testFilePath := filepath.Join(f.WorkDir, testFileName)
 	if err := os.WriteFile(testFilePath, []byte(testCode), 0644); err != nil {
 		return &FalsificationResult{
-			Passed: false,
-			Reason: fmt.Sprintf("failed writing test file: %v", err),
+			Passed:           false,
+			Reason:           fmt.Sprintf("failed writing test file: %v", err),
+			PromptTokens:     pTok,
+			CompletionTokens: cTok,
 		}, err
 	}
 	defer os.Remove(testFilePath)
@@ -106,25 +114,31 @@ RULES:
 
 		if isMalformed {
 			return &FalsificationResult{
-				Passed:          true,
-				Skipped:         true,
-				IsMalformedTest: true,
-				Reason:          "synthesized test had invalid syntax/imports; skipped to prevent false-negative rollback",
-				GeneratedTest:   testCode,
-				FailureOutput:   output,
+				Passed:           true,
+				Skipped:          true,
+				IsMalformedTest:  true,
+				Reason:           "synthesized test had invalid syntax/imports; skipped to prevent false-negative rollback",
+				GeneratedTest:    testCode,
+				FailureOutput:    output,
+				PromptTokens:     pTok,
+				CompletionTokens: cTok,
 			}, nil
 		}
 
 		return &FalsificationResult{
-			Passed:        false,
-			GeneratedTest: testCode,
-			FailureOutput: output,
+			Passed:           false,
+			GeneratedTest:    testCode,
+			FailureOutput:    output,
+			PromptTokens:     pTok,
+			CompletionTokens: cTok,
 		}, nil
 	}
 
 	return &FalsificationResult{
-		Passed:        true,
-		GeneratedTest: testCode,
+		Passed:           true,
+		GeneratedTest:    testCode,
+		PromptTokens:     pTok,
+		CompletionTokens: cTok,
 	}, nil
 }
 

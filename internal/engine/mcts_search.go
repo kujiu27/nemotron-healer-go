@@ -82,6 +82,8 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 			a.notify(StateVerifyingSandbox, "Entering Red-Blue Adversarial Arena (Self-Play)...", nil)
 			gameArena := arena.NewArena(a.Nebius, a.Runner, a.Patcher, a.WorkDir, a.TestCommand)
 			rounds, eq, _ := gameArena.SelfPlay(ctx, targetFile, 2)
+			a.addTokens(gameArena.TotalPromptTokens, gameArena.TotalCompletionTokens)
+			a.Session.TokenLedger.CalculateCost()
 			a.notify(StateVerifyingSandbox, fmt.Sprintf("Red-Blue Arena: Survived %d attack rounds (defense held all rounds: %v)", len(rounds), eq), nil)
 			arenaNotes = fmt.Sprintf("Survived %d Adversarial Attack-Defend Rounds (defense held all rounds: %v)", len(rounds), eq)
 		}
@@ -192,6 +194,12 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 					falsifyRes, _ := wtFalsifier.StressTest(ctx, targetFile, diffPatch)
 					advPass = falsifyRes.Passed
 					bestFalsify = falsifyRes
+					if falsifyRes != nil {
+						mu.Lock()
+						a.addTokens(falsifyRes.PromptTokens, falsifyRes.CompletionTokens)
+						a.Session.TokenLedger.CalculateCost()
+						mu.Unlock()
+					}
 					if !advPass {
 						falsifyFailureOutput = falsifyRes.FailureOutput
 					}
@@ -249,8 +257,13 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 								if v2.IsSuccess {
 									f2, _ = wtFalsifier.StressTest(ctx, targetFile, refineDiff)
 									adv2 = f2.Passed
+									if f2 != nil {
+										mu.Lock()
+										a.addTokens(f2.PromptTokens, f2.CompletionTokens)
+										a.Session.TokenLedger.CalculateCost()
+										mu.Unlock()
+									}
 								}
-
 								r2 := evaluator.ComputeReward(v2.IsSuccess, adv2, blastReport.RiskScore, refineDiff)
 								child2.Backpropagate(r2)
 
@@ -408,6 +421,10 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 			// Run Adversarial Falsification stress test
 			falsifyRes, _ = a.Falsifier.StressTest(ctx, targetFile, diffPatch)
 			advPass = falsifyRes.Passed
+			if falsifyRes != nil {
+				a.addTokens(falsifyRes.PromptTokens, falsifyRes.CompletionTokens)
+				a.Session.TokenLedger.CalculateCost()
+			}
 			if !advPass {
 				falsifyFailureOutput = falsifyRes.FailureOutput
 			}
@@ -482,8 +499,11 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 						if verifyRes2.IsSuccess {
 							f2, _ = a.Falsifier.StressTest(ctx, targetFile, refineDiff)
 							advPass2 = f2.Passed
+							if f2 != nil {
+								a.addTokens(f2.PromptTokens, f2.CompletionTokens)
+								a.Session.TokenLedger.CalculateCost()
+							}
 						}
-
 						reward2 := evaluator.ComputeReward(verifyRes2.IsSuccess, advPass2, blastReport.RiskScore, refineDiff)
 						child2.Backpropagate(reward2)
 

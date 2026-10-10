@@ -415,7 +415,10 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			// 7. Adversarial Falsification Stress Test
 			a.notify(StateVerifyingSandbox, "Running Adversarial Falsification Test against synthesized patch...", nil)
 			falsifyRes, _ := a.Falsifier.StressTest(ctx, targetFile, patchSug.DiffPatch)
-
+			if falsifyRes != nil {
+				a.addTokens(falsifyRes.PromptTokens, falsifyRes.CompletionTokens)
+				a.Session.TokenLedger.CalculateCost()
+			}
 			if !falsifyRes.Passed {
 				a.notify(StateDiagnosing, fmt.Sprintf("Adversarial Falsification test output:\n%s", falsifyRes.FailureOutput), map[string]interface{}{
 					"failure": falsifyRes.FailureOutput,
@@ -431,6 +434,8 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				a.notify(StateVerifyingSandbox, "Entering Red-Blue Adversarial Arena (Self-Play)...", nil)
 				gameArena := arena.NewArena(a.Nebius, a.Runner, a.Patcher, a.WorkDir, a.TestCommand)
 				rounds, eq, _ := gameArena.SelfPlay(ctx, targetFile, 2)
+				a.addTokens(gameArena.TotalPromptTokens, gameArena.TotalCompletionTokens)
+				a.Session.TokenLedger.CalculateCost()
 				a.notify(StateVerifyingSandbox, fmt.Sprintf("Red-Blue Arena: Survived %d attack rounds (defense held all rounds: %v)", len(rounds), eq), nil)
 				arenaNotes = fmt.Sprintf("Survived %d Adversarial Attack-Defend Rounds (defense held all rounds: %v)", len(rounds), eq)
 			}

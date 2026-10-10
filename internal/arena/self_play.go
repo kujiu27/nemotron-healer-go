@@ -28,6 +28,8 @@ type Arena struct {
 	Patcher     *sandbox.Patcher
 	WorkDir     string
 	TestCommand string
+	TotalPromptTokens     int
+	TotalCompletionTokens int
 }
 
 func NewArena(nebius *client.NebiusClient, runner *sandbox.Runner, patcher *sandbox.Patcher, workDir, testCmd string) *Arena {
@@ -75,7 +77,9 @@ RULES:
 			{Role: "user", Content: redPrompt},
 		}
 
-		redResp, _, _, err := a.Nebius.StreamCompletion(ctx, redMessages, nil)
+		redResp, rpTok, rcTok, err := a.Nebius.StreamCompletion(ctx, redMessages, nil)
+		a.TotalPromptTokens += rpTok
+		a.TotalCompletionTokens += rcTok
 		if err != nil {
 			return results, false, err
 		}
@@ -136,7 +140,9 @@ Output the exact unified diff inside a `+"```diff"+` block.`, currentCode, attac
 			{Role: "user", Content: bluePrompt},
 		}
 
-		blueResp, _, _, err := a.Nebius.StreamCompletion(ctx, blueMessages, nil)
+		blueResp, bpTok, bcTok, err := a.Nebius.StreamCompletion(ctx, blueMessages, nil)
+		a.TotalPromptTokens += bpTok
+		a.TotalCompletionTokens += bcTok
 		if err != nil {
 			return results, false, err
 		}
