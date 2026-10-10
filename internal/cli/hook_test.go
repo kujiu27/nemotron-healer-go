@@ -152,4 +152,22 @@ func TestHookCmd_JSONPure(t *testing.T) {
 	if resUninstall.Status != "uninstalled" || !resUninstall.Success {
 		t.Errorf("unexpected hook uninstall payload: %+v", resUninstall)
 	}
+
+	// Test hook run --json with passing dummy test command
+	dummyGo := filepath.Join(tmpDir, "dummy_test.go")
+	_ = os.WriteFile(dummyGo, []byte("package dummy\n"), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module dummy\n\ngo 1.22\n"), 0644)
+	outRun := captureStdout(func() {
+		_ = hookRunCmd.RunE(hookRunCmd, []string{tmpDir})
+	})
+	var resRun struct {
+		Status  string `json:"status"`
+		Success bool   `json:"success"`
+	}
+	if err := json.Unmarshal([]byte(outRun), &resRun); err != nil {
+		t.Fatalf("hook run --json stdout not pure JSON: %v, raw:\n%s", err, outRun)
+	}
+	if resRun.Status != "passed" || !resRun.Success {
+		t.Errorf("unexpected hook run payload: %+v", resRun)
+	}
 }
