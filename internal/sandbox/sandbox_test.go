@@ -197,6 +197,29 @@ func TestWorktreeSandbox_DirtyWorkspaceSync(t *testing.T) {
 	}
 }
 
+func TestCopyFile_PreservesPermissions(t *testing.T) {
+	tmpDir := t.TempDir()
+	src := filepath.Join(tmpDir, "script.sh")
+	dst := filepath.Join(tmpDir, "script_copy.sh")
+
+	_ = os.WriteFile(src, []byte("#!/bin/sh\necho ok\n"), 0755)
+	if err := copyFile(src, dst); err != nil {
+		t.Fatalf("copyFile failed: %v", err)
+	}
+
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dstInfo, err := os.Stat(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dstInfo.Mode().Perm() != srcInfo.Mode().Perm() {
+		t.Errorf("expected permission %v, got %v", srcInfo.Mode().Perm(), dstInfo.Mode().Perm())
+	}
+}
+
 func TestRollbackRemovesFilesCreatedAfterCheckpoint(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "rollback_test_*")
 	if err != nil {

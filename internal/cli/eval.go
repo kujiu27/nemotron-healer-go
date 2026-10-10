@@ -429,6 +429,11 @@ func createIsolatedSandbox(srcRelPath string) (string, error) {
 }
 
 func copyFileDirect(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -441,8 +446,10 @@ func copyFileDirect(src, dst string) error {
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, in)
-	return err
+	if _, err = io.Copy(out, in); err != nil {
+		return err
+	}
+	return os.Chmod(dst, info.Mode().Perm())
 }
 
 func init() {
