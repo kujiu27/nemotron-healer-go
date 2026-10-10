@@ -21,6 +21,10 @@ func DetectTestCommand(workDir string) (command string, ecosystem string, err er
 	if fileExists(filepath.Join(absWorkDir, "go.mod")) {
 		return "go test ./...", "Go (go.mod)", nil
 	}
+	if hasGoTestFiles(absWorkDir) {
+		return "go test .", "Go (Package / Tests)", nil
+	}
+
 
 	// 2. Python Ecosystem
 	pyMarkers := []string{"pytest.ini", "pyproject.toml", "setup.cfg", "requirements.txt", "Pipfile"}
@@ -125,6 +129,20 @@ func hasPythonTestFiles(dir string) bool {
 			return true
 		}
 		if e.IsDir() && (name == "tests" || name == "test") {
+			return true
+		}
+	}
+	return false
+}
+
+func hasGoTestFiles(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() && strings.HasSuffix(name, "_test.go") {
 			return true
 		}
 	}
