@@ -19,10 +19,13 @@ var (
 func BuildGroundingQuery(workDir, targetFile string, archetype ArchetypeAnalysis, lastError string) string {
 	ext := filepath.Ext(targetFile)
 	lang := "python"
-	if ext == ".go" {
+	switch ext {
+	case ".go":
 		lang = "go"
-	} else if ext == ".ts" || ext == ".js" {
+	case ".ts", ".js", ".tsx", ".jsx":
 		lang = "typescript"
+	case ".rs":
+		lang = "rust"
 	}
 
 	lowerErr := strings.ToLower(lastError)
@@ -55,20 +58,34 @@ func BuildGroundingQuery(workDir, targetFile string, archetype ArchetypeAnalysis
 
 	// 3. Concurrency / Deadlock
 	if archetype.Archetype == ArchetypeConcurrencyRace || deadlockRegex.MatchString(lastError) {
-		if lang == "go" {
+		switch lang {
+		case "go":
 			return "go sync.Mutex RWMutex prevent race condition deadlock"
+		case "rust":
+			return "rust Arc Mutex RwLock tokio prevent race condition deadlock"
+		case "typescript":
+			return "typescript mutex concurrency promise deadlock race condition"
+		default:
+			return fmt.Sprintf("%s asyncio task reentrant lock prevent deadlock race condition", lang)
 		}
-		return fmt.Sprintf("%s asyncio task reentrant lock prevent deadlock race condition", lang)
 	}
 
 	// 4. Null / NoneType / AttributeError
 	if m := attributeErrRegex.FindStringSubmatch(lastError); len(m) > 2 {
 		return fmt.Sprintf("%s fix AttributeError no attribute %s", lang, m[2])
 	}
-	if strings.Contains(lowerErr, "nonetype") || strings.Contains(lowerErr, "nil pointer") {
-		return fmt.Sprintf("%s handle NoneType optional attribute defensive check", lang)
+	if strings.Contains(lowerErr, "cannot read properties of undefined") || strings.Contains(lowerErr, "cannot read property of undefined") {
+		return "typescript fix cannot read properties of undefined optional chaining"
 	}
-
+	if strings.Contains(lowerErr, "unwrap() on a none value") || strings.Contains(lowerErr, "called `option::unwrap()`") {
+		return "rust Option unwrap None value handle match if let"
+	}
+	if strings.Contains(lowerErr, "nil pointer") {
+		return "go fix nil pointer dereference guard check"
+	}
+	if strings.Contains(lowerErr, "nonetype") {
+		return "python handle NoneType optional attribute defensive check"
+	}
 	// 5. Interface breaking API change
 	if archetype.Archetype == ArchetypeInterfaceBreaking {
 		cleanBase := filepath.Base(targetFile)
@@ -105,6 +122,7 @@ func detectLibraryVersion(workDir, lastError string) string {
 		filepath.Join(workDir, "requirements.txt"),
 		filepath.Join(workDir, "go.mod"),
 		filepath.Join(workDir, "package.json"),
+		filepath.Join(workDir, "Cargo.toml"),
 	}
 
 	for _, m := range manifests {
