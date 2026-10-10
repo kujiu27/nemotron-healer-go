@@ -113,39 +113,88 @@ var hookRunCmd = &cobra.Command{
 
 		testCmd, eco, err := engine.DetectTestCommand(absDir)
 		if err != nil {
+			if jsonFlag {
+				payload := map[string]interface{}{
+					"status":  "skipped",
+					"reason":  "no test command detected",
+					"success": true,
+				}
+				data, _ := json.MarshalIndent(payload, "", "  ")
+				fmt.Println(string(data))
+				return nil
+			}
 			fmt.Printf("⚠️ No test command detected in %s; skipping pre-push check.\n", absDir)
 			return nil
 		}
 
-		fmt.Printf("⚡ [Nemotron-Healer Hook] Running %s check: `%s`...\n", eco, testCmd)
+		humanOut := os.Stdout
+		humanErr := os.Stderr
+		if jsonFlag {
+			humanOut = os.Stderr
+		}
+
+		fmt.Fprintf(humanErr, "⚡ [Nemotron-Healer Hook] Running %s check: `%s`...\n", eco, testCmd)
 		c := exec.Command("sh", "-c", testCmd)
 		c.Dir = absDir
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stderr
+		c.Stdout = humanOut
+		c.Stderr = humanErr
 		if err := c.Run(); err != nil {
-			fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5555")).Render(
-				"\n❌ Pre-push verification test failed! Push blocked."))
-
 			if autoHealFlag {
-				fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render(
+				fmt.Fprintln(humanErr, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render(
 					"⚡ [Shift-Left Autonomous Self-Healing] Launching in-situ repair before push..."))
 				agent := engine.NewAgent(absDir, testCmd, 3, func(event engine.HealingStepEvent) {
-					fmt.Printf("[%s] %s\n", event.State, event.Summary)
+					fmt.Fprintf(humanErr, "[%s] %s\n", event.State, event.Summary)
 				}, nil)
 				session, hErr := agent.Run(context.Background())
 				if hErr == nil && session.IsResolved {
+					if jsonFlag {
+						payload := map[string]interface{}{
+							"status":           "healed",
+							"success":          true,
+							"duration_seconds": session.DurationSeconds,
+							"session_id":       session.SessionID,
+						}
+						data, _ := json.MarshalIndent(payload, "", "  ")
+						fmt.Println(string(data))
+						return fmt.Errorf("pre-push regression intercepted and healed autonomously; review fix branch before pushing")
+					}
 					fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render(
 						fmt.Sprintf("🎉 Shift-Left Self-Healing SUCCEEDED in %.2fs! Verified fix branch created.", session.DurationSeconds)))
 					return fmt.Errorf("pre-push regression intercepted and healed autonomously; review fix branch before pushing")
 				}
-				fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")).Render(
+				fmt.Fprintln(humanErr, lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")).Render(
 					"⚠️ Autonomous repair did not achieve verified pass."))
-			} else {
+			}
+
+			if jsonFlag {
+				payload := map[string]interface{}{
+					"status":  "failed",
+					"success": false,
+					"command": testCmd,
+				}
+				data, _ := json.MarshalIndent(payload, "", "  ")
+				fmt.Println(string(data))
+				return fmt.Errorf("pre-push verification test failed; push blocked")
+			}
+			fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5555")).Render(
+				"\n❌ Pre-push verification test failed! Push blocked."))
+			if !autoHealFlag {
 				fmt.Println("💡 Run `nemotron-healer` (or install hook with `--auto-heal`) to autonomously repair this repository before pushing.")
 			}
 			return fmt.Errorf("pre-push verification test failed; push blocked")
 		}
 
+		if jsonFlag {
+			payload := map[string]interface{}{
+				"status":    "passed",
+				"success":   true,
+				"command":   testCmd,
+				"ecosystem": eco,
+			}
+			data, _ := json.MarshalIndent(payload, "", "  ")
+			fmt.Println(string(data))
+			return nil
+		}
 		fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("✅ Pre-push verification passed."))
 		return nil
 	},
