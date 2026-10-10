@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kujiu27/nemotron-healer-go/internal/engine"
 	"github.com/spf13/cobra"
+	"encoding/json"
 )
 var autoHealFlag bool
 
@@ -43,6 +44,16 @@ var hookInstallCmd = &cobra.Command{
 		if autoHealFlag {
 			modeMsg = "Broken commits will be intercepted and autonomously self-healed in-situ prior to `git push`."
 		}
+		if jsonFlag {
+			payload := map[string]interface{}{
+				"status":    "installed",
+				"hook_path": hookPath,
+				"auto_heal": autoHealFlag,
+			}
+			data, _ := json.MarshalIndent(payload, "", "  ")
+			fmt.Println(string(data))
+			return nil
+		}
 		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render(
 			fmt.Sprintf("✅ Shift-Left Git Hook successfully installed at `%s`", hookPath)))
 		fmt.Println(modeMsg)
@@ -69,6 +80,16 @@ var hookUninstallCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonFlag {
+			payload := map[string]interface{}{
+				"status":  "uninstalled",
+				"target":  absDir,
+				"success": true,
+			}
+			data, _ := json.MarshalIndent(payload, "", "  ")
+			fmt.Println(string(data))
+			return nil
+		}
 		fmt.Println("✅ Shift-Left Git Hook successfully uninstalled.")
 		return nil
 	},
