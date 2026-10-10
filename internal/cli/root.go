@@ -21,7 +21,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.5"
+var Version = "v0.7.6"
 
 var (
 	testCmdFlag    string
@@ -34,6 +34,7 @@ var (
 	jsonFlag       bool
 	autoAcceptFlag bool
 	mockFlag       bool
+	mockCleanupFunc func()
 )
 
 func initMockServerIfEnabled() func() {
@@ -75,8 +76,6 @@ var RootCmd = &cobra.Command{
 			human = os.Stderr
 		}
 
-		cleanupMock := initMockServerIfEnabled()
-		defer cleanupMock()
 		if mockFlag && !jsonFlag {
 			fmt.Fprintln(human, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFB86C")).Render("⚡ Running in offline MOCK mode (X-Nemotron-Healer: MOCK) — zero API keys required"))
 		}
@@ -185,8 +184,6 @@ var doctorCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cleanupMock := initMockServerIfEnabled()
-		defer cleanupMock()
 
 		fmt.Println(lipgloss.NewStyle().Bold(true).Render("Nemotron Healer Environment Check (Go Runtime)"))
 		fmt.Println("--------------------------------------------------")
@@ -290,6 +287,16 @@ var versionCmd = &cobra.Command{
 }
 
 func init() {
+	RootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		mockCleanupFunc = initMockServerIfEnabled()
+		return nil
+	}
+	RootCmd.PersistentPostRun = func(cmd *cobra.Command, args []string) {
+		if mockCleanupFunc != nil {
+			mockCleanupFunc()
+		}
+	}
+
 	RootCmd.PersistentFlags().StringVarP(&testCmdFlag, "command", "c", "", "Test command to run (default: auto-detected from ecosystem: go test, pytest, npm test, cargo test, make test)")
 	RootCmd.PersistentFlags().IntVarP(&turnsFlag, "turns", "t", 5, "Maximum healing attempts")
 	RootCmd.PersistentFlags().BoolVar(&noTUIFlag, "no-tui", false, "Disable TUI and output plain text (for CI / GitHub Actions)")

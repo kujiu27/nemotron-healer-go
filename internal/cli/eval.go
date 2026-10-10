@@ -35,10 +35,18 @@ var (
 )
 
 var evalCmd = &cobra.Command{
-	Use:   "eval",
-	Short: "Run the in-repo Autonomous Healer Benchmark (AHB-9) with sandboxed isolation, A/B ablation, and repeat runs",
+	Use:          "eval",
+	Short:        "Run the in-repo Autonomous Healer Benchmark (AHB-9) with sandboxed isolation, A/B ablation, and repeat runs",
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if os.Getenv("NEBIUS_API_KEY") == "" && !mockFlag {
+			return fmt.Errorf("NEBIUS_API_KEY is not set. Export your key: export NEBIUS_API_KEY=\"...\" (tokenfactory.nebius.com) or pass --mock for offline benchmark verification")
+		}
+
 		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ AHB-9 In-Repo Benchmark & Ablation Engine"))
+		if mockFlag {
+			fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFB86C")).Render("⚡ Running benchmark in offline MOCK mode (X-Nemotron-Healer: MOCK) — zero API keys required"))
+		}
 		fmt.Printf("Repeats per case: %d\n\n", max(1, repeatFlag))
 		fmt.Println("Grounded against Concurrency, API Breaking Migrations, and Re-entrancy Traps")
 		fmt.Println()
