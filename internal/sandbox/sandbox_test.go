@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -141,6 +142,58 @@ func TestWorktreeSandbox(t *testing.T) {
 	}
 	if _, err := os.Stat(wt.WorkDir); !os.IsNotExist(err) {
 		t.Fatalf("worktree directory still exists after cleanup: %s", wt.WorkDir)
+	}
+}
+
+func TestWorktreeSandbox_DirtyWorkspaceSync(t *testing.T) {
+	tmpDir := t.TempDir()
+	cm := NewCheckpointManager(tmpDir)
+	if err := cm.EnsureGitContext(); err != nil {
+		t.Fatalf("failed to init git: %v", err)
+	}
+
+	// 1. Create a committed baseline file
+	baseFile := filepath.Join(tmpDir, "tracked.txt")
+	_ = os.WriteFile(baseFile, []byte("v1"), 0644)
+	cAdd := exec.Command("git", "add", "tracked.txt")
+	cAdd.Dir = tmpDir
+	_ = cAdd.Run()
+	cCommit := exec.Command("git", "commit", "-m", "init tracked")
+	cCommit.Dir = tmpDir
+	_ = cCommit.Run()
+
+	// 2. Introduce UNCOMMITTED modification
+	_ = os.WriteFile(baseFile, []byte("v2-uncommitted"), 0644)
+
+	// 3. Introduce UNTRACKED new file
+	untrackedFile := filepath.Join(tmpDir, "new_untracked.txt")
+	_ = os.WriteFile(untrackedFile, []byte("fresh-code"), 0644)
+
+	// 4. Launch WorktreeSandbox
+	wt, err := NewWorktreeSandbox(tmpDir, "test_sync")
+	if err != nil {
+		t.Fatalf("failed to create worktree: %v", err)
+	}
+	defer wt.Cleanup()
+
+	// 5. Verify that uncommitted modification is present in the worktree
+	wtTracked := filepath.Join(wt.WorkDir, "tracked.txt")
+	contentTracked, err := os.ReadFile(wtTracked)
+	if err != nil {
+		t.Fatalf("could not read tracked file in worktree: %v", err)
+	}
+	if string(contentTracked) != "v2-uncommitted" {
+		t.Errorf("expected worktree to reflect uncommitted change 'v2-uncommitted', got: %s", string(contentTracked))
+	}
+
+	// 6. Verify that untracked new file is present in the worktree
+	wtUntracked := filepath.Join(wt.WorkDir, "new_untracked.txt")
+	contentUntracked, err := os.ReadFile(wtUntracked)
+	if err != nil {
+		t.Fatalf("could not read untracked file in worktree: %v", err)
+	}
+	if string(contentUntracked) != "fresh-code" {
+		t.Errorf("expected worktree to reflect untracked file 'fresh-code', got: %s", string(contentUntracked))
 	}
 }
 
