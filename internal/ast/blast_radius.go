@@ -95,7 +95,10 @@ func (g *CodeGraph) BuildGraph() error {
 		}
 		slashRel := filepath.ToSlash(rel)
 		if (strings.HasPrefix(slashRel, ".") && slashRel != ".") || strings.Contains(slashRel, "/.") ||
-			strings.Contains(slashRel, "venv") || strings.Contains(slashRel, "node_modules") {
+			strings.Contains(slashRel, "venv") || strings.Contains(slashRel, "node_modules") ||
+			strings.HasPrefix(slashRel, "target/") || slashRel == "target" || strings.Contains(slashRel, "/target/") ||
+			strings.HasPrefix(slashRel, "dist/") || slashRel == "dist" || strings.Contains(slashRel, "/dist/") ||
+			strings.HasPrefix(slashRel, "build/") || slashRel == "build" || strings.Contains(slashRel, "/build/") {
 			if info.IsDir() {
 				return filepath.SkipDir
 			}

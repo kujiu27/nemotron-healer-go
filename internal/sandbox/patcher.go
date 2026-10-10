@@ -67,6 +67,19 @@ func PreFlightSyntaxCheck(workDir, relFilePath string) (bool, string) {
 				return false, fmt.Sprintf("JavaScript Syntax Error in %s: %s", relFilePath, strings.TrimSpace(errBuf.String()))
 			}
 		}
+	case ".rs":
+		if _, lookErr := exec.LookPath("rustc"); lookErr == nil {
+			tmpDir, err := os.MkdirTemp("", "nh-rustc-check-*")
+			if err == nil {
+				defer os.RemoveAll(tmpDir)
+				cmd := exec.Command("rustc", "--crate-type=lib", "--emit=metadata", "--out-dir", tmpDir, fullPath)
+				var errBuf bytes.Buffer
+				cmd.Stderr = &errBuf
+				if rErr := cmd.Run(); rErr != nil {
+					return false, fmt.Sprintf("Rust Syntax Error in %s: %s", relFilePath, strings.TrimSpace(errBuf.String()))
+				}
+			}
+		}
 	}
 	return true, ""
 }

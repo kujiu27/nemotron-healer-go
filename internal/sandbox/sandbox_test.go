@@ -440,6 +440,27 @@ func TestPreFlightSyntaxCheck(t *testing.T) {
 	if !strings.Contains(badJSONMsg, "JSON Syntax Error") {
 		t.Fatalf("expected JSON Syntax Error message, got: %s", badJSONMsg)
 	}
+
+	// 7. Valid Rust code
+	validRs := filepath.Join(tmpDir, "valid.rs")
+	_ = os.WriteFile(validRs, []byte("pub fn add(a: i32, b: i32) -> i32 { a + b }\n"), 0644)
+	okRs, msgRs := PreFlightSyntaxCheck(tmpDir, "valid.rs")
+	if !okRs {
+		t.Fatalf("expected valid Rust to pass, got: %s", msgRs)
+	}
+
+	// 8. Malformed Rust code (if rustc available)
+	if _, err := exec.LookPath("rustc"); err == nil {
+		badRs := filepath.Join(tmpDir, "bad.rs")
+		_ = os.WriteFile(badRs, []byte("pub fn add(a: i32, b: i32 -> i32 {\n"), 0644)
+		badRsOK, badRsMsg := PreFlightSyntaxCheck(tmpDir, "bad.rs")
+		if badRsOK {
+			t.Fatalf("expected malformed Rust to fail syntax check")
+		}
+		if !strings.Contains(badRsMsg, "Rust Syntax Error") {
+			t.Fatalf("expected Rust Syntax Error, got: %s", badRsMsg)
+		}
+	}
 }
 
 func TestPreFlightSyntaxCheckFiles(t *testing.T) {
