@@ -42,10 +42,14 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 
 	loc := ResolveTargetLocation(a.WorkDir, initialFailingOutput, a.CodeGraph)
 	targetHint := loc.FilePath
+	a.Session.TargetFile = loc.FilePath
+	a.Session.TargetLine = loc.LineNum
+	a.Session.TargetSymbol = loc.Symbol
 	targetSym := loc.Symbol
 	codeCtx := a.collectSourceContext(targetHint)
 	blastReport := a.CodeGraph.AnalyzeBlastRadius(targetHint, targetSym)
 	archetype := ClassifyDefect(initialFailingOutput, codeCtx)
+	a.Session.DefectArchetype = string(archetype.Archetype)
 
 	docsCtx := ""
 	if !a.DisableGrounding {

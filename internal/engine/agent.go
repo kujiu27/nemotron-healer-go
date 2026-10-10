@@ -256,6 +256,9 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		// 2. Resolve Target Location & Compute AST Blast Radius
 		loc := ResolveTargetLocation(a.WorkDir, a.Session.LastError, a.CodeGraph)
 		targetHint := loc.FilePath
+		a.Session.TargetFile = loc.FilePath
+		a.Session.TargetLine = loc.LineNum
+		a.Session.TargetSymbol = loc.Symbol
 		codeCtx := a.collectSourceContext(targetHint)
 		blastReport := a.CodeGraph.AnalyzeBlastRadius(targetHint, loc.Symbol)
 		a.notify(StateDiagnosing, fmt.Sprintf("Computed AST Blast Radius for `%s` (file: `%s`): %d affected files, %d callers (Risk Score: %.2f)",
@@ -265,6 +268,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 
 		// 3. Deterministic Defect Archetype Classification (Rule Engine)
 		archetype := ClassifyDefect(a.Session.LastError, codeCtx)
+		a.Session.DefectArchetype = string(archetype.Archetype)
 		a.notify(StateDiagnosing, fmt.Sprintf("Archetype Rule Engine: Classified as [%s] (%s) - %s",
 			archetype.Archetype, archetype.Severity, archetype.Description), map[string]interface{}{
 			"archetype": archetype,
