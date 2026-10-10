@@ -339,6 +339,14 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		if err != nil || patchSug == nil || patchSug.DiffPatch == "" {
 			a.notify(StateFailed, fmt.Sprintf("Turn %d: Nemotron error: %v (patchSug is nil: %v)", turn, err, patchSug == nil), nil)
 			_ = a.Checkpointer.Rollback(cpID)
+
+			if isAuthError(err) {
+				a.notify(StateFailed, fmt.Sprintf("Unrecoverable authentication error on Turn %d (%v). Aborting healing loop: please set NEBIUS_API_KEY or use --mock.", turn, err), nil)
+				a.Session.IsResolved = false
+				a.Session.DurationSeconds = time.Since(startTime).Seconds()
+				return a.Session, fmt.Errorf("nebius authentication failed: %w", err)
+			}
+
 			continue
 		}
 
@@ -648,4 +656,17 @@ func (a *Agent) finalizeSuccessfulHealing(
 	})
 
 	return branchName
+}
+
+func isAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "401") ||
+		strings.Contains(msg, "403") ||
+		strings.Contains(msg, "unauthorized") ||
+		strings.Contains(msg, "forbidden") ||
+		strings.Contains(msg, "couldn't authenticate") ||
+		strings.Contains(msg, "token is not present")
 }
