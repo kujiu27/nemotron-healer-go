@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math/rand/v2"
 	"fmt"
 	"net/http"
 	"os"
@@ -83,13 +84,16 @@ func (t *TavilyClient) Search(ctx context.Context, query string, maxResults int)
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", t.BaseURL+"/search", bytes.NewReader(data))
-	if err != nil {
-		return nil, err
+	newReq := func() (*http.Request, error) {
+		r, err := http.NewRequestWithContext(ctx, "POST", t.BaseURL+"/search", bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		r.Header.Set("Content-Type", "application/json")
+		return r, nil
 	}
-	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := t.HTTP.Do(req)
+	resp, err := t.executeWithRetry(ctx, newReq)
 	if err != nil {
 		return nil, err
 	}
@@ -138,12 +142,16 @@ func (t *TavilyClient) Extract(ctx context.Context, url string) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, "POST", t.BaseURL+"/extract", bytes.NewReader(data))
-	if err != nil {
-		return "", err
+	newReq := func() (*http.Request, error) {
+		r, err := http.NewRequestWithContext(ctx, "POST", t.BaseURL+"/extract", bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		r.Header.Set("Content-Type", "application/json")
+		return r, nil
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := t.HTTP.Do(req)
+
+	resp, err := t.executeWithRetry(ctx, newReq)
 	if err != nil {
 		return "", err
 	}
@@ -177,4 +185,66 @@ func (t *TavilyClient) FormatContext(resp *TavilySearchResponse) string {
 		sb.WriteString(fmt.Sprintf("[%d] %s (%s)\n%s\n\n", i+1, r.Title, r.URL, r.Content))
 	}
 	return sb.String()
+}
+
+// executeWithRetry wraps HTTP requests with exponential backoff and jitter for transient errors (429, 5xx)
+func (t *TavilyClient) executeWithRetry(ctx context.Context, createReq func() (*http.Request, error)) (*http.Response, error) {
+	maxRetries := 3
+	baseDelay := 100 * time.Millisecond
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		req, err := createReq()
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := t.HTTP.Do(req)
+		if err != nil {
+			if attempt == maxRetries || ctx.Err() != nil {
+				return nil, err
+			}
+		} else if resp.StatusCode == http.StatusOK {
+			return resp, nil
+		} else if resp.StatusCode == http.StatusTooManyRequests ||
+			resp.StatusCode == http.StatusBadGateway ||
+			resp.StatusCode == http.StatusServiceUnavailable ||
+			resp.StatusCode == http.StatusGatewayTimeout ||
+			resp.StatusCode == http.StatusInternalServerError {
+
+			if attempt == maxRetries || ctx.Err() != nil {
+				return resp, nil
+			}
+
+			retrySec := 0
+			if ra := resp.Header.Get("Retry-After"); ra != "" {
+				fmt.Sscanf(ra, "%d", &retrySec)
+			}
+			resp.Body.Close()
+
+			var backoff time.Duration
+			if retrySec > 0 {
+				backoff = time.Duration(retrySec) * time.Second
+			} else {
+				multiplier := 1 << attempt
+				jitter := time.Duration(rand.IntN(100)) * time.Millisecond
+				backoff = time.Duration(multiplier)*baseDelay + jitter
+			}
+
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+			}
+			continue
+		} else {
+			return resp, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(baseDelay * time.Duration(1<<attempt)):
+		}
+	}
+	return nil, fmt.Errorf("exceeded max retries")
 }

@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"regexp"
@@ -157,7 +157,7 @@ func (c *NebiusClient) executeWithRetry(ctx context.Context, createReq func() (*
 				backoff = time.Duration(retrySec) * time.Second
 			} else {
 				multiplier := 1 << attempt
-				jitter := time.Duration(rand.Intn(250)) * time.Millisecond
+				jitter := time.Duration(rand.IntN(250)) * time.Millisecond
 				backoff = time.Duration(multiplier)*baseDelay + jitter
 			}
 
