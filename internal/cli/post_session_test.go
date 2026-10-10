@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"encoding/json"
 	"bytes"
 	"path/filepath"
 	"testing"
@@ -89,5 +90,41 @@ func TestHandlePostSession_GitHubOutput(t *testing.T) {
 		if !bytes.Contains(data, []byte(sub)) {
 			t.Errorf("expected GITHUB_OUTPUT to contain %q, got:\n%s", sub, content)
 		}
+	}
+}
+
+func TestHandlePostSession_JSONPurityIncludesBranchName(t *testing.T) {
+	tmpDir := t.TempDir()
+	origJSON := jsonFlag
+	jsonFlag = true
+	defer func() { jsonFlag = origJSON }()
+
+	session := &engine.HealingSession{
+		SessionID:       "sess-777",
+		BranchName:      "fix/nemotron-heal-sess-777",
+		IsResolved:      true,
+		DurationSeconds: 1.0,
+		CurrentTurn:     1,
+		MaxTurns:        1,
+	}
+
+	agent := &engine.Agent{
+		Nebius: &client.NebiusClient{Model: "nvidia/Nemotron-3-Ultra-550b-a55b"},
+	}
+
+	var humanBuf bytes.Buffer
+	out := captureStdout(func() {
+		_ = handlePostSession(session, agent, tmpDir, "main", &humanBuf)
+	})
+
+	var res struct {
+		BranchName string `json:"branch_name"`
+		IsResolved bool   `json:"is_resolved"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("stdout not valid JSON: %v, raw:\n%s", err, out)
+	}
+	if res.BranchName != "fix/nemotron-heal-sess-777" {
+		t.Errorf("expected branch_name 'fix/nemotron-heal-sess-777', got %q", res.BranchName)
 	}
 }

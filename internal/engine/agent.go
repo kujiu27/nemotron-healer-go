@@ -520,6 +520,7 @@ func (a *Agent) finalizeSuccessfulHealing(
 	}
 
 	branchName := fmt.Sprintf("fix/nemotron-heal-%s", a.Session.SessionID)
+	a.Session.BranchName = branchName
 
 	var tavilyCitationTable strings.Builder
 	if !a.DisableGrounding && len(a.Session.TavilyQueries) > 0 {

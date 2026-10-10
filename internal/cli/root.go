@@ -22,7 +22,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.42"
+var Version = "v0.7.43"
 
 var (
 	testCmdFlag    string
@@ -206,8 +206,8 @@ func handlePostSession(session *engine.HealingSession, agent *engine.Agent, absD
 	// Emit GitHub Actions step outputs if running inside GitHub Actions runner
 	if outputFile := os.Getenv("GITHUB_OUTPUT"); outputFile != "" {
 		if f, oErr := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); oErr == nil {
-			branchName := ""
-			if session.IsResolved && session.SessionID != "" {
+			branchName := session.BranchName
+			if branchName == "" && session.IsResolved && session.SessionID != "" {
 				branchName = fmt.Sprintf("fix/nemotron-heal-%s", session.SessionID)
 			}
 			patchCount := len(session.AppliedPatches)
