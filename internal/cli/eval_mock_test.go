@@ -132,3 +132,49 @@ func TestEvalCmd_JSONPure(t *testing.T) {
 		t.Errorf("unexpected eval json payload: %+v", res)
 	}
 }
+
+func TestEvalCmd_StepSummaryPublishesScorecardWithoutJunk(t *testing.T) {
+	origMock := mockFlag
+	mockFlag = true
+	defer func() { mockFlag = origMock }()
+
+	cleanup := initMockServerIfEnabled()
+	defer cleanup()
+
+	origCase := caseFilterFlag
+	caseFilterFlag = "AHB-08"
+	defer func() { caseFilterFlag = origCase }()
+
+	origRepeat := repeatFlag
+	repeatFlag = 1
+	defer func() { repeatFlag = origRepeat }()
+
+	tmpDir := t.TempDir()
+	summaryFile := filepath.Join(tmpDir, "step_summary.md")
+	t.Setenv("GITHUB_STEP_SUMMARY", summaryFile)
+
+	err := evalCmd.RunE(evalCmd, []string{})
+	if err != nil {
+		t.Fatalf("evalCmd run failed: %v", err)
+	}
+
+	data, err := os.ReadFile(summaryFile)
+	if err != nil {
+		t.Fatalf("failed reading GITHUB_STEP_SUMMARY: %v", err)
+	}
+	content := string(data)
+
+	if !strings.Contains(content, "## 📊 AHB-9 Benchmark & Ablation Scorecard") {
+		t.Errorf("expected GITHUB_STEP_SUMMARY to contain scorecard header, got:\n%s", content)
+	}
+	if !strings.Contains(content, "AHB-08") {
+		t.Errorf("expected GITHUB_STEP_SUMMARY to contain AHB-08 row, got:\n%s", content)
+	}
+	// Verify NO intermediate sandbox failure/success reports polluted the summary
+	if strings.Contains(content, "## ⚡ Nemotron-Healer Failure Diagnostic Report") {
+		t.Errorf("intermediate baseline failure report leaked into GITHUB_STEP_SUMMARY:\n%s", content)
+	}
+	if strings.Contains(content, "## ⚡ Nemotron-Healer Autonomous Verification Report") {
+		t.Errorf("intermediate healing report leaked into GITHUB_STEP_SUMMARY:\n%s", content)
+	}
+}

@@ -30,7 +30,10 @@ type Agent struct {
 	// DisableGrounding turns off Tavily retrieval and archetype constraints;
 	// used as the un-grounded baseline in A/B ablation runs.
 	DisableGrounding  bool
-	lastTavilyResults []client.TavilySearchResultItem
+	// DisableStepSummary suppresses appending intermediate reports to GITHUB_STEP_SUMMARY
+	// (used during benchmark ablation and background evaluations to prevent CI summary noise).
+	DisableStepSummary bool
+	lastTavilyResults  []client.TavilySearchResultItem
 	Session           *HealingSession
 	Runner            *sandbox.Runner
 	Checkpointer      *sandbox.CheckpointManager
@@ -215,7 +218,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 - **Patches Applied**: 0
 `, a.WorkDir, a.TestCommand, a.Session.DurationSeconds)
 		a.Session.AuditReport = cleanReport
-		writeStepSummary(cleanReport)
+		a.writeStepSummary(cleanReport)
 		a.notify(StateSucceeded, "All tests pass! Repository is already clean.", map[string]interface{}{
 			"stdout": initRes.Stdout,
 		})
@@ -380,7 +383,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				a.Session.BranchName = ""
 				failReport := a.renderFailureAuditReport()
 				a.Session.AuditReport = failReport
-				writeStepSummary(failReport)
+				a.writeStepSummary(failReport)
 				return a.Session, fmt.Errorf("nebius authentication failed: %w", err)
 			}
 			continue
@@ -492,7 +495,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 	a.Session.BranchName = ""
 	failReport := a.renderFailureAuditReport()
 	a.Session.AuditReport = failReport
-	writeStepSummary(failReport)
+	a.writeStepSummary(failReport)
 	a.notify(StateFailed, fmt.Sprintf("Self-healing budget exhausted after %d turns.", a.Session.MaxTurns), nil)
 	return a.Session, nil
 }
@@ -697,7 +700,7 @@ func (a *Agent) finalizeSuccessfulHealing(
 	}
 
 	// Step Summary Hook for GitHub Actions Native CI/CD
-	writeStepSummary(auditReport)
+	a.writeStepSummary(auditReport)
 
 	turnReport := turn
 	if a.Session.CurrentTurn < turn {
@@ -732,7 +735,10 @@ func isAuthError(err error) bool {
 		strings.Contains(msg, "token is not present")
 }
 
-func writeStepSummary(report string) {
+func (a *Agent) writeStepSummary(report string) {
+	if a.DisableStepSummary {
+		return
+	}
 	if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
 		if f, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 			_, _ = f.WriteString("\n" + report + "\n")

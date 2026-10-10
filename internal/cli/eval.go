@@ -217,6 +217,7 @@ var evalCmd = &cobra.Command{
 					baseAgent := engine.NewAgent(baseDir, c.Command, 1, nil, nil)
 					baseAgent.EnableArena = false
 					baseAgent.DisableGrounding = true
+					baseAgent.DisableStepSummary = true
 					baseSession, _ := baseAgent.Run(context.Background())
 					baselinePass = baseSession.IsResolved
 				}
@@ -225,6 +226,7 @@ var evalCmd = &cobra.Command{
 				start := time.Now()
 				agent := engine.NewAgent(tmpDir, c.Command, 3, nil, nil)
 				agent.EnableArena = false // Fast verifiable evaluation
+				agent.DisableStepSummary = true
 				session, _ := agent.Run(context.Background())
 				dur := time.Since(start).Seconds()
 
@@ -333,47 +335,57 @@ var evalCmd = &cobra.Command{
 			}
 		}
 
-		if exportMDFlag != "" {
-			var mdSb strings.Builder
-			mdSb.WriteString("## 📊 AHB-9 Benchmark & Ablation Scorecard\n\n")
-			mdSb.WriteString(fmt.Sprintf("*Evaluated on %s against NVIDIA Nemotron & Nebius Token Factory*\n\n", time.Now().Format("2006-01-02 15:04:05")))
-			mdSb.WriteString("| Case ID | Benchmark Scenario | Defect Archetype | Baseline LLM | Nemotron-Healer | Turns | Run Cost |\n")
+		var mdSb strings.Builder
+		mdSb.WriteString("## 📊 AHB-9 Benchmark & Ablation Scorecard\n\n")
+		mdSb.WriteString(fmt.Sprintf("*Evaluated on %s against NVIDIA Nemotron & Nebius Token Factory*\n\n", time.Now().Format("2006-01-02 15:04:05")))
+		mdSb.WriteString("| Case ID | Benchmark Scenario | Defect Archetype | Baseline LLM | Nemotron-Healer | Turns | Run Cost |\n")
+		mdSb.WriteString("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
+		for _, r := range results {
+			bStr := "❌ FAIL"
+			if r.BaselinePass {
+				bStr = "✅ PASS"
+			}
+			fStr := "❌ FAIL"
+			if r.FullPass {
+				fStr = "✅ PASS"
+			}
+			mdSb.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %s | %d | $%.5f |\n",
+				r.CaseID, r.Name, r.Archetype, bStr, fStr, r.TurnsTaken, r.CostUSD))
+		}
+		mdSb.WriteString(fmt.Sprintf("\n- **Baseline Solve Rate**: %.1f%%\n", baseRate))
+		mdSb.WriteString(fmt.Sprintf("- **Nemotron-Healer Solve Rate**: **%.1f%%**\n", fullRate))
+		mdSb.WriteString(fmt.Sprintf("- **Empirical Grounding Delta**: **+%.1f%% Accuracy Lift**\n", delta))
+		if totalRuns > 1 {
+			mdSb.WriteString("\n### Per-Case Statistics across repeats (mean ± population std)\n\n")
+			mdSb.WriteString("| Case ID | Baseline | Full System | Turns | Duration (s) | Tokens | Cost ($) |\n")
 			mdSb.WriteString("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
-			for _, r := range results {
-				bStr := "❌ FAIL"
-				if r.BaselinePass {
-					bStr = "✅ PASS"
-				}
-				fStr := "❌ FAIL"
-				if r.FullPass {
-					fStr = "✅ PASS"
-				}
-				mdSb.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %s | %d | $%.5f |\n",
-					r.CaseID, r.Name, r.Archetype, bStr, fStr, r.TurnsTaken, r.CostUSD))
+			for _, s := range perCase {
+				mdSb.WriteString(fmt.Sprintf("| %s | %d/%d | %d/%d | %.1f ± %.1f | %.1f ± %.1f | %.0f ± %.0f | %.5f ± %.5f |\n",
+					s.CaseID, s.BaselineWins, s.Repeats, s.FullWins, s.Repeats,
+					s.TurnsMean, s.TurnsStd, s.DurationMean, s.DurationStd,
+					s.TokensMean, s.TokensStd, s.CostMean, s.CostStd))
 			}
-			mdSb.WriteString(fmt.Sprintf("\n- **Baseline Solve Rate**: %.1f%%\n", baseRate))
-			mdSb.WriteString(fmt.Sprintf("- **Nemotron-Healer Solve Rate**: **%.1f%%**\n", fullRate))
-			mdSb.WriteString(fmt.Sprintf("- **Empirical Grounding Delta**: **+%.1f%% Accuracy Lift**\n", delta))
-			if totalRuns > 1 {
-				mdSb.WriteString("\n### Per-Case Statistics across repeats (mean ± population std)\n\n")
-				mdSb.WriteString("| Case ID | Baseline | Full System | Turns | Duration (s) | Tokens | Cost ($) |\n")
-				mdSb.WriteString("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
-				for _, s := range perCase {
-					mdSb.WriteString(fmt.Sprintf("| %s | %d/%d | %d/%d | %.1f ± %.1f | %.1f ± %.1f | %.0f ± %.0f | %.5f ± %.5f |\n",
-						s.CaseID, s.BaselineWins, s.Repeats, s.FullWins, s.Repeats,
-						s.TurnsMean, s.TurnsStd, s.DurationMean, s.DurationStd,
-						s.TokensMean, s.TokensStd, s.CostMean, s.CostStd))
-				}
-			}
+		}
+
+		scorecardMD := mdSb.String()
+		if exportMDFlag != "" {
 			if dir := filepath.Dir(exportMDFlag); dir != "" && dir != "." {
 				if err := os.MkdirAll(dir, 0755); err != nil {
 					return fmt.Errorf("failed to create directory for export Markdown %q: %w", exportMDFlag, err)
 				}
 			}
-			if wErr := os.WriteFile(exportMDFlag, []byte(mdSb.String()), 0644); wErr != nil {
+			if wErr := os.WriteFile(exportMDFlag, []byte(scorecardMD), 0644); wErr != nil {
 				return fmt.Errorf("export Markdown write failed: %w", wErr)
 			}
 			fmt.Printf("📝 Exported benchmark ablation Markdown scorecard to `%s`\n", exportMDFlag)
+		}
+
+		// Publish scorecard to GitHub Actions Step Summary if in CI runner
+		if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
+			if f, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+				_, _ = f.WriteString("\n" + scorecardMD + "\n")
+				_ = f.Close()
+			}
 		}
 
 		return nil
