@@ -72,6 +72,12 @@ Pre-compiled binaries are attached to [Releases](https://github.com/kujiu27/nemo
 (auto-published by CI on every `v*` tag push). The Windows build is provided
 for use inside a POSIX shell (Git Bash / WSL); the healer executes test
 commands via `sh -c`.
+### 0. 60-Second Demo (Zero API keys required)
+```bash
+make demo   # or: bash demo/run_pitch_demo.sh
+```
+Auto-detects environment: runs live cloud heal if keys are exported, or launches the built-in mock server offline if keys are absent. Auto-detects Python pytest vs pure Go.
+
 
 ### 2. Verify Environment
 ```bash
@@ -94,7 +100,7 @@ nemotron-healer samples/external_gjson --mock --command "go test . -run TestEmpt
 ### 4. Use as a GitHub Action
 ```yaml
 - name: Autonomous Self-Healing CI
-  uses: kujiu27/nemotron-healer-go@v0.7.6
+  uses: kujiu27/nemotron-healer-go@v0.7.7
   with:
     path: .                    # directory to heal (default: repo root)
     command: go test ./...     # the failing test command

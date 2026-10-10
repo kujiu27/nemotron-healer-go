@@ -21,7 +21,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.6"
+var Version = "v0.7.7"
 
 var (
 	testCmdFlag    string
@@ -59,6 +59,7 @@ var RootCmd = &cobra.Command{
 	Use:   "nemotron-healer [target_dir]",
 	Short: "Autonomous Code Self-Healing & Diagnostic Agent powered by NVIDIA Nemotron on Nebius Token Factory & Tavily Search",
 	SilenceUsage: true,
+	SilenceErrors: true,
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		targetDir := "."

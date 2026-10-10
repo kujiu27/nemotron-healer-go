@@ -79,3 +79,19 @@ func TestMockServer_Endpoints(t *testing.T) {
 		t.Errorf("expected raw_content in extract response, got %s", string(body))
 	}
 }
+
+func TestMockServer_CascadeDispatch(t *testing.T) {
+	server := StartServer()
+	defer server.Close()
+
+	cascadeBody := []byte(`{"messages":[{"role":"user","content":"fix deadlock in service.py BankingService"}],"stream":false}`)
+	resp, err := http.Post(server.URL+"/v1/chat/completions", "application/json", bytes.NewReader(cascadeBody))
+	if err != nil {
+		t.Fatalf("POST /chat/completions for cascade failed: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "--- a/service.py") || !strings.Contains(string(body), "async with self.engine.lock:") {
+		t.Errorf("expected service.py patch for cascade, got %s", string(body))
+	}
+}
