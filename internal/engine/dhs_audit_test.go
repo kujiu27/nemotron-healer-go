@@ -45,6 +45,11 @@ func TestFinalizeSuccessfulHealing_AuditParity(t *testing.T) {
 		TransitiveDependents: []string{"main"},
 		RiskScore:            0.25,
 	}
+	agent.Session.TavilyQueries = []string{"gjson empty string query"}
+	agent.Session.TavilyAnswer = "GJSON path syntax supports empty string queries via the array operator."
+	agent.Session.TavilyExtractURL = "https://github.com/tidwall/gjson"
+	agent.Session.TavilyExtractBytes = 1845
+
 
 	branchName := agent.finalizeSuccessfulHealing(
 		"main.go",
@@ -108,6 +113,15 @@ func TestFinalizeSuccessfulHealing_AuditParity(t *testing.T) {
 	}
 	if !strings.Contains(auditContent, agent.Session.PatchDigest) {
 		t.Errorf("HEAL_AUDIT_REPORT.md missing patch digest: %s", auditContent)
+	}
+	if !strings.Contains(auditContent, "Tavily AI Synthesized Summary") {
+		t.Errorf("HEAL_AUDIT_REPORT.md missing Tavily AI Synthesized Summary: %s", auditContent)
+	}
+	if !strings.Contains(auditContent, "Tavily Extract API (Deep Full-Text Grounding)") {
+		t.Errorf("HEAL_AUDIT_REPORT.md missing Tavily Extract API section: %s", auditContent)
+	}
+	if !strings.Contains(auditContent, "1845 bytes") {
+		t.Errorf("HEAL_AUDIT_REPORT.md missing 1845 bytes metric: %s", auditContent)
 	}
 }
 
