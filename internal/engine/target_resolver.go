@@ -145,5 +145,32 @@ func ResolveTargetLocation(workDir string, errorTrace string, graph *ast.CodeGra
 		return TargetLocation{FilePath: sortedFiles[0]}
 	}
 
+	// Ecosystem-aware default fallback
+	if _, err := os.Stat(filepath.Join(absWorkDir, "go.mod")); err == nil {
+		if _, err := os.Stat(filepath.Join(absWorkDir, "main.go")); err == nil {
+			return TargetLocation{FilePath: "main.go"}
+		}
+		if matches, _ := filepath.Glob(filepath.Join(absWorkDir, "*.go")); len(matches) > 0 {
+			for _, m := range matches {
+				base := filepath.Base(m)
+				if !isTestFile(base) {
+					return TargetLocation{FilePath: base}
+				}
+			}
+		}
+		return TargetLocation{FilePath: "main.go"}
+	}
+	if _, err := os.Stat(filepath.Join(absWorkDir, "package.json")); err == nil {
+		for _, cand := range []string{"index.ts", "index.js", "src/index.ts", "src/index.js"} {
+			if _, err := os.Stat(filepath.Join(absWorkDir, cand)); err == nil {
+				return TargetLocation{FilePath: cand}
+			}
+		}
+		return TargetLocation{FilePath: "index.ts"}
+	}
+	if _, err := os.Stat(filepath.Join(absWorkDir, "Cargo.toml")); err == nil {
+		return TargetLocation{FilePath: "src/main.rs"}
+	}
+
 	return TargetLocation{FilePath: "main.py"}
 }
