@@ -338,4 +338,23 @@ func TestPreFlightSyntaxCheck(t *testing.T) {
 	if !strings.Contains(badPyMsg, "Python Syntax Error") {
 		t.Fatalf("expected Python Syntax Error message, got: %s", badPyMsg)
 	}
+
+	// 5. Valid JSON payload
+	validJSON := filepath.Join(tmpDir, "config.json")
+	_ = os.WriteFile(validJSON, []byte(`{"enabled": true, "count": 42}`), 0644)
+	okJSON, msgJSON := PreFlightSyntaxCheck(tmpDir, "config.json")
+	if !okJSON {
+		t.Fatalf("expected valid JSON to pass, got: %s", msgJSON)
+	}
+
+	// 6. Malformed JSON payload
+	badJSON := filepath.Join(tmpDir, "bad.json")
+	_ = os.WriteFile(badJSON, []byte(`{"enabled": true, trailing_comma: }`), 0644)
+	badJSONOK, badJSONMsg := PreFlightSyntaxCheck(tmpDir, "bad.json")
+	if badJSONOK {
+		t.Fatalf("expected malformed JSON to be rejected")
+	}
+	if !strings.Contains(badJSONMsg, "JSON Syntax Error") {
+		t.Fatalf("expected JSON Syntax Error message, got: %s", badJSONMsg)
+	}
 }
