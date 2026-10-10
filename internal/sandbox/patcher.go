@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -31,7 +32,8 @@ func PreFlightSyntaxCheck(workDir, relFilePath string) (bool, string) {
 			return false, fmt.Sprintf("Go Syntax Error in %s: %v", relFilePath, err)
 		}
 	case ".py":
-		cmd := exec.Command("python3", "-m", "py_compile", fullPath)
+		script := "import ast, sys; ast.parse(open(sys.argv[1], 'rb').read())"
+		cmd := exec.Command("python3", "-c", script, fullPath)
 		var errBuf bytes.Buffer
 		cmd.Stderr = &errBuf
 		if err := cmd.Run(); err != nil {
@@ -41,7 +43,15 @@ func PreFlightSyntaxCheck(workDir, relFilePath string) (bool, string) {
 			}
 			return false, fmt.Sprintf("Python Syntax Error in %s: %s", relFilePath, msg)
 		}
-	case ".js":
+	case ".json":
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			return false, fmt.Sprintf("JSON Read Error in %s: %v", relFilePath, err)
+		}
+		if !json.Valid(data) {
+			return false, fmt.Sprintf("JSON Syntax Error in %s: invalid JSON payload", relFilePath)
+		}
+	case ".js", ".mjs", ".cjs":
 		if _, lookErr := exec.LookPath("node"); lookErr == nil {
 			cmd := exec.Command("node", "--check", fullPath)
 			var errBuf bytes.Buffer
@@ -51,7 +61,6 @@ func PreFlightSyntaxCheck(workDir, relFilePath string) (bool, string) {
 			}
 		}
 	}
-
 	return true, ""
 }
 
