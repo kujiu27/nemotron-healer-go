@@ -298,6 +298,11 @@ var evalCmd = &cobra.Command{
 				"per_case":            perCase,
 			}
 			if d, err := json.MarshalIndent(payload, "", "  "); err == nil {
+				if dir := filepath.Dir(exportJSONFlag); dir != "" && dir != "." {
+					if err := os.MkdirAll(dir, 0755); err != nil {
+						return fmt.Errorf("failed to create directory for export JSON %q: %w", exportJSONFlag, err)
+					}
+				}
 				if wErr := os.WriteFile(exportJSONFlag, d, 0644); wErr != nil {
 					return fmt.Errorf("export JSON write failed: %w", wErr)
 				}
@@ -335,6 +340,11 @@ var evalCmd = &cobra.Command{
 						s.CaseID, s.BaselineWins, s.Repeats, s.FullWins, s.Repeats,
 						s.TurnsMean, s.TurnsStd, s.DurationMean, s.DurationStd,
 						s.TokensMean, s.TokensStd, s.CostMean, s.CostStd))
+				}
+			}
+			if dir := filepath.Dir(exportMDFlag); dir != "" && dir != "." {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return fmt.Errorf("failed to create directory for export Markdown %q: %w", exportMDFlag, err)
 				}
 			}
 			if wErr := os.WriteFile(exportMDFlag, []byte(mdSb.String()), 0644); wErr != nil {
