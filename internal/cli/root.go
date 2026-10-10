@@ -22,7 +22,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.55"
+var Version = "v0.7.56"
 
 var (
 	testCmdFlag    string
@@ -356,6 +356,45 @@ var doctorCmd = &cobra.Command{
 				if pyPath, pyErr := exec.LookPath("python"); pyErr == nil {
 					path = pyPath
 					err = nil
+				}
+			}
+			if err != nil && tc == "pytest" {
+				// Check local virtual environments or python -m pytest
+				venvPaths := []string{
+					filepath.Join(".venv", "bin", "pytest"),
+					filepath.Join("venv", "bin", "pytest"),
+					filepath.Join("..", ".venv", "bin", "pytest"),
+					filepath.Join(".venv", "Scripts", "pytest.exe"),
+					filepath.Join("venv", "Scripts", "pytest.exe"),
+					filepath.Join("..", ".venv", "Scripts", "pytest.exe"),
+				}
+				if venvEnv := os.Getenv("VIRTUAL_ENV"); venvEnv != "" {
+					venvPaths = append([]string{
+						filepath.Join(venvEnv, "bin", "pytest"),
+						filepath.Join(venvEnv, "Scripts", "pytest.exe"),
+					}, venvPaths...)
+				}
+				for _, vp := range venvPaths {
+					if _, sErr := os.Stat(vp); sErr == nil {
+						path = vp
+						err = nil
+						break
+					}
+				}
+				if err != nil {
+					pyBin := "python3"
+					if _, lookPy3 := exec.LookPath("python3"); lookPy3 != nil {
+						if _, lookPy := exec.LookPath("python"); lookPy == nil {
+							pyBin = "python"
+						}
+					}
+					if pyPath, lookErr := exec.LookPath(pyBin); lookErr == nil {
+						checkCmd := exec.Command(pyPath, "-c", "import pytest")
+						if cErr := checkCmd.Run(); cErr == nil {
+							path = fmt.Sprintf("%s -m pytest (module in %s)", pyBin, pyPath)
+							err = nil
+						}
+					}
 				}
 			}
 			if err == nil {
