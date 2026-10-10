@@ -32,6 +32,7 @@ var (
 	archFilterFlag string
 	exportJSONFlag string
 	exportMDFlag   string
+	searchEvalFlag bool
 )
 
 var evalCmd = &cobra.Command{
@@ -226,6 +227,7 @@ var evalCmd = &cobra.Command{
 				start := time.Now()
 				agent := engine.NewAgent(tmpDir, c.Command, 3, nil, nil)
 				agent.EnableArena = false // Fast verifiable evaluation
+				agent.EnableSearch = searchEvalFlag
 				agent.DisableStepSummary = true
 				session, _ := agent.Run(context.Background())
 				dur := time.Since(start).Seconds()
@@ -436,7 +438,21 @@ func createIsolatedSandbox(srcRelPath string) (string, error) {
 		_ = os.MkdirAll(filepath.Dir(destPath), 0755)
 		return copyFileDirect(path, destPath)
 	})
-
+	if err == nil {
+		if _, lookGit := exec.LookPath("git"); lookGit == nil {
+			cmdRun := func(args ...string) {
+				c := exec.Command("git", args...)
+				c.Dir = tmpDir
+				_ = c.Run()
+			}
+			cmdRun("init")
+			cmdRun("config", "user.name", "Nemotron Healer")
+			cmdRun("config", "user.email", "healer@nemotron.local")
+			cmdRun("config", "commit.gpgsign", "false")
+			cmdRun("add", "-A")
+			cmdRun("commit", "-m", "initial benchmark state", "--no-gpg-sign")
+		}
+	}
 	return tmpDir, err
 }
 
@@ -471,5 +487,6 @@ func init() {
 	evalCmd.Flags().StringVar(&archFilterFlag, "archetype", "", "Filter benchmark cases by defect archetype name")
 	evalCmd.Flags().StringVar(&exportJSONFlag, "export-json", "", "Export benchmark ablation results to JSON file")
 	evalCmd.Flags().StringVar(&exportMDFlag, "export-md", "", "Export benchmark ablation scorecard to Markdown file")
+	evalCmd.Flags().BoolVar(&searchEvalFlag, "search", false, "Enable Test-Time Compute (TTC) Divergent Hypothesis Search across benchmark runs")
 	RootCmd.AddCommand(evalCmd)
 }
