@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -162,6 +163,7 @@ func ExtractModifiedFiles(diffPatch string) []string {
 	for f := range fileMap {
 		res = append(res, f)
 	}
+	sort.Strings(res)
 	return res
 }
 
@@ -345,6 +347,7 @@ func (p *Patcher) applyAtomicMultiFileHunks(targetFiles []string, diffPatch stri
 	for _, m := range mutations {
 		changed = append(changed, m.relPath)
 	}
+	sort.Strings(changed)
 	return true, fmt.Sprintf("Atomically replaced hunks in: %s", strings.Join(changed, ", "))
 }
 

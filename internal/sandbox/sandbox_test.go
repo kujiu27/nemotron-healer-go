@@ -211,6 +211,13 @@ func TestExtractModifiedFiles(t *testing.T) {
 			t.Errorf("unexpected file in diff: %s", f)
 		}
 	}
+	// Deterministic sorting verification
+	expectedSlice := []string{"internal/engine/agent.go", "pkg/client.go", "pkg/newfile.go"}
+	for i, exp := range expectedSlice {
+		if files[i] != exp {
+			t.Errorf("expected files[%d] == %s, got %s (slice not sorted deterministically: %v)", i, exp, files[i], files)
+		}
+	}
 }
 
 func TestMultiFileAtomicPatching(t *testing.T) {
