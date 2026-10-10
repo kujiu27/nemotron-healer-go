@@ -463,3 +463,65 @@ func TestPreFlightSyntaxCheckFiles(t *testing.T) {
 		t.Fatalf("expected Go Syntax Error in msg, got: %s", msg)
 	}
 }
+
+func TestParseTracebacks(t *testing.T) {
+	// 1. Go test failure
+	goOut := "=== RUN   TestSample\n--- FAIL: TestSample (0.00s)\n    sample_test.go:10: assert failed\nFAIL\n"
+	goTraces := parseTracebacks(goOut, "")
+	if len(goTraces) == 0 {
+		t.Fatalf("expected Go trace extracted, got 0")
+	}
+	if !strings.Contains(goTraces[0], "--- FAIL: TestSample") {
+		t.Errorf("expected Go trace content, got %q", goTraces[0])
+	}
+
+	// 2. Python pytest failure
+	pyOut := "FAILED test_calc.py::test_add - assert 1 == 2\nE   assert 1 == 2\n"
+	pyTraces := parseTracebacks(pyOut, "")
+	if len(pyTraces) == 0 {
+		t.Fatalf("expected Python trace extracted, got 0")
+	}
+	if !strings.Contains(pyTraces[0], "FAILED") {
+		t.Errorf("expected Python trace content, got %q", pyTraces[0])
+	}
+
+	// 3. Rust cargo test panic
+	rustOut := "test test_task ... FAILED\n\nfailures:\n---- test_task stdout ----\nthread 'test_task' panicked at 'assert failed', src/lib.rs:12:5\ntest result: FAILED. 0 passed; 1 failed\n"
+	rustTraces := parseTracebacks(rustOut, "")
+	if len(rustTraces) == 0 {
+		t.Fatalf("expected Rust trace extracted, got 0")
+	}
+	if !strings.Contains(rustTraces[0], "FAILED") && !strings.Contains(rustTraces[0], "panicked at") {
+		t.Errorf("expected Rust trace content, got %q", rustTraces[0])
+	}
+
+	// 4. Go runtime data race detector
+	raceOut := "==================\nWARNING: DATA RACE\nWrite at 0x00c000100010 by goroutine 7:\n  main.mutate()\n==================\nFAIL\n"
+	raceTraces := parseTracebacks(raceOut, "")
+	if len(raceTraces) == 0 {
+		t.Fatalf("expected Go data race trace extracted, got 0")
+	}
+	if !strings.Contains(raceTraces[0], "DATA RACE") {
+		t.Errorf("expected DATA RACE content, got %q", raceTraces[0])
+	}
+
+	// 5. Node / Jest failure
+	jestOut := "FAIL src/calc.test.ts\n  ● Calculator › adds\n    expect(received).toBe(expected)\n"
+	jestTraces := parseTracebacks(jestOut, "")
+	if len(jestTraces) == 0 {
+		t.Fatalf("expected Jest trace extracted, got 0")
+	}
+	if !strings.Contains(jestTraces[0], "Calculator") {
+		t.Errorf("expected Jest trace content, got %q", jestTraces[0])
+	}
+
+	// 6. Multiple failing Go tests extracted cleanly
+	multiGo := "=== RUN   TestOne\n--- FAIL: TestOne (0.00s)\n    one_test.go:5: err 1\n=== RUN   TestTwo\n--- FAIL: TestTwo (0.00s)\n    two_test.go:8: err 2\nFAIL\n"
+	multiTraces := parseTracebacks(multiGo, "")
+	if len(multiTraces) != 2 {
+		t.Fatalf("expected 2 distinct Go traces, got %d", len(multiTraces))
+	}
+	if !strings.Contains(multiTraces[0], "TestOne") || !strings.Contains(multiTraces[1], "TestTwo") {
+		t.Errorf("expected separate TestOne and TestTwo, got %v", multiTraces)
+	}
+}
