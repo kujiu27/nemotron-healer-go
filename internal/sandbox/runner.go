@@ -84,23 +84,46 @@ func parseTracebacks(stdout, stderr string) []string {
 	inTrace := false
 	var currentTrace []string
 
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "Traceback (most recent call last):") ||
+	isStart := func(trimmed string) bool {
+		return strings.HasPrefix(trimmed, "Traceback (most recent call last):") ||
 			strings.HasPrefix(trimmed, "FAIL:") ||
+			strings.HasPrefix(trimmed, "--- FAIL:") ||
 			strings.HasPrefix(trimmed, "ERROR:") ||
 			strings.Contains(trimmed, "FAILED") ||
-			strings.Contains(trimmed, "panic:") {
+			strings.Contains(trimmed, "panic:") ||
+			strings.Contains(trimmed, "panicked at") ||
+			strings.Contains(trimmed, "WARNING: DATA RACE") ||
+			strings.HasPrefix(trimmed, "● ") ||
+			strings.HasPrefix(trimmed, "AssertionError:")
+	}
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		if isStart(trimmed) {
+			if inTrace && len(currentTrace) > 0 {
+				traces = append(traces, strings.Join(currentTrace, "\n"))
+			}
 			inTrace = true
 			currentTrace = []string{line}
 			continue
 		}
 
 		if inTrace {
+			if strings.HasPrefix(trimmed, "=== RUN ") {
+				traces = append(traces, strings.Join(currentTrace, "\n"))
+				inTrace = false
+				currentTrace = nil
+				continue
+			}
+
 			currentTrace = append(currentTrace, line)
 			if strings.HasPrefix(trimmed, "E   ") ||
 				strings.Contains(line, "Error:") ||
-				strings.Contains(line, "Exception:") {
+				strings.Contains(line, "Exception:") ||
+				strings.HasPrefix(trimmed, "FAIL\t") ||
+				trimmed == "FAIL" ||
+				strings.Contains(trimmed, "test result: FAILED") {
 				traces = append(traces, strings.Join(currentTrace, "\n"))
 				inTrace = false
 				currentTrace = nil

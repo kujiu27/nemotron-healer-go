@@ -34,6 +34,8 @@ func ClassifyDefect(trace string, sourceContext string) ArchetypeAnalysis {
 		strings.Contains(lowerTrace, "race") ||
 		strings.Contains(lowerTrace, "concurrent") ||
 		strings.Contains(lowerTrace, "deadlock") ||
+		strings.Contains(lowerTrace, "cannot borrow as mutable") ||
+		strings.Contains(lowerTrace, "poisonerror") ||
 		(strings.Contains(lowerSource, "asyncio.gather") && strings.Contains(lowerTrace, "assertionerror")) {
 		return ArchetypeAnalysis{
 			Archetype:   ArchetypeConcurrencyRace,
@@ -71,6 +73,8 @@ Python:
 		strings.Contains(lowerTrace, "removed in") ||
 		strings.Contains(lowerTrace, "migration") ||
 		strings.Contains(lowerTrace, "has been renamed") ||
+		strings.Contains(lowerTrace, "cannot find module") ||
+		strings.Contains(lowerTrace, "module not found") ||
 		strings.Contains(lowerTrace, "validationerror") {
 		return ArchetypeAnalysis{
 			Archetype:   ArchetypeInterfaceBreaking,
@@ -115,6 +119,7 @@ SQL:
 	if strings.Contains(lowerTrace, "unclosed") ||
 		strings.Contains(lowerTrace, "resourcewarning") ||
 		strings.Contains(lowerTrace, "file descriptor") ||
+		strings.Contains(lowerTrace, "too many open files") ||
 		strings.Contains(lowerTrace, "connection pool exhausted") {
 		return ArchetypeAnalysis{
 			Archetype:   ArchetypeResourceLeak,
@@ -140,7 +145,15 @@ Python:
 	if strings.Contains(lowerTrace, "nonetype") ||
 		strings.Contains(lowerTrace, "nil pointer") ||
 		strings.Contains(lowerTrace, "nullpointerexception") ||
-		strings.Contains(lowerTrace, "attributeerror") {
+		strings.Contains(lowerTrace, "attributeerror") ||
+		strings.Contains(lowerTrace, "cannot read properties of undefined") ||
+		strings.Contains(lowerTrace, "cannot read property of undefined") ||
+		strings.Contains(lowerTrace, "cannot read properties of null") ||
+		strings.Contains(lowerTrace, "is not a function") ||
+		strings.Contains(lowerTrace, "typeerror") ||
+		strings.Contains(lowerTrace, "called `option::unwrap()` on a `none` value") ||
+		strings.Contains(lowerTrace, "unwrap() on a none value") ||
+		strings.Contains(lowerTrace, "called `result::unwrap()` on an `err` value") {
 		return ArchetypeAnalysis{
 			Archetype:   ArchetypeNullTypeError,
 			Severity:    "MEDIUM",
