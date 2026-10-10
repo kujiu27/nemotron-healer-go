@@ -187,25 +187,27 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 
 				verifyRes, _ := wtRunner.Run(a.TestCommand)
 				advPass := false
+				advSkipped := false
 				falsifyFailureOutput := ""
 				var bestFalsify *falsify.FalsificationResult
 
 				if verifyRes.IsSuccess {
 					falsifyRes, _ := wtFalsifier.StressTest(ctx, targetFile, diffPatch)
-					advPass = falsifyRes.Passed
 					bestFalsify = falsifyRes
 					if falsifyRes != nil {
+						advPass = falsifyRes.Passed && !falsifyRes.Skipped
+						advSkipped = falsifyRes.Skipped
 						mu.Lock()
 						a.addTokens(falsifyRes.PromptTokens, falsifyRes.CompletionTokens)
 						a.Session.TokenLedger.CalculateCost()
 						mu.Unlock()
 					}
-					if !advPass {
+					if !advPass && !advSkipped && falsifyRes != nil {
 						falsifyFailureOutput = falsifyRes.FailureOutput
 					}
 				}
 
-				reward := evaluator.ComputeReward(verifyRes.IsSuccess, advPass, blastReport.RiskScore, diffPatch)
+				reward := evaluator.ComputeReward(verifyRes.IsSuccess, advPass, advSkipped, blastReport.RiskScore, diffPatch)
 				child.Backpropagate(reward)
 
 				a.notify(StateVerifyingSandbox, fmt.Sprintf("DHS Worktree Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f (Parallel Worktree)",
@@ -253,19 +255,20 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 							if applied2 {
 								v2, _ := wtRunner.Run(a.TestCommand)
 								adv2 := false
+								advSkipped2 := false
 								var f2 *falsify.FalsificationResult
 								if v2.IsSuccess {
 									f2, _ = wtFalsifier.StressTest(ctx, targetFile, refineDiff)
-									adv2 = f2.Passed
 									if f2 != nil {
+										adv2 = f2.Passed && !f2.Skipped
+										advSkipped2 = f2.Skipped
 										mu.Lock()
 										a.addTokens(f2.PromptTokens, f2.CompletionTokens)
 										a.Session.TokenLedger.CalculateCost()
 										mu.Unlock()
 									}
 								}
-								r2 := evaluator.ComputeReward(v2.IsSuccess, adv2, blastReport.RiskScore, refineDiff)
-								child2.Backpropagate(r2)
+								r2 := evaluator.ComputeReward(v2.IsSuccess, adv2, advSkipped2, blastReport.RiskScore, refineDiff)
 
 								a.notify(StateVerifyingSandbox, fmt.Sprintf("DHS Depth-2 Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f",
 									depth2ID, v2.IsSuccess, adv2, r2), nil)
@@ -414,25 +417,26 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 		// Rollout: Run verification test in sandbox
 		verifyRes, _ := a.Runner.Run(a.TestCommand)
 		advPass := false
+		advSkipped := false
 		falsifyFailureOutput := ""
 
 		var falsifyRes *falsify.FalsificationResult
 		if verifyRes.IsSuccess {
 			// Run Adversarial Falsification stress test
 			falsifyRes, _ = a.Falsifier.StressTest(ctx, targetFile, diffPatch)
-			advPass = falsifyRes.Passed
 			if falsifyRes != nil {
+				advPass = falsifyRes.Passed && !falsifyRes.Skipped
+				advSkipped = falsifyRes.Skipped
 				a.addTokens(falsifyRes.PromptTokens, falsifyRes.CompletionTokens)
 				a.Session.TokenLedger.CalculateCost()
 			}
-			if !advPass {
+			if !advPass && !advSkipped && falsifyRes != nil {
 				falsifyFailureOutput = falsifyRes.FailureOutput
 			}
 		}
 
 		// Calculate Grounded Verifiable Reward
-		reward := evaluator.ComputeReward(verifyRes.IsSuccess, advPass, blastReport.RiskScore, diffPatch)
-		child.Backpropagate(reward)
+		reward := evaluator.ComputeReward(verifyRes.IsSuccess, advPass, advSkipped, blastReport.RiskScore, diffPatch)
 
 		a.notify(StateVerifyingSandbox, fmt.Sprintf("DHS Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f",
 			childID, verifyRes.IsSuccess, advPass, reward), map[string]interface{}{
@@ -495,17 +499,18 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 					if applied2 {
 						verifyRes2, _ := a.Runner.Run(a.TestCommand)
 						advPass2 := false
+						advSkipped2 := false
 						var f2 *falsify.FalsificationResult
 						if verifyRes2.IsSuccess {
 							f2, _ = a.Falsifier.StressTest(ctx, targetFile, refineDiff)
-							advPass2 = f2.Passed
 							if f2 != nil {
+								advPass2 = f2.Passed && !f2.Skipped
+								advSkipped2 = f2.Skipped
 								a.addTokens(f2.PromptTokens, f2.CompletionTokens)
 								a.Session.TokenLedger.CalculateCost()
 							}
 						}
-						reward2 := evaluator.ComputeReward(verifyRes2.IsSuccess, advPass2, blastReport.RiskScore, refineDiff)
-						child2.Backpropagate(reward2)
+						reward2 := evaluator.ComputeReward(verifyRes2.IsSuccess, advPass2, advSkipped2, blastReport.RiskScore, refineDiff)
 
 						a.notify(StateVerifyingSandbox, fmt.Sprintf("DHS Depth-2 Rollout [%s]: BasePass=%v, AdvPass=%v ➔ Grounded Reward: %.3f",
 							depth2ID, verifyRes2.IsSuccess, advPass2, reward2), map[string]interface{}{
