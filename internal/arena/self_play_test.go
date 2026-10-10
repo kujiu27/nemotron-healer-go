@@ -40,3 +40,15 @@ func TestArenaBuildTestCmd_SubpackageColocation(t *testing.T) {
 		t.Errorf("expected colocated pytest path, got %q", cmdPy)
 	}
 }
+
+func TestIsAttackSyntaxOrImportError(t *testing.T) {
+	if !isAttackSyntaxOrImportError("SyntaxError: invalid syntax", "Python") {
+		t.Errorf("expected Python SyntaxError detected")
+	}
+	if !isAttackSyntaxOrImportError("# test\n[build failed]\n./x.go:1:2: undefined: Foo", "Go") {
+		t.Errorf("expected Go build failure detected")
+	}
+	if isAttackSyntaxOrImportError("FAIL: assert balance == 100", "Python") {
+		t.Errorf("assertion failure must not be treated as syntax error")
+	}
+}
