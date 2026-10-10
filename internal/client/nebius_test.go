@@ -91,3 +91,38 @@ func TestStreamCompletion_LargePayloadSurvivesDefaultScannerLimit(t *testing.T) 
 		t.Fatalf("expected received callback tokens length %d, got %d", len(largeContent), len(received))
 	}
 }
+
+func TestNebiusClient_TelemetryConcurrency(t *testing.T) {
+	client := &NebiusClient{
+		LastTTFT:         0.12,
+		LastTPS:          45.6,
+		LastThoughtChain: "test-thought",
+	}
+
+	done := make(chan bool)
+	// Reader goroutine
+	go func() {
+		for range 100 {
+			ttft, tps, tc := client.Telemetry()
+			if ttft < 0 || tps < 0 || tc == "" {
+				t.Errorf("invalid telemetry read")
+			}
+		}
+		done <- true
+	}()
+
+	// Writer goroutine
+	go func() {
+		for range 100 {
+			client.mu.Lock()
+			client.LastTTFT = 0.15
+			client.LastTPS = 50.0
+			client.LastThoughtChain = "updated"
+			client.mu.Unlock()
+		}
+		done <- true
+	}()
+
+	<-done
+	<-done
+}
