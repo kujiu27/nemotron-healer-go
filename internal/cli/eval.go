@@ -43,13 +43,18 @@ var evalCmd = &cobra.Command{
 			return fmt.Errorf("NEBIUS_API_KEY is not set. Export your key: export NEBIUS_API_KEY=\"...\" (tokenfactory.nebius.com) or pass --mock for offline benchmark verification")
 		}
 
-		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ AHB-9 In-Repo Benchmark & Ablation Engine"))
-		if mockFlag {
-			fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFB86C")).Render("⚡ Running benchmark in offline MOCK mode (X-Nemotron-Healer: MOCK) — zero API keys required"))
+		human := os.Stdout
+		if jsonFlag {
+			human = os.Stderr
 		}
-		fmt.Printf("Repeats per case: %d\n\n", max(1, repeatFlag))
-		fmt.Println("Grounded against Concurrency, API Breaking Migrations, and Re-entrancy Traps")
-		fmt.Println()
+
+		fmt.Fprintln(human, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("⚡ AHB-9 In-Repo Benchmark & Ablation Engine"))
+		if mockFlag {
+			fmt.Fprintln(human, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFB86C")).Render("⚡ Running benchmark in offline MOCK mode (X-Nemotron-Healer: MOCK) — zero API keys required"))
+		}
+		fmt.Fprintf(human, "Repeats per case: %d\n\n", max(1, repeatFlag))
+		fmt.Fprintln(human, "Grounded against Concurrency, API Breaking Migrations, and Re-entrancy Traps")
+		fmt.Fprintln(human)
 
 		// Auto-resolve pytest command if not in global PATH
 		defaultPytest := "pytest"
@@ -175,10 +180,10 @@ var evalCmd = &cobra.Command{
 		totalRuns := max(1, repeatFlag)
 		for rep := 1; rep <= totalRuns; rep++ {
 			if totalRuns > 1 {
-				fmt.Printf("— Repeat %d/%d —\n", rep, totalRuns)
+				fmt.Fprintf(human, "— Repeat %d/%d —\n", rep, totalRuns)
 			}
 			for idx, c := range cases {
-				fmt.Printf("[%d/%d] Sandboxing & Evaluating %s (%s)...\n", idx+1, len(cases), c.ID, c.Name)
+				fmt.Fprintf(human, "[%d/%d] Sandboxing & Evaluating %s (%s)...\n", idx+1, len(cases), c.ID, c.Name)
 
 				// Step 1: Create clean isolated temporary sandboxes (one per arm)
 				tmpDir, err := createIsolatedSandbox(c.Path)
@@ -234,11 +239,11 @@ var evalCmd = &cobra.Command{
 		}
 
 		// Print Comparative A/B Ablation Scorecard Table
-		fmt.Println("\n" + lipgloss.NewStyle().Bold(true).Render("📊 AHB-9 Ablation Scorecard (NVIDIA x Nebius x Tavily)"))
-		fmt.Println("=====================================================================================================")
-		fmt.Printf("%-8s | %-24s | %-16s | %-12s | %-12s | %-6s | %-8s\n",
+		fmt.Fprintln(human, "\n"+lipgloss.NewStyle().Bold(true).Render("📊 AHB-9 Ablation Scorecard (NVIDIA x Nebius x Tavily)"))
+		fmt.Fprintln(human, "=====================================================================================================")
+		fmt.Fprintf(human, "%-8s | %-24s | %-16s | %-12s | %-12s | %-6s | %-8s\n",
 			"Case ID", "Benchmark Scenario", "Defect Archetype", "Baseline LLM", "Full System", "Turns", "Cost ($)")
-		fmt.Println("-----------------------------------------------------------------------------------------------------")
+		fmt.Fprintln(human, "-----------------------------------------------------------------------------------------------------")
 
 		baselineWins := 0
 		fullWins := 0
@@ -256,29 +261,29 @@ var evalCmd = &cobra.Command{
 				fullWins++
 			}
 
-			fmt.Printf("%-8s | %-24s | %-16s | %-12s | %-12s | %-6d | $%-7.5f\n",
+			fmt.Fprintf(human, "%-8s | %-24s | %-16s | %-12s | %-12s | %-6d | $%-7.5f\n",
 				r.CaseID, r.Name, r.Archetype, baseStr, fullStr, r.TurnsTaken, r.CostUSD)
 		}
-		fmt.Println("=====================================================================================================")
+		fmt.Fprintln(human, "=====================================================================================================")
 
 		total := max(1, len(results))
 		baseRate := float64(baselineWins) / float64(total) * 100.0
 		fullRate := float64(fullWins) / float64(total) * 100.0
 		delta := fullRate - baseRate
 
-		fmt.Printf("• Baseline Un-Grounded Solve Rate : %5.1f%% (%d/%d)\n", baseRate, baselineWins, total)
-		fmt.Printf("• Nemotron-Healer Full Solve Rate : %5.1f%% (%d/%d)\n", fullRate, fullWins, total)
-		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render(
+		fmt.Fprintf(human, "• Baseline Un-Grounded Solve Rate : %5.1f%% (%d/%d)\n", baseRate, baselineWins, total)
+		fmt.Fprintf(human, "• Nemotron-Healer Full Solve Rate : %5.1f%% (%d/%d)\n", fullRate, fullWins, total)
+		fmt.Fprintln(human, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render(
 			fmt.Sprintf("• Empirical Grounding Delta (Tavily + AST) : +%.1f%% Accuracy Lift\n", delta),
 		))
 
 		perCase := aggregateByCase(results)
 		if totalRuns > 1 {
-			fmt.Println("\n📈 Per-Case Statistics across repeats (mean ± population std):")
-			fmt.Printf("%-8s | %-12s | %-12s | %-14s | %-14s | %-14s | %-16s\n",
+			fmt.Fprintln(human, "\n📈 Per-Case Statistics across repeats (mean ± population std):")
+			fmt.Fprintf(human, "%-8s | %-12s | %-12s | %-14s | %-14s | %-14s | %-16s\n",
 				"Case ID", "Baseline", "Full System", "Turns", "Duration (s)", "Tokens", "Cost ($)")
 			for _, s := range perCase {
-				fmt.Printf("%-8s | %-12s | %-12s | %5.1f ± %-4.1f | %5.1f ± %-4.1f | %6.0f ± %-5.0f | %6.5f ± %-7.5f\n",
+				fmt.Fprintf(human, "%-8s | %-12s | %-12s | %5.1f ± %-4.1f | %5.1f ± %-4.1f | %6.0f ± %-5.0f | %6.5f ± %-7.5f\n",
 					s.CaseID,
 					fmt.Sprintf("%d/%d", s.BaselineWins, s.Repeats),
 					fmt.Sprintf("%d/%d", s.FullWins, s.Repeats),
@@ -287,16 +292,22 @@ var evalCmd = &cobra.Command{
 			}
 		}
 
+		payload := map[string]interface{}{
+			"timestamp":           time.Now().UTC().Format(time.RFC3339),
+			"benchmark":           "AHB-9",
+			"total_runs":          len(results),
+			"baseline_solve_rate": baseRate,
+			"full_solve_rate":     fullRate,
+			"empirical_lift":      delta,
+			"per_case":            perCase,
+		}
+
+		if jsonFlag {
+			d, _ := json.MarshalIndent(payload, "", "  ")
+			fmt.Println(string(d))
+		}
+
 		if exportJSONFlag != "" {
-			payload := map[string]interface{}{
-				"timestamp":           time.Now().UTC().Format(time.RFC3339),
-				"benchmark":           "AHB-9",
-				"total_runs":          len(results),
-				"baseline_solve_rate": baseRate,
-				"full_solve_rate":     fullRate,
-				"empirical_lift":      delta,
-				"per_case":            perCase,
-			}
 			if d, err := json.MarshalIndent(payload, "", "  "); err == nil {
 				if dir := filepath.Dir(exportJSONFlag); dir != "" && dir != "." {
 					if err := os.MkdirAll(dir, 0755); err != nil {
