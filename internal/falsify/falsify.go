@@ -170,6 +170,12 @@ func isTestSyntaxOrImportError(output, lang string) bool {
 		return strings.Contains(lower, "syntaxerror") ||
 			strings.Contains(lower, "cannot find module")
 	}
+	if lang == "Rust" {
+		return strings.Contains(lower, "error[e") ||
+			strings.Contains(lower, "could not compile") ||
+			strings.Contains(lower, "unresolved import") ||
+			strings.Contains(lower, "syntax error")
+	}
 	return false
 }
 
@@ -184,7 +190,15 @@ func detectLanguage(targetFile, testCmd string) LangConfig {
 	ext := strings.ToLower(filepath.Ext(targetFile))
 	lowerCmd := strings.ToLower(testCmd)
 
-	if ext == ".go" || strings.Contains(lowerCmd, "go test") {
+	if ext == ".rs" || strings.Contains(lowerCmd, "cargo test") {
+		return LangConfig{
+			Name:         "Rust",
+			Fence:        "rust",
+			TestFileName: "adversarial_falsify_test.rs",
+			Rules:        "1. Output ONLY valid, runnable Rust test code inside a ```rust block.\n2. Use standard `#[test]` attribute.",
+		}
+	}
+	if ext == ".go" || strings.HasPrefix(lowerCmd, "go test") || strings.Contains(lowerCmd, " go test") {
 		return LangConfig{
 			Name:         "Go",
 			Fence:        "go",
@@ -219,6 +233,9 @@ func (f *Falsifier) buildTestCmd(lang LangConfig, testFileName string, targetDir
 			targetPkg = "./" + filepath.ToSlash(dir)
 		}
 		return fmt.Sprintf("go test -v -run TestAdversarialFalsify %s", targetPkg)
+	}
+	if lang.Name == "Rust" {
+		return "cargo test"
 	}
 	targetPath := testFileName
 	if dir != "." {

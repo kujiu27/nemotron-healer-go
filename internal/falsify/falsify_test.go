@@ -21,6 +21,11 @@ func TestDetectLanguage(t *testing.T) {
 	if cfgTS.Name != "TypeScript/JavaScript" {
 		t.Fatalf("expected TS/JS, got %s", cfgTS.Name)
 	}
+
+	cfgRust := detectLanguage("src/lib.rs", "cargo test")
+	if cfgRust.Name != "Rust" {
+		t.Fatalf("expected Rust, got %s", cfgRust.Name)
+	}
 }
 
 func TestPersistRegressionTest(t *testing.T) {
@@ -70,5 +75,13 @@ func TestBuildTestCmd_SubpackageColocation(t *testing.T) {
 	cmdPy := fPy.buildTestCmd(langPy, "test__adversarial_falsify.py", "backend")
 	if cmdPy != "python3 -m pytest backend/test__adversarial_falsify.py" {
 		t.Errorf("expected colocated pytest path, got %q", cmdPy)
+	}
+
+	// 4. Rust target
+	fRust := &Falsifier{TestCommand: "cargo test"}
+	langRust := detectLanguage("src/lib.rs", "cargo test")
+	cmdRust := fRust.buildTestCmd(langRust, "adversarial_falsify_test.rs", "src")
+	if cmdRust != "cargo test" {
+		t.Errorf("expected 'cargo test', got %q", cmdRust)
 	}
 }
