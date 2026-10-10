@@ -111,7 +111,7 @@ jobs:
           command: go test . -run TestEmptyValueQuery -count=1
           turns: '2'
           enable_mock: 'true'
-
+          sarif: heal-results.sarif
       - name: Assert action succeeded end-to-end on real runner and populated step outputs
         if: steps.act_success.outcome != 'success' || steps.act_success.outputs.is_resolved != 'true'
         run: |
@@ -131,7 +131,11 @@ jobs:
             echo "Action did not export patch_digest output"
             exit 1
           fi
-
+          if [ ! -f "heal-results.sarif" ]; then
+            echo "Expected heal-results.sarif to be exported, but file was not found!"
+            exit 1
+          fi
+          python3 -c "import json; d=json.load(open('heal-results.sarif')); assert d['version'] == '2.1.0'; assert len(d['runs']) > 0; print('SARIF validation passed on real runner')"
   benchmark-red:
     name: Benchmark RED-State Integrity
     runs-on: ubuntu-latest

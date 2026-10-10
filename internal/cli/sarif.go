@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/kujiu27/nemotron-healer-go/internal/engine"
@@ -22,9 +23,10 @@ type SarifLocation struct {
 }
 
 type SarifResult struct {
-	RuleID  string `json:"ruleId"`
-	Level   string `json:"level"`
-	Message struct {
+	RuleID    string          `json:"ruleId"`
+	RuleIndex int             `json:"ruleIndex"`
+	Level     string          `json:"level"`
+	Message   struct {
 		Text string `json:"text"`
 	} `json:"message"`
 	Locations []SarifLocation `json:"locations,omitempty"`
@@ -35,6 +37,7 @@ type SarifRule struct {
 	ShortDescription struct {
 		Text string `json:"text"`
 	} `json:"shortDescription"`
+	HelpURI string `json:"helpUri,omitempty"`
 }
 
 type SarifReport struct {
@@ -58,7 +61,9 @@ func ExportSarif(session *engine.HealingSession, outputPath string) error {
 	ruleID := "NH-DEFECT"
 	ruleDesc := "Autonomous Code Self-Healing Defect Diagnostic"
 	if session.DefectArchetype != "" {
-		ruleID = "NH-" + strings.ToUpper(session.DefectArchetype)
+		clean := regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(session.DefectArchetype, "-")
+		clean = strings.Trim(clean, "-")
+		ruleID = "NH-" + strings.ToUpper(clean)
 		ruleDesc = fmt.Sprintf("Autonomous Diagnostic: %s", session.DefectArchetype)
 	}
 	level := "warning"
@@ -68,7 +73,18 @@ func ExportSarif(session *engine.HealingSession, outputPath string) error {
 	}
 	if !session.IsResolved {
 		level = "error"
-		msgText = "Defect unresolved: " + session.LastError
+		lastErr := session.LastError
+		if lastErr == "" {
+			lastErr = session.InitialError
+		}
+		if lastErr != "" {
+			msgText = "Defect unresolved: " + lastErr
+		} else {
+			msgText = "Defect unresolved: autonomous healing budget exhausted"
+		}
+	}
+	if len(msgText) > 1000 {
+		msgText = msgText[:997] + "..."
 	}
 
 	var locations []SarifLocation
@@ -117,7 +133,8 @@ func ExportSarif(session *engine.HealingSession, outputPath string) error {
 						InformationURI: "https://github.com/kujiu27/nemotron-healer-go",
 						Rules: []SarifRule{
 							{
-								ID: ruleID,
+								ID:      ruleID,
+								HelpURI: "https://github.com/kujiu27/nemotron-healer-go",
 								ShortDescription: struct {
 									Text string `json:"text"`
 								}{
@@ -130,6 +147,7 @@ func ExportSarif(session *engine.HealingSession, outputPath string) error {
 				Results: []SarifResult{
 					{
 						RuleID:    ruleID,
+						RuleIndex: 0,
 						Level:     level,
 						Locations: locations,
 						Message: struct {
