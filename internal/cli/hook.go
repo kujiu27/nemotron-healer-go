@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"path/filepath"
 
 	"github.com/charmbracelet/lipgloss"
@@ -145,14 +146,34 @@ fi
 exit 0
 `
 
-// InstallGitHook creates the executable pre-push hook in .git/hooks
-func InstallGitHook(repoDir string, autoHeal ...bool) (string, error) {
+// resolveGitHooksDir determines the git hooks directory across standard repositories,
+// worktrees (where .git is a file), and submodules.
+func resolveGitHooksDir(repoDir string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--git-path", "hooks")
+	cmd.Dir = repoDir
+	if out, err := cmd.Output(); err == nil {
+		p := strings.TrimSpace(string(out))
+		if p != "" {
+			if !filepath.IsAbs(p) {
+				p = filepath.Join(repoDir, p)
+			}
+			return filepath.Clean(p), nil
+		}
+	}
 	gitDir := filepath.Join(repoDir, ".git")
-	if _, err := os.Stat(gitDir); err != nil {
-		return "", fmt.Errorf("not a git repository (missing .git directory in %s)", repoDir)
+	if fi, err := os.Stat(gitDir); err == nil && fi.IsDir() {
+		return filepath.Join(gitDir, "hooks"), nil
+	}
+	return "", fmt.Errorf("not a git repository (missing .git in %s)", repoDir)
+}
+
+// InstallGitHook creates the executable pre-push hook in the repository's hooks directory
+func InstallGitHook(repoDir string, autoHeal ...bool) (string, error) {
+	hooksDir, err := resolveGitHooksDir(repoDir)
+	if err != nil {
+		return "", err
 	}
 
-	hooksDir := filepath.Join(gitDir, "hooks")
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		return "", err
 	}
@@ -180,7 +201,11 @@ const hookOwnershipMarker = "[Nemotron-Healer] Autonomous Pre-Push Verification 
 
 // UninstallGitHook removes OUR pre-push hook; a foreign hook is left untouched.
 func UninstallGitHook(repoDir string) error {
-	prePushPath := filepath.Join(repoDir, ".git", "hooks", "pre-push")
+	hooksDir, err := resolveGitHooksDir(repoDir)
+	if err != nil {
+		return nil
+	}
+	prePushPath := filepath.Join(hooksDir, "pre-push")
 	existing, err := os.ReadFile(prePushPath)
 	if os.IsNotExist(err) {
 		return nil

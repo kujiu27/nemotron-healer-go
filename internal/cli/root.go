@@ -21,7 +21,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.26"
+var Version = "v0.7.27"
 
 var (
 	testCmdFlag    string
@@ -106,6 +106,11 @@ var RootCmd = &cobra.Command{
 			agent.EnableSearch = searchFlag
 			agent.EnableArena = arenaFlag
 
+			origBranchCmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+			origBranchCmd.Dir = absDir
+			origBranchOut, _ := origBranchCmd.Output()
+			origBranch := strings.TrimSpace(string(origBranchOut))
+
 			session, err := agent.Run(context.Background())
 			if err != nil {
 				return err
@@ -130,10 +135,15 @@ var RootCmd = &cobra.Command{
 
 				inCIEnv := os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != "" || ciFlag
 				if !inCIEnv && !autoAcceptFlag {
-					confirmMsg := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFB86C")).Render("\n? Keep the verified fix branch (patch already committed to it)? [Y/n]: ")
+					confirmMsg := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFB86C")).Render("\n? Stay on the verified fix branch (patch committed to it)? [Y/n]: ")
 					confirmed := PromptConfirmation(confirmMsg, nil)
 					if !confirmed {
-						fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Render("Declined — fix branch remains available for review; nothing further applied."))
+						if origBranch != "" && origBranch != "HEAD" {
+							checkoutCmd := exec.Command("git", "checkout", origBranch)
+							checkoutCmd.Dir = absDir
+							_ = checkoutCmd.Run()
+						}
+						fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Render(fmt.Sprintf("Declined — restored to '%s'; fix branch remains available for review.", origBranch)))
 					} else {
 						fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("Fix branch retained with the verified patch."))
 					}
