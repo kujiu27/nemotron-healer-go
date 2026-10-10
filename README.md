@@ -100,7 +100,7 @@ nemotron-healer samples/external_gjson --mock --command "go test . -run TestEmpt
 ### 4. Use as a GitHub Action
 ```yaml
 - name: Autonomous Self-Healing CI
-  uses: kujiu27/nemotron-healer-go@v0.7.27
+  uses: kujiu27/nemotron-healer-go@v0.7.28
   with:
     path: .                    # directory to heal (default: repo root)
     command: go test ./...     # the failing test command

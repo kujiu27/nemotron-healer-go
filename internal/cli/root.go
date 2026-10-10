@@ -21,7 +21,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.27"
+var Version = "v0.7.28"
 
 var (
 	testCmdFlag    string
@@ -195,22 +195,27 @@ var doctorCmd = &cobra.Command{
 	SilenceErrors: true,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		human := os.Stdout
+		if jsonFlag {
+			human = os.Stderr
+		}
 
-		fmt.Println(lipgloss.NewStyle().Bold(true).Render("Nemotron Healer Environment Check (Go Runtime)"))
-		fmt.Println("--------------------------------------------------")
+		fmt.Fprintln(human, lipgloss.NewStyle().Bold(true).Render("Nemotron Healer Environment Check (Go Runtime)"))
+		fmt.Fprintln(human, "--------------------------------------------------")
 
 		ready := true
 		var failureReasons []string
 
 		nebius := client.NewNebiusClient()
-		fmt.Printf("• Inference Endpoint: %s\n", nebius.BaseURL)
-		fmt.Printf("• Fast Triage Model:  %s (Tier-1 <150ms)\n", nebius.FastModel)
-		fmt.Printf("• Reasoning Brain:    %s\n", nebius.ReasoningModel)
-		fmt.Printf("• Catalog Pricing:    $1.00/1M in, $3.00/1M out\n")
+		fmt.Fprintf(human, "• Inference Endpoint: %s\n", nebius.BaseURL)
+		fmt.Fprintf(human, "• Fast Triage Model:  %s (Tier-1 <150ms)\n", nebius.FastModel)
+		fmt.Fprintf(human, "• Reasoning Brain:    %s\n", nebius.ReasoningModel)
+		fmt.Fprintf(human, "• Catalog Pricing:    $1.00/1M in, $3.00/1M out\n")
 
 		if mockFlag {
-			fmt.Println("• Mode:               [OFFLINE MOCK] Zero API keys required (X-Nemotron-Healer: MOCK)")
+			fmt.Fprintln(human, "• Mode:               [OFFLINE MOCK] Zero API keys required (X-Nemotron-Healer: MOCK)")
 		}
+		probeLabel := "UNTESTED"
 
 		// Active Network RTT Probe against Inference Endpoint
 		nebiusStart := time.Now()
@@ -223,19 +228,21 @@ var doctorCmd = &cobra.Command{
 		resp, err := probeClient.Do(req)
 		nebiusRTT := time.Since(nebiusStart).Milliseconds()
 		if err == nil && resp.StatusCode == http.StatusOK {
-			probeLabel := "ONLINE"
+			probeLabel = "ONLINE"
 			if mockFlag {
 				probeLabel = "ONLINE (MOCK)"
 			}
-			fmt.Printf("• Endpoint Probe:     [%s] Authenticated (RTT: %dms)\n", probeLabel, nebiusRTT)
+			fmt.Fprintf(human, "• Endpoint Probe:     [%s] Authenticated (RTT: %dms)\n", probeLabel, nebiusRTT)
 			resp.Body.Close()
 		} else if err == nil {
-			fmt.Printf("• Endpoint Probe:     [HTTP %d] %s (RTT: %dms)\n", resp.StatusCode, resp.Status, nebiusRTT)
+			probeLabel = fmt.Sprintf("HTTP %d", resp.StatusCode)
+			fmt.Fprintf(human, "• Endpoint Probe:     [%s] %s (RTT: %dms)\n", probeLabel, resp.Status, nebiusRTT)
 			resp.Body.Close()
 			ready = false
 			failureReasons = append(failureReasons, fmt.Sprintf("Inference endpoint rejected authentication (HTTP %d %s). Please set a valid NEBIUS_API_KEY.", resp.StatusCode, resp.Status))
 		} else {
-			fmt.Printf("• Endpoint Probe:     [UNREACHABLE] (Error: %v)\n", err)
+			probeLabel = "UNREACHABLE"
+			fmt.Fprintf(human, "• Endpoint Probe:     [UNREACHABLE] (Error: %v)\n", err)
 			ready = false
 			failureReasons = append(failureReasons, fmt.Sprintf("Inference endpoint unreachable (%v). Check network or set NEBIUS_BASE_URL.", err))
 		}
@@ -251,40 +258,64 @@ var doctorCmd = &cobra.Command{
 			if mockFlag {
 				tavilyLabel = "Configured (Mock Grounding)"
 			}
-			fmt.Printf("• Tavily Search API:  %s\n", tavilyLabel)
+			fmt.Fprintf(human, "• Tavily Search API:  %s\n", tavilyLabel)
 		} else {
-			fmt.Println("• Tavily Search API:  Not configured (grounding disabled, baseline ungrounded mode)")
+			fmt.Fprintln(human, "• Tavily Search API:  Not configured (grounding disabled, baseline ungrounded mode)")
 		}
 
 		// Toolchain checks
 		toolchains := []string{"git", "python3", "pytest", "go"}
+		toolchainMap := make(map[string]bool)
 		for _, tc := range toolchains {
 			if path, err := exec.LookPath(tc); err == nil {
-				fmt.Printf("• Toolchain %-8s: Available (%s)\n", tc, path)
+				toolchainMap[tc] = true
+				fmt.Fprintf(human, "• Toolchain %-8s: Available (%s)\n", tc, path)
 			} else {
+				toolchainMap[tc] = false
 				if tc == "git" {
 					ready = false
 					failureReasons = append(failureReasons, "Toolchain git is required for transactional rollback and branch creation, but was not found in PATH.")
-					fmt.Printf("• Toolchain %-8s: [MISSING - REQUIRED]\n", tc)
+					fmt.Fprintf(human, "• Toolchain %-8s: [MISSING - REQUIRED]\n", tc)
 				} else {
-					fmt.Printf("• Toolchain %-8s: Not found in PATH (optional, needed if target repo uses it)\n", tc)
+					fmt.Fprintf(human, "• Toolchain %-8s: Not found in PATH (optional, needed if target repo uses it)\n", tc)
 				}
 			}
 		}
 
-		fmt.Println("--------------------------------------------------")
+		fmt.Fprintln(human, "--------------------------------------------------")
+		if jsonFlag {
+			payload := map[string]interface{}{
+				"ready":              ready,
+				"mock_mode":          mockFlag,
+				"failure_reasons":    failureReasons,
+				"inference_endpoint": nebius.BaseURL,
+				"fast_model":         nebius.FastModel,
+				"reasoning_model":    nebius.ReasoningModel,
+				"endpoint_probe":     probeLabel,
+				"endpoint_rtt_ms":    nebiusRTT,
+				"tavily_configured":  tavily.APIKey != "",
+				"toolchains":         toolchainMap,
+			}
+			data, _ := json.MarshalIndent(payload, "", "  ")
+			fmt.Println(string(data))
+			if !ready {
+				return fmt.Errorf("environment check failed: %d issue(s) detected", len(failureReasons))
+			}
+			return nil
+		}
+		fmt.Fprintln(human, "--------------------------------------------------")
 		if ready {
-			fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("System ready for autonomous self-healing."))
+			fmt.Fprintln(human, lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Render("System ready for autonomous self-healing."))
 			return nil
 		}
 
-		fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5555")).Render("System NOT ready for live cloud healing:"))
+		fmt.Fprintln(human, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5555")).Render("System NOT ready for live cloud healing:"))
 		for _, reason := range failureReasons {
-			fmt.Printf("  ✘ %s\n", reason)
+			fmt.Fprintf(human, "  ✘ %s\n", reason)
 		}
-		fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")).Render("\nTip: To test the full self-healing pipeline offline with zero API keys:"))
-		fmt.Println("     nemotron-healer doctor --mock")
-		fmt.Println("     nemotron-healer samples/external_gjson --mock --command \"go test . -run TestEmptyValueQuery -count=1\"")
+		fmt.Fprintln(human, lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")).Render("\nTip: To test the full self-healing pipeline offline with zero API keys:"))
+		fmt.Fprintln(human, "     nemotron-healer doctor --mock")
+		fmt.Fprintln(human, "     nemotron-healer samples/external_gjson --mock --command \"go test . -run TestEmptyValueQuery -count=1\"")
 		return fmt.Errorf("environment check failed: %d issue(s) detected", len(failureReasons))
 	},
 }
@@ -293,6 +324,19 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version info",
 	Run: func(cmd *cobra.Command, args []string) {
+		if jsonFlag {
+			payload := map[string]interface{}{
+				"version":   Version,
+				"platform":  "Nebius Token Factory",
+				"models": map[string]string{
+					"reasoning": "nvidia/Nemotron-3-Ultra-550b-a55b",
+					"triage":    "nvidia/Nemotron-3-Nano-30B-A3B",
+				},
+			}
+			data, _ := json.MarshalIndent(payload, "", "  ")
+			fmt.Println(string(data))
+			return
+		}
 		fmt.Printf("nemotron-healer-go %s (NVIDIA Nemotron 3 Ultra + Tavily)\n", Version)
 	},
 }
