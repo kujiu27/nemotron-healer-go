@@ -112,11 +112,25 @@ jobs:
           turns: '2'
           enable_mock: 'true'
 
-      - name: Assert action succeeded end-to-end on real runner
-        if: steps.act_success.outcome != 'success'
+      - name: Assert action succeeded end-to-end on real runner and populated step outputs
+        if: steps.act_success.outcome != 'success' || steps.act_success.outputs.is_resolved != 'true'
         run: |
-          echo "Expected the healer action to succeed in mock mode, got: ${{ steps.act_success.outcome }}"
-          exit 1
+          echo "Outcome: ${{ steps.act_success.outcome }}"
+          echo "Resolved: ${{ steps.act_success.outputs.is_resolved }}"
+          echo "Branch: ${{ steps.act_success.outputs.branch_name }}"
+          echo "Digest: ${{ steps.act_success.outputs.patch_digest }}"
+          if [ "${{ steps.act_success.outputs.is_resolved }}" != "true" ]; then
+            echo "Action did not export is_resolved=true output"
+            exit 1
+          fi
+          if [ -z "${{ steps.act_success.outputs.branch_name }}" ]; then
+            echo "Action did not export branch_name output"
+            exit 1
+          fi
+          if [ -z "${{ steps.act_success.outputs.patch_digest }}" ]; then
+            echo "Action did not export patch_digest output"
+            exit 1
+          fi
 
   benchmark-red:
     name: Benchmark RED-State Integrity
