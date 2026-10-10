@@ -31,6 +31,13 @@ type NebiusClient struct {
 	LastThoughtChain string
 }
 
+// Telemetry returns the thread-safe snapshot of the latest measured TTFT and TPS.
+func (c *NebiusClient) Telemetry() (ttft float64, tps float64, thoughtChain string) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.LastTTFT, c.LastTPS, c.LastThoughtChain
+}
+
 type ChatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

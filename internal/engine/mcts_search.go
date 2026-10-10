@@ -322,6 +322,10 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 		if authErr != nil {
 			return nil, fmt.Errorf("nebius authentication failed: %w", authErr)
 		}
+		ttft, tps, _ := a.Nebius.Telemetry()
+		a.Session.TokenLedger.TTFTSeconds = ttft
+		a.Session.TokenLedger.MeasuredTPS = tps
+
 		// Select best branch from parallel rollouts
 		var winningBranch *branchResult
 		highestReward := -1.0
@@ -470,6 +474,10 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 		if reward >= 0.70 {
 			a.notify(StateSucceeded, fmt.Sprintf("🎉 DHS converged on optimal branch [%s] (%s) with Reward: %.3f!",
 				childID, hyp.Name, reward), nil)
+			ttft, tps, _ := a.Nebius.Telemetry()
+			a.Session.TokenLedger.TTFTSeconds = ttft
+			a.Session.TokenLedger.MeasuredTPS = tps
+
 
 			runArenaIfEnabled(targetFile)
 			a.Session.AppliedPatches = append(a.Session.AppliedPatches, diffPatch)
@@ -542,6 +550,10 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 
 						if reward2 >= 0.70 {
 							a.notify(StateSucceeded, fmt.Sprintf("🎉 DHS Depth-2 converged on optimal hardened branch [%s] with Reward: %.3f!", depth2ID, reward2), nil)
+							ttft2, tps2, _ := a.Nebius.Telemetry()
+							a.Session.TokenLedger.TTFTSeconds = ttft2
+							a.Session.TokenLedger.MeasuredTPS = tps2
+
 							runArenaIfEnabled(targetFile)
 							a.Session.AppliedPatches = append(a.Session.AppliedPatches, refineDiff)
 							a.finalizeSuccessfulHealing(

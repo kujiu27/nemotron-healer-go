@@ -378,8 +378,9 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		patchSug, pTokens, cTokens, err := a.Nebius.DiagnoseAndPatch(ctx, a.TestCommand, initRes.Stdout, a.Session.LastError, codeCtx, docsCtx, archetypeContext, failedHistory, a.OnStreamToken)
 		// Ledger telemetry
 		a.addTokens(pTokens, cTokens)
-		a.Session.TokenLedger.TTFTSeconds = a.Nebius.LastTTFT
-		a.Session.TokenLedger.MeasuredTPS = a.Nebius.LastTPS
+		ttft, tps, _ := a.Nebius.Telemetry()
+		a.Session.TokenLedger.TTFTSeconds = ttft
+		a.Session.TokenLedger.MeasuredTPS = tps
 		a.Session.TokenLedger.CalculateCost()
 
 		if err != nil || patchSug == nil || patchSug.DiffPatch == "" {
