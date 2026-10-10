@@ -100,6 +100,24 @@ jobs:
           echo "Expected the healer to exit non-zero without API keys, got: ${{ steps.act.outcome }}"
           exit 1
 
+      # Positive smoke test: runs composite action with enable_mock: 'true' against AHB-08 (samples/external_gjson),
+      # asserting that the GitHub Action successfully heals the bug, verifies falsification,
+      # creates the PR branch, and outputs the notice on a real GitHub runner without API keys!
+      - name: Run composite action with enable_mock (verify end-to-end success in CI)
+        id: act_success
+        uses: ./
+        with:
+          path: samples/external_gjson
+          command: go test . -run TestEmptyValueQuery -count=1
+          turns: '2'
+          enable_mock: 'true'
+
+      - name: Assert action succeeded end-to-end on real runner
+        if: steps.act_success.outcome != 'success'
+        run: |
+          echo "Expected the healer action to succeed in mock mode, got: ${{ steps.act_success.outcome }}"
+          exit 1
+
   benchmark-red:
     name: Benchmark RED-State Integrity
     runs-on: ubuntu-latest

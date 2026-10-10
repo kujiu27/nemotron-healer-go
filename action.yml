@@ -17,6 +17,18 @@ inputs:
     description: "Enable Red-Blue Adversarial Self-Play Arena"
     required: false
     default: "true"
+  enable_search:
+    description: "Enable Test-Time Compute (TTC) Divergent Hypothesis Search"
+    required: false
+    default: "false"
+  enable_mock:
+    description: "Run in offline mock mode using built-in labeled mock server (zero API keys required)"
+    required: false
+    default: "false"
+  sarif:
+    description: "Export diagnostic and healing results in standard SARIF 2.1.0 format to path"
+    required: false
+    default: ""
   github_token:
     description: "GitHub token for creating PR comments"
     required: false
@@ -34,12 +46,17 @@ runs:
     - name: Build Nemotron-Healer from source
       shell: bash
       run: |
-        REF="${{ github.action_ref }}"
-        if [ -z "$REF" ]; then REF="main"; fi
-        echo "Building Nemotron-Healer from source @ ${REF}..."
-        git clone --depth 1 --branch "${REF}" https://github.com/kujiu27/nemotron-healer-go.git /tmp/nh-src \
-          || git clone --depth 1 https://github.com/kujiu27/nemotron-healer-go.git /tmp/nh-src
-        CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /usr/local/bin/nemotron-healer /tmp/nh-src/cmd/nemotron-healer
+        if [ -d "$GITHUB_ACTION_PATH/cmd/nemotron-healer" ]; then
+          echo "Building Nemotron-Healer directly from action path: $GITHUB_ACTION_PATH..."
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /usr/local/bin/nemotron-healer "$GITHUB_ACTION_PATH/cmd/nemotron-healer"
+        else
+          REF="${{ github.action_ref }}"
+          if [ -z "$REF" ]; then REF="main"; fi
+          echo "Building Nemotron-Healer from source @ ${REF}..."
+          git clone --depth 1 --branch "${REF}" https://github.com/kujiu27/nemotron-healer-go.git /tmp/nh-src \
+            || git clone --depth 1 https://github.com/kujiu27/nemotron-healer-go.git /tmp/nh-src
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /usr/local/bin/nemotron-healer /tmp/nh-src/cmd/nemotron-healer
+        fi
         nemotron-healer version
 
     - name: Run Autonomous Self-Healing Pipeline
@@ -52,12 +69,24 @@ runs:
         NH_COMMAND: ${{ inputs.command }}
         NH_TURNS: ${{ inputs.turns }}
         NH_ARENA: ${{ inputs.enable_arena }}
+        NH_SEARCH: ${{ inputs.enable_search }}
+        NH_MOCK: ${{ inputs.enable_mock }}
+        NH_SARIF: ${{ inputs.sarif }}
       run: |
-        ARENA_FLAG=""
+        EXTRA_FLAGS=""
         if [[ "$NH_ARENA" == "true" ]]; then
-          ARENA_FLAG="--arena"
+          EXTRA_FLAGS="$EXTRA_FLAGS --arena"
         fi
-        nemotron-healer "$NH_PATH" --command "$NH_COMMAND" --turns "$NH_TURNS" $ARENA_FLAG --no-tui
+        if [[ "$NH_SEARCH" == "true" ]]; then
+          EXTRA_FLAGS="$EXTRA_FLAGS --search"
+        fi
+        if [[ "$NH_MOCK" == "true" ]]; then
+          EXTRA_FLAGS="$EXTRA_FLAGS --mock"
+        fi
+        if [[ -n "$NH_SARIF" ]]; then
+          EXTRA_FLAGS="$EXTRA_FLAGS --sarif $NH_SARIF"
+        fi
+        nemotron-healer "$NH_PATH" --command "$NH_COMMAND" --turns "$NH_TURNS" $EXTRA_FLAGS --no-tui
 
     - name: Publish PR Audit Report Comment
       if: always() && github.event_name == 'pull_request'
@@ -65,6 +94,10 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
-        if [[ -f "HEAL_AUDIT_REPORT.md" ]]; then
-          gh pr comment ${{ github.event.pull_request.number }} --body-file HEAL_AUDIT_REPORT.md || true
+        REPORT_FILE="HEAL_AUDIT_REPORT.md"
+        if [[ ! -f "$REPORT_FILE" && -f "$NH_PATH/HEAL_AUDIT_REPORT.md" ]]; then
+          REPORT_FILE="$NH_PATH/HEAL_AUDIT_REPORT.md"
+        fi
+        if [[ -f "$REPORT_FILE" ]]; then
+          gh pr comment ${{ github.event.pull_request.number }} --body-file "$REPORT_FILE" || true
         fi
