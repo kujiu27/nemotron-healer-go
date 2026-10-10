@@ -22,7 +22,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.29"
+var Version = "v0.7.30"
 
 var (
 	testCmdFlag    string
@@ -174,6 +174,8 @@ func handlePostSession(session *engine.HealingSession, agent *engine.Agent, absD
 	if sarifFlag != "" {
 		if sErr := ExportSarif(session, sarifFlag); sErr == nil {
 			fmt.Fprintf(human, "📊 Exported SARIF 2.1.0 security report to `%s`\n", sarifFlag)
+		} else {
+			fmt.Fprintf(human, "⚠️ Failed to export SARIF report to `%s`: %v\n", sarifFlag, sErr)
 		}
 	}
 	if session.IsResolved && len(session.AppliedPatches) > 0 && !jsonFlag {
