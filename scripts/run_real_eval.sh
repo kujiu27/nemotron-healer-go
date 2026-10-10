@@ -32,13 +32,18 @@ if [ -n "${EVAL_CASE:-}" ]; then
   CASE_FLAG="--case $EVAL_CASE"
 fi
 
+SEARCH_FLAG=""
+if [ "${EVAL_SEARCH:-false}" = "true" ] || [ "${1:-}" = "--search" ] || [ "${2:-}" = "--search" ] || [ "${3:-}" = "--search" ]; then
+  SEARCH_FLAG="--search"
+fi
+
 mkdir -p "$(dirname "$OUT")" "$(dirname "$JSON_OUT")" "$(dirname "$MD_OUT")"
 
 {
   echo ""
   echo "## Real API eval — ${STAMP} — commit ${COMMIT} — model $(grep -o 'Nemotron-3-Ultra[^"]*' internal/client/nebius.go | head -1)"
   echo '```'
-  "$BIN" eval --repeat "${REPEAT:-3}" $MOCK_FLAG $CASE_FLAG --export-json "$JSON_OUT" --export-md "$MD_OUT" 2>&1
+  "$BIN" eval --repeat "${REPEAT:-3}" $MOCK_FLAG $CASE_FLAG $SEARCH_FLAG --export-json "$JSON_OUT" --export-md "$MD_OUT" 2>&1
   echo '```'
 } >> "$OUT"
 

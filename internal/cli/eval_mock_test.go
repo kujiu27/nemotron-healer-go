@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -176,5 +177,30 @@ func TestEvalCmd_StepSummaryPublishesScorecardWithoutJunk(t *testing.T) {
 	}
 	if strings.Contains(content, "## ⚡ Nemotron-Healer Autonomous Verification Report") {
 		t.Errorf("intermediate healing report leaked into GITHUB_STEP_SUMMARY:\n%s", content)
+	}
+}
+
+func TestCreateIsolatedSandbox_InitializesGitRepo(t *testing.T) {
+	sandboxDir, err := createIsolatedSandbox("samples/external_gjson")
+	if err != nil {
+		t.Fatalf("createIsolatedSandbox failed: %v", err)
+	}
+	defer os.RemoveAll(sandboxDir)
+
+	// Verify .git directory exists
+	gitDir := filepath.Join(sandboxDir, ".git")
+	if info, err := os.Stat(gitDir); err != nil || !info.IsDir() {
+		t.Errorf("expected .git directory in isolated sandbox, got error: %v", err)
+	}
+
+	// Verify git status runs cleanly
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = sandboxDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Errorf("git status in sandbox failed: %v, out: %s", err, out)
+	}
+	if len(strings.TrimSpace(string(out))) != 0 {
+		t.Errorf("expected clean git tree in sandbox, got uncommitted files: %s", out)
 	}
 }
