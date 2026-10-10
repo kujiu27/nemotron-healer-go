@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -105,5 +106,50 @@ func TestGitHookInWorktree(t *testing.T) {
 	}
 	if _, err := os.Stat(hookPath); !os.IsNotExist(err) {
 		t.Fatalf("hook still exists after uninstall in worktree")
+	}
+}
+
+func TestHookCmd_JSONPure(t *testing.T) {
+	tmpDir := t.TempDir()
+	cInit := exec.Command("git", "init")
+	cInit.Dir = tmpDir
+	if err := cInit.Run(); err != nil {
+		t.Skip("git init unavailable")
+	}
+
+	origJSON := jsonFlag
+	jsonFlag = true
+	defer func() { jsonFlag = origJSON }()
+
+	outInstall := captureStdout(func() {
+		_ = hookInstallCmd.RunE(hookInstallCmd, []string{tmpDir})
+	})
+
+	var resInstall struct {
+		Status   string `json:"status"`
+		HookPath string `json:"hook_path"`
+		AutoHeal bool   `json:"auto_heal"`
+	}
+	if err := json.Unmarshal([]byte(outInstall), &resInstall); err != nil {
+		t.Fatalf("hook install --json stdout not pure JSON: %v, raw:\n%s", err, outInstall)
+	}
+	if resInstall.Status != "installed" || resInstall.HookPath == "" {
+		t.Errorf("unexpected hook install payload: %+v", resInstall)
+	}
+
+	outUninstall := captureStdout(func() {
+		_ = hookUninstallCmd.RunE(hookUninstallCmd, []string{tmpDir})
+	})
+
+	var resUninstall struct {
+		Status  string `json:"status"`
+		Target  string `json:"target"`
+		Success bool   `json:"success"`
+	}
+	if err := json.Unmarshal([]byte(outUninstall), &resUninstall); err != nil {
+		t.Fatalf("hook uninstall --json stdout not pure JSON: %v, raw:\n%s", err, outUninstall)
+	}
+	if resUninstall.Status != "uninstalled" || !resUninstall.Success {
+		t.Errorf("unexpected hook uninstall payload: %+v", resUninstall)
 	}
 }
