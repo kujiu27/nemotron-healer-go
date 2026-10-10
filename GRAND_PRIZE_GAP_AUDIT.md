@@ -180,7 +180,9 @@ DESIGN 还宣称 R>0.7 时 "restricts unified diffs to non-signature-breaking op
 | 评委扫读零显式差异化(vs SweAgent/OpenHands) | 中伤 | closed-loop vs open-loop 明示(Devpost+README) | docs/differentiation-blade |
 | 残留盲区 993 行:arena 判定污染(-m pytest 丢失)、TUI 数据竞争、pydantic v1 死代码 | 重伤×3 | 全修 + 3 回归测试(78 tests) | fix/residual-quality |
 | 账本/计数陈旧(r25 停更、46→78、2→4 外部案例) | 中伤 | 本行起账本与七门禁/78 tests/9 case/4 外部 bug 同步 | chore/ledger-sync-v0.7.0 |
-> 后续追加轮(9-32)发现与修复已并入上表;主 README 的 "Evidence & Verification" 一节给全部收据入口。
+| v0.7.0 冷机复验缺失(r20-31 大改后) | 中伤 | 冷 clone/构建/check/红态 9/9 全绿,零缺陷零变更 | 验收记录(无 commit) |
+| DHS 双路径 ~200 行逐字重复(入档债务) | 中伤 | 三 helper 六调用点收敛,净删 30 行;78 tests + mock 四模式锁定 | refactor/dhs-dedup |
+> 后续追加轮(9-35)发现与修复已并入上表;主 README 的 "Evidence & Verification" 一节给全部收据入口。
 ### Remediation Status (for judges)
 
 This repo carries its own adversarial self-audit (above, 10 interrogation
