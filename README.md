@@ -40,7 +40,7 @@ When CI tests fail or breaking changes break your codebase, developers waste hou
 | GitHub Action works on a real runner | `action-smoke` job in [CI](.github/workflows/ci.yml) runs the composite action end-to-end on every push |
 | Release binaries are live | [Releases](https://github.com/kujiu27/nemotron-healer-go/releases) — auto-published on `v*` tag pushes |
 | Benchmark statistics with variance | `nemotron-healer eval --repeat N` — per-case solve rates + mean±std |
-| Full pipeline runs end-to-end without API keys | `make eval-mock` — labeled mock endpoints (`X-Nemotron-Healer: MOCK`), a wiring demo that writes no receipts |
+| Full pipeline runs end-to-end without API keys | `nemotron-healer --mock` (or `make eval-mock`) — built-in labeled mock endpoints (`X-Nemotron-Healer: MOCK`), pure Go, zero python or API keys |
 
 ---
 
@@ -75,7 +75,8 @@ commands via `sh -c`.
 
 ### 2. Verify Environment
 ```bash
-nemotron-healer doctor
+nemotron-healer doctor          # verifies Token Factory & Tavily (fail-closed)
+nemotron-healer doctor --mock   # verifies built-in mock environment offline
 ```
 
 ### 3. Heal a Broken Project
@@ -86,12 +87,14 @@ nemotron-healer . --command "pytest"
 
 # Or in non-interactive CI mode
 nemotron-healer . --command "go test ./..." --no-tui
-```
+
+# Or offline with zero API keys via built-in mock
+nemotron-healer samples/external_gjson --mock --command "go test . -run TestEmptyValueQuery -count=1" --no-tui
 
 ### 4. Use as a GitHub Action
 ```yaml
 - name: Autonomous Self-Healing CI
-  uses: kujiu27/nemotron-healer-go@v0.7.4
+  uses: kujiu27/nemotron-healer-go@v0.7.5
   with:
     path: .                    # directory to heal (default: repo root)
     command: go test ./...     # the failing test command

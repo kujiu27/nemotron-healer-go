@@ -362,9 +362,12 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 		promptMessages := buildHypothesisPrompt(hyp.Name, hyp.Guidance, targetHint, archetype.Archetype, initialFailingOutput, codeCtx, docsCtx)
 
 		rawResp, pTok, cTok, err := a.Nebius.StreamCompletion(ctx, promptMessages, a.OnStreamToken)
+		if err != nil && isAuthError(err) {
+			_ = a.Checkpointer.Rollback(cpID)
+			return nil, fmt.Errorf("nebius authentication failed: %w", err)
+		}
 		a.addTokens(pTok, cTok)
 		a.Session.TokenLedger.CalculateCost()
-
 		diffPatch, targetFile := targetHint, targetHint
 		if err == nil {
 			diffPatch, targetFile = parseResponseDiffTarget(rawResp, targetHint)
