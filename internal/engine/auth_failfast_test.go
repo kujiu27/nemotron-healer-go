@@ -66,3 +66,37 @@ func TestAgentRun_AuthFastFail(t *testing.T) {
 		t.Errorf("session must not be marked resolved on auth failure")
 	}
 }
+
+func TestAgentRun_SearchAuthFastFail(t *testing.T) {
+	tmpDir := t.TempDir()
+	failingCmd := "false"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"detail":"Couldn't authenticate. Reason: token is not present"}`))
+	}))
+	defer server.Close()
+
+	agent := NewAgent(tmpDir, failingCmd, 5, nil, nil)
+	agent.EnableSearch = true
+	agent.DisableGrounding = true
+	agent.Nebius.BaseURL = server.URL
+	agent.Nebius.APIKey = ""
+
+	start := time.Now()
+	session, err := agent.Run(context.Background())
+	duration := time.Since(start)
+
+	if err == nil {
+		t.Fatalf("expected auth error with EnableSearch, got nil")
+	}
+	if session.CurrentTurn > 0 {
+		t.Errorf("expected fail fast before Turn 1 in DHS, ran %d turns", session.CurrentTurn)
+	}
+	if duration > 10*time.Second {
+		t.Errorf("expected fast fail, took %v", duration)
+	}
+	if session.IsResolved {
+		t.Errorf("session must not be marked resolved on auth failure")
+	}
+}
