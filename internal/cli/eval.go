@@ -345,6 +345,13 @@ func createIsolatedSandbox(srcRelPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if _, err := os.Stat(absSrc); err != nil {
+		if alt, aErr := filepath.Abs(filepath.Join("..", "..", srcRelPath)); aErr == nil {
+			if _, sErr := os.Stat(alt); sErr == nil {
+				absSrc = alt
+			}
+		}
+	}
 
 	tmpDir, err := os.MkdirTemp("", "nemotron_eval_*")
 	if err != nil {
