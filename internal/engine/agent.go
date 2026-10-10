@@ -84,12 +84,23 @@ func NewAgent(workDir, testCommand string, maxTurns int, onEvent EventCallback, 
 	}
 }
 
-// addTokens accumulates streamed usage under eventMu so renderers
-// (TUI SessionSnapshot) never read torn counters.
+// addTokens accumulates streamed Nemotron Ultra usage and recalculates cost atomically under eventMu
+// so renderers (TUI SessionSnapshot) never read torn counters.
 func (a *Agent) addTokens(prompt, completion int) {
 	a.eventMu.Lock()
 	a.Session.TokenLedger.PromptTokens += prompt
 	a.Session.TokenLedger.CompletionTokens += completion
+	a.Session.TokenLedger.CalculateCost()
+	a.eventMu.Unlock()
+}
+
+// addFastTokens accumulates streamed Nemotron Nano fast triage usage ($0.06/$0.24 per 1M)
+// and recalculates cost atomically under eventMu.
+func (a *Agent) addFastTokens(prompt, completion int) {
+	a.eventMu.Lock()
+	a.Session.TokenLedger.FastPromptTokens += prompt
+	a.Session.TokenLedger.FastCompTokens += completion
+	a.Session.TokenLedger.CalculateCost()
 	a.eventMu.Unlock()
 }
 
@@ -285,7 +296,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		if a.Nebius.FastModel != "" && !a.DisableGrounding {
 			triage, ftP, ftC, ftErr := a.Nebius.FastTriage(ctx, a.Session.LastError)
 			if ftErr == nil && triage != nil {
-				a.addTokens(ftP, ftC)
+				a.addFastTokens(ftP, ftC)
 				if triage.HypothesizedRootCause != "" {
 					a.notify(StateDiagnosing, fmt.Sprintf("Tier-1 Fast Triage (%s): %s", a.Nebius.FastModel, triage.HypothesizedRootCause), nil)
 				}
@@ -543,8 +554,25 @@ func (a *Agent) finalizeSuccessfulHealing(
 	// Quantitative Economics (Token Factory catalog prices, streamed usage)
 	pTok := a.Session.TokenLedger.PromptTokens
 	cTok := a.Session.TokenLedger.CompletionTokens
-	nebiusCost := a.Session.TokenLedger.EstimatedCostUSD
+	fastPTok := a.Session.TokenLedger.FastPromptTokens
+	fastCTok := a.Session.TokenLedger.FastCompTokens
 
+	var econMatrixSb strings.Builder
+	econMatrixSb.WriteString("| Infrastructure Tier | Model / Agent | Pricing Rate (Prompt / Completion) | Estimated Run Cost | Savings vs Baseline |\n")
+	econMatrixSb.WriteString("| :--- | :--- | :--- | :--- | :--- |\n")
+	ultraCost := (float64(pTok)*PricePromptPerMillion + float64(cTok)*PriceCompletionPerMillion) / 1_000_000.0
+	econMatrixSb.WriteString(fmt.Sprintf("| ⚡ **Nebius Token Factory** | **NVIDIA Nemotron 3 Ultra** (Reasoning Brain) | **$1.00 / $3.00 per 1M** | **$%.6f USD** | — (Our Platform) |\n", ultraCost))
+	if fastPTok+fastCTok > 0 {
+		nanoCost := (float64(fastPTok)*PriceFastPromptPerMillion + float64(fastCTok)*PriceFastCompletionPerMillion) / 1_000_000.0
+		econMatrixSb.WriteString(fmt.Sprintf("| ⚡ **Nebius Token Factory** | **NVIDIA Nemotron 3 Nano** (Tier-1 Triage) | **$0.06 / $0.24 per 1M** | **$%.6f USD** | — (Our Platform) |\n", nanoCost))
+	}
+	econMatrixSb.WriteString(fmt.Sprintf("| 🧑‍💻 Senior Staff Engineer | 30-min Manual Triage ($50/hr) | Fixed Engineering Salary | $25.00 USD | **-%.1f%%%% Net Savings** |\n", a.Session.TokenLedger.SavingsPercentage))
+
+	tokenBreakdown := fmt.Sprintf("%d (Prompt: %d, Completion: %d)", a.Session.TokenLedger.TotalTokens, pTok, cTok)
+	if fastPTok+fastCTok > 0 {
+		tokenBreakdown = fmt.Sprintf("%d (Ultra Brain: %d in / %d out; Nano Triage: %d in / %d out)",
+			a.Session.TokenLedger.TotalTokens, pTok, cTok, fastPTok, fastCTok)
+	}
 	regressionGuardSection := "- **Regression Guard**: Counter-example verified in sandbox ephemeral test."
 	if a.Session.RegressionTestFile != "" {
 		regressionGuardSection = fmt.Sprintf("- **Permanent Regression Test**: `%s` (Committed into branch to permanently prevent regressions in CI)", a.Session.RegressionTestFile)
@@ -614,15 +642,11 @@ func (a *Agent) finalizeSuccessfulHealing(
 ---
 
 ### 💰 Quantitative Economic & Throughput Matrix
-| Infrastructure Tier | Model / Agent | Pricing Rate (Prompt / Completion) | Estimated Run Cost | Savings vs Baseline |
-| :--- | :--- | :--- | :--- | :--- |
-| ⚡ **Nebius Token Factory** | **NVIDIA Nemotron 3 Ultra** | **$1.00 / $3.00 per 1M** | **$%.6f USD** | — (Our Platform) |
-| 🧑‍💻 Senior Staff Engineer | 30-min Manual Triage ($50/hr) | Fixed Engineering Salary | $25.00 USD | **-%.1f%%%% Net Savings** |
-
+%s
 **Nebius High-Performance Streaming Metrics:**
 - **Time To First Token (TTFT)**: `+"`%.2fs`"+`
 - **Measured Generation Throughput**: `+"`%.1f tokens/sec`"+`
-- **Total In-Flight Tokens**: %d (Prompt: %d, Completion: %d)
+- **Total In-Flight Tokens**: %s
 `,
 		a.WorkDir, a.TestCommand, outcomeText,
 		archetype.Archetype, archetype.Severity, archetype.Description,
@@ -631,9 +655,9 @@ func (a *Agent) finalizeSuccessfulHealing(
 		tavilyCitationTable.String(), falsifyStatus, arenaNotes,
 		regressionGuardSection, reasoningSection,
 		patchDigest, a.Nebius.Model,
-		nebiusCost, a.Session.TokenLedger.SavingsPercentage,
+		econMatrixSb.String(),
 		a.Session.TokenLedger.TTFTSeconds, a.Session.TokenLedger.MeasuredTPS,
-		a.Session.TokenLedger.TotalTokens, pTok, cTok)
+		tokenBreakdown)
 
 	commitPrefix := "via Nemotron 3 Ultra"
 	if resolutionMechanism != "" {

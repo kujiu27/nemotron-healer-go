@@ -54,39 +54,38 @@ func TestTokenLedgerLifecycle_AddTokens(t *testing.T) {
 		t.Fatalf("expected initial 0 tokens, got %d", agent.Session.TokenLedger.TotalTokens)
 	}
 
-	// 1. Stage 1: Fast triage (Nemotron Nano)
-	agent.addTokens(150, 40)
-	agent.Session.TokenLedger.CalculateCost()
+	// 1. Stage 1: Fast triage (Nemotron Nano @ $0.06/$0.24 per 1M)
+	agent.addFastTokens(150, 40)
 	if agent.Session.TokenLedger.TotalTokens != 190 {
 		t.Errorf("expected 190 tokens after triage, got %d", agent.Session.TokenLedger.TotalTokens)
+	}
+	if agent.Session.TokenLedger.FastPromptTokens != 150 || agent.Session.TokenLedger.FastCompTokens != 40 {
+		t.Errorf("fast token counters mismatch: %d, %d", agent.Session.TokenLedger.FastPromptTokens, agent.Session.TokenLedger.FastCompTokens)
 	}
 
 	// 2. Stage 2: Synthesis (Nemotron 3 Ultra)
 	agent.addTokens(1200, 350)
-	agent.Session.TokenLedger.CalculateCost()
 	if agent.Session.TokenLedger.TotalTokens != 1740 {
-		t.Errorf("expected 1740 tokens after synthesis, got %d", agent.Session.TokenLedger.TotalTokens)
+		t.Errorf("expected 1740 tokens after synthesis (190 fast + 1550 ultra), got %d", agent.Session.TokenLedger.TotalTokens)
 	}
 
 	// 3. Stage 3: Adversarial Falsification stress test
 	agent.addTokens(400, 180)
-	agent.Session.TokenLedger.CalculateCost()
 	if agent.Session.TokenLedger.TotalTokens != 2320 {
 		t.Errorf("expected 2320 tokens after falsification, got %d", agent.Session.TokenLedger.TotalTokens)
 	}
 
 	// 4. Stage 4: Red-Blue Arena (2 rounds)
 	agent.addTokens(800, 300)
-	agent.Session.TokenLedger.CalculateCost()
 	if agent.Session.TokenLedger.TotalTokens != 3420 {
 		t.Errorf("expected 3420 tokens after arena, got %d", agent.Session.TokenLedger.TotalTokens)
 	}
 
-	// Verify prompt/completion totals
-	if agent.Session.TokenLedger.PromptTokens != (150 + 1200 + 400 + 800) {
+	// Verify prompt/completion totals (Ultra models)
+	if agent.Session.TokenLedger.PromptTokens != (1200 + 400 + 800) {
 		t.Errorf("prompt tokens mismatch: got %d", agent.Session.TokenLedger.PromptTokens)
 	}
-	if agent.Session.TokenLedger.CompletionTokens != (40 + 350 + 180 + 300) {
+	if agent.Session.TokenLedger.CompletionTokens != (350 + 180 + 300) {
 		t.Errorf("completion tokens mismatch: got %d", agent.Session.TokenLedger.CompletionTokens)
 	}
 	if agent.Session.TokenLedger.EstimatedCostUSD <= 0 {
