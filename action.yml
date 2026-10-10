@@ -65,18 +65,23 @@ runs:
     - name: Build Nemotron-Healer from source
       shell: bash
       run: |
+        BIN_DIR="$(go env GOPATH)/bin"
+        mkdir -p "$BIN_DIR"
+        echo "$BIN_DIR" >> "$GITHUB_PATH"
         if [ -d "$GITHUB_ACTION_PATH/cmd/nemotron-healer" ]; then
           echo "Building Nemotron-Healer directly from action path: $GITHUB_ACTION_PATH..."
-          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /usr/local/bin/nemotron-healer "$GITHUB_ACTION_PATH/cmd/nemotron-healer"
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$BIN_DIR/nemotron-healer" "$GITHUB_ACTION_PATH/cmd/nemotron-healer"
         else
           REF="${{ github.action_ref }}"
           if [ -z "$REF" ]; then REF="main"; fi
           echo "Building Nemotron-Healer from source @ ${REF}..."
-          git clone --depth 1 --branch "${REF}" https://github.com/kujiu27/nemotron-healer-go.git /tmp/nh-src \
-            || git clone --depth 1 https://github.com/kujiu27/nemotron-healer-go.git /tmp/nh-src
-          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /usr/local/bin/nemotron-healer /tmp/nh-src/cmd/nemotron-healer
+          TMP_SRC="$(mktemp -d /tmp/nh-src-XXXX)"
+          git clone --depth 1 --branch "${REF}" https://github.com/kujiu27/nemotron-healer-go.git "$TMP_SRC" \
+            || git clone --depth 1 https://github.com/kujiu27/nemotron-healer-go.git "$TMP_SRC"
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$BIN_DIR/nemotron-healer" "$TMP_SRC/cmd/nemotron-healer"
+          rm -rf "$TMP_SRC"
         fi
-        nemotron-healer version
+        "$BIN_DIR/nemotron-healer" version
 
     - name: Run Autonomous Self-Healing Pipeline
       id: heal
