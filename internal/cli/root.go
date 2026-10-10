@@ -22,7 +22,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.43"
+var Version = "v0.7.44"
 
 var (
 	testCmdFlag    string
@@ -112,11 +112,17 @@ var RootCmd = &cobra.Command{
 			origBranchOut, _ := origBranchCmd.Output()
 			origBranch := strings.TrimSpace(string(origBranchOut))
 
-			session, err := agent.Run(context.Background())
-			if err != nil {
-				return err
+			session, runErr := agent.Run(context.Background())
+			if session != nil {
+				postErr := handlePostSession(session, agent, absDir, origBranch, human)
+				if postErr != nil {
+					return postErr
+				}
 			}
-			return handlePostSession(session, agent, absDir, origBranch, human)
+			if runErr != nil {
+				return runErr
+			}
+			return nil
 		}
 
 		// Interactive TUI Mode
@@ -155,13 +161,15 @@ var RootCmd = &cobra.Command{
 			return err
 		}
 		<-agentDone
+		if runSession != nil {
+			postErr := handlePostSession(runSession, agent, absDir, origBranch, human)
+			if postErr != nil {
+				return postErr
+			}
+		}
 		if runErr != nil {
 			return runErr
 		}
-		if runSession != nil {
-			return handlePostSession(runSession, agent, absDir, origBranch, human)
-		}
-
 		return nil
 	},
 }
@@ -207,7 +215,7 @@ func handlePostSession(session *engine.HealingSession, agent *engine.Agent, absD
 	if outputFile := os.Getenv("GITHUB_OUTPUT"); outputFile != "" {
 		if f, oErr := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); oErr == nil {
 			branchName := session.BranchName
-			if branchName == "" && session.IsResolved && session.SessionID != "" {
+			if branchName == "" && session.IsResolved && len(session.AppliedPatches) > 0 && session.SessionID != "" {
 				branchName = fmt.Sprintf("fix/nemotron-heal-%s", session.SessionID)
 			}
 			patchCount := len(session.AppliedPatches)
@@ -227,11 +235,25 @@ func handlePostSession(session *engine.HealingSession, agent *engine.Agent, absD
 		}
 	}
 
+	// Persist audit report file at workspace root for GitHub Action PR comment step
+	reportPath := filepath.Join(absDir, "HEAL_AUDIT_REPORT.md")
+	if session.AuditReport != "" {
+		_ = os.WriteFile(reportPath, []byte(session.AuditReport), 0644)
+	}
+
 	if session.IsResolved {
-		fmt.Fprintf(human, "::notice title=Nemotron Self-Healing Succeeded::Verified fix generated in %.2fs (Turn %d)\n", session.DurationSeconds, session.CurrentTurn)
+		if len(session.AppliedPatches) > 0 {
+			branchName := session.BranchName
+			if branchName == "" && session.SessionID != "" {
+				branchName = fmt.Sprintf("fix/nemotron-heal-%s", session.SessionID)
+			}
+			fmt.Fprintf(human, "::notice title=Nemotron Self-Healing Succeeded::Verified fix generated on branch %s in %.2fs (Turn %d)\n", branchName, session.DurationSeconds, session.CurrentTurn)
+		} else {
+			fmt.Fprintf(human, "::notice title=Nemotron Repository Clean::All tests already pass — no self-healing needed (%.2fs)\n", session.DurationSeconds)
+		}
 	} else {
 		fmt.Fprintf(human, "::error title=Nemotron Self-Healing Failed::Could not verify fix within %d turns\n", session.MaxTurns)
-		os.Exit(1)
+		return fmt.Errorf("self-healing failed to resolve test failure within %d turns", session.MaxTurns)
 	}
 	return nil
 }

@@ -52,6 +52,9 @@ outputs:
   duration_seconds:
     description: "Total self-healing runtime in seconds"
     value: ${{ steps.heal.outputs.duration_seconds }}
+  patches_count:
+    description: "Total number of verified patches applied"
+    value: ${{ steps.heal.outputs.patches_count }}
 
 runs:
   using: "composite"

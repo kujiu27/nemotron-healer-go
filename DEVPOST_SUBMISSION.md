@@ -58,12 +58,13 @@ ledger mapping every finding to its fix commit), then fixed everything it found:
 
 - `make bench` regenerates `docs/PERF.md` — committed receipts for the 8.0MB binary,
   ~12MB RSS, sub-10ms start. No API keys needed.
-- Two benchmark cases are REAL upstream bugs with red/green proofs in-repo:
-  sergi/go-diff `6dbe13c` (AHB-06) and pelletier/go-toml `6fa69af` (AHB-07) —
-  buggy tree fails, the upstream 17-line fix passes.
+- Four benchmark cases are REAL upstream bugs with red/green proofs in-repo:
+  sergi/go-diff `6dbe13c` (AHB-06), pelletier/go-toml `6fa69af` (AHB-07),
+  tidwall/gjson `0b52f9a` (AHB-08), and golang-jwt/jwt `1a11d37` (AHB-09) —
+  each failing as shipped, verified red on every CI push.
 - The GitHub Action chain runs end-to-end on a real runner in CI (`action-smoke` job)
   on every push — no release-binary dependency.
-- Release binaries auto-publish on tag pushes; `v0.7.43` assets are live.
+- Release binaries auto-publish on tag pushes; `v0.7.44` assets are live.
 - RED-state integrity gate: CI verifies every benchmark case still FAILS its own
   test command as shipped — no leaked answers, enforced on every push.
 
@@ -116,7 +117,7 @@ export TAVILY_API_KEY=...   # tavily.com
 nemotron-healer . --command "pytest" --no-tui
 ```
 
-Or as a one-line GitHub Action (`uses: kujiu27/nemotron-healer-go@v0.7.43`) — see README.
+Or as a one-line GitHub Action (`uses: kujiu27/nemotron-healer-go@v0.7.44`) — see README.
 
 ## Video
 
