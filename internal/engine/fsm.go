@@ -71,6 +71,7 @@ type HealingSession struct {
 	InitialError       string             `json:"initial_error"`
 	LastError          string             `json:"last_error"`
 	AppliedPatches     []string           `json:"applied_patches"`
+	BranchName         string             `json:"branch_name,omitempty"`
 	TavilyQueries      []string           `json:"tavily_queries"`
 	TavilyAnswer       string             `json:"tavily_answer,omitempty"`
 	TavilyExtractURL   string             `json:"tavily_extract_url,omitempty"`
