@@ -97,7 +97,11 @@ RULES:
 	targetDir := filepath.Dir(targetFile)
 	testFileName := lang.TestFileName
 	var testFilePath string
-	if targetDir == "." || targetDir == "" {
+	if lang.Name == "Rust" {
+		testDir := filepath.Join(f.WorkDir, "tests")
+		_ = os.MkdirAll(testDir, 0755)
+		testFilePath = filepath.Join(testDir, testFileName)
+	} else if targetDir == "." || targetDir == "" {
 		testFilePath = filepath.Join(f.WorkDir, testFileName)
 	} else {
 		testFilePath = filepath.Join(f.WorkDir, targetDir, testFileName)
@@ -235,7 +239,8 @@ func (f *Falsifier) buildTestCmd(lang LangConfig, testFileName string, targetDir
 		return fmt.Sprintf("go test -v -run TestAdversarialFalsify %s", targetPkg)
 	}
 	if lang.Name == "Rust" {
-		return "cargo test"
+		testStem := strings.TrimSuffix(testFileName, ".rs")
+		return fmt.Sprintf("cargo test --test %s", testStem)
 	}
 	targetPath := testFileName
 	if dir != "." {
@@ -249,6 +254,9 @@ func (f *Falsifier) buildTestCmd(lang LangConfig, testFileName string, targetDir
 			}
 		}
 		return fmt.Sprintf("%s %s", tokens[0], targetPath)
+	}
+	if strings.HasPrefix(f.TestCommand, "npm test") {
+		return fmt.Sprintf("%s -- %s", f.TestCommand, targetPath)
 	}
 	return fmt.Sprintf("%s %s", f.TestCommand, targetPath)
 }

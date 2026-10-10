@@ -100,7 +100,11 @@ RULES:
 		targetDir := filepath.Dir(targetFile)
 		testFileName := lang.AttackFileName
 		var testFilePath string
-		if targetDir == "." || targetDir == "" {
+		if lang.Name == "Rust" {
+			testDir := filepath.Join(a.WorkDir, "tests")
+			_ = os.MkdirAll(testDir, 0755)
+			testFilePath = filepath.Join(testDir, testFileName)
+		} else if targetDir == "." || targetDir == "" {
 			testFilePath = filepath.Join(a.WorkDir, testFileName)
 		} else {
 			testFilePath = filepath.Join(a.WorkDir, targetDir, testFileName)
@@ -273,7 +277,8 @@ func (a *Arena) buildTestCmd(lang ArenaLangConfig, testFileName string, targetDi
 		return fmt.Sprintf("go test -v -run TestRedAttack %s", targetPkg)
 	}
 	if lang.Name == "Rust" {
-		return "cargo test"
+		testStem := strings.TrimSuffix(testFileName, ".rs")
+		return fmt.Sprintf("cargo test --test %s", testStem)
 	}
 	targetPath := testFileName
 	if dir != "." {
@@ -287,6 +292,9 @@ func (a *Arena) buildTestCmd(lang ArenaLangConfig, testFileName string, targetDi
 			}
 		}
 		return fmt.Sprintf("%s %s", tokens[0], targetPath)
+	}
+	if strings.HasPrefix(a.TestCommand, "npm test") {
+		return fmt.Sprintf("%s -- %s", a.TestCommand, targetPath)
 	}
 	return fmt.Sprintf("%s %s", a.TestCommand, targetPath)
 }

@@ -81,7 +81,15 @@ func TestBuildTestCmd_SubpackageColocation(t *testing.T) {
 	fRust := &Falsifier{TestCommand: "cargo test"}
 	langRust := detectLanguage("src/lib.rs", "cargo test")
 	cmdRust := fRust.buildTestCmd(langRust, "adversarial_falsify_test.rs", "src")
-	if cmdRust != "cargo test" {
-		t.Errorf("expected 'cargo test', got %q", cmdRust)
+	if cmdRust != "cargo test --test adversarial_falsify_test" {
+		t.Errorf("expected 'cargo test --test adversarial_falsify_test', got %q", cmdRust)
+	}
+
+	// 5. npm test argument separator
+	fNpm := &Falsifier{TestCommand: "npm test"}
+	langTS := detectLanguage("src/index.ts", "npm test")
+	cmdNpm := fNpm.buildTestCmd(langTS, "adversarial_falsify.test.ts", "src")
+	if cmdNpm != "npm test -- src/adversarial_falsify.test.ts" {
+		t.Errorf("expected npm test separator, got %q", cmdNpm)
 	}
 }
