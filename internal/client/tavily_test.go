@@ -73,3 +73,23 @@ func TestTavilyRetrySuccess(t *testing.T) {
 		t.Errorf("expected at least 2 attempts, got: %d", attempts)
 	}
 }
+
+func TestTavilyProbe(t *testing.T) {
+	c := newTestTavily(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/search" {
+			t.Fatalf("path = %s, want /search", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"results":[]}`))
+	})
+	status, rtt, err := c.Probe(context.Background())
+	if err != nil {
+		t.Fatalf("Probe failed: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Errorf("status = %d, want 200", status)
+	}
+	if rtt < 0 {
+		t.Errorf("rtt = %d, want >= 0", rtt)
+	}
+}

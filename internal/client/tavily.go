@@ -170,6 +170,37 @@ func (t *TavilyClient) Extract(ctx context.Context, url string) (string, error) 
 	}
 	return "", nil
 }
+// Probe verifies API reachability and authentication with a minimal search query.
+func (t *TavilyClient) Probe(ctx context.Context) (int, int64, error) {
+	if t.APIKey == "" {
+		return 0, 0, fmt.Errorf("TAVILY_API_KEY is not set")
+	}
+	start := time.Now()
+	body := TavilySearchRequest{
+		APIKey:      t.APIKey,
+		Query:       "ping",
+		MaxResults:  1,
+		SearchDepth: "basic",
+	}
+	b, err := json.Marshal(body)
+	if err != nil {
+		return 0, 0, err
+	}
+	url := strings.TrimRight(t.BaseURL, "/") + "/search"
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(b))
+	if err != nil {
+		return 0, 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 4 * time.Second}
+	resp, err := client.Do(req)
+	rtt := time.Since(start).Milliseconds()
+	if err != nil {
+		return 0, rtt, err
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode, rtt, nil
+}
 
 func (t *TavilyClient) FormatContext(resp *TavilySearchResponse) string {
 	if resp == nil || len(resp.Results) == 0 {
