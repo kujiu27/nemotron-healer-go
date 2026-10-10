@@ -21,7 +21,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.12"
+var Version = "v0.7.13"
 
 var (
 	testCmdFlag    string
@@ -125,7 +125,7 @@ var RootCmd = &cobra.Command{
 				fmt.Print(RenderColorizedDiff(latestPatch))
 
 				if session.PatchDigest != "" {
-					fmt.Print(RenderPatchProvenance(session.PatchDigest, "nvidia/Nemotron-3-Ultra-550b-a55b", "Nebius Token Factory"))
+					fmt.Print(RenderPatchProvenance(session.PatchDigest, agent.Nebius.Model, "Nebius Token Factory"))
 				}
 
 				inCIEnv := os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != "" || ciFlag
