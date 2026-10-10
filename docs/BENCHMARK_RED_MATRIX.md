@@ -4,7 +4,7 @@ Regenerate: `bash scripts/verify_red.sh` (needs go, python3+pytest, pydantic).
 Every case must FAIL its own test command as shipped — a green case means
 a healed/answer file leaked into the benchmark. CI enforces this on every push.
 
-- Verified: 2026-10-10T11:23:04Z, commit `5da22aa`
+- Verified: 2026-10-10T11:27:45Z, commit `450c3dd`
 
 | Case | Sample | Command | State |
 | :--- | :--- | :--- | :--- |
