@@ -81,6 +81,10 @@ type HealingSession struct {
 	RegressionTestFile string             `json:"regression_test_file,omitempty"`
 	ThoughtChain       string             `json:"thought_chain,omitempty"`
 	PatchDigest        string             `json:"patch_digest,omitempty"`
+	TargetFile         string             `json:"target_file,omitempty"`
+	TargetLine         int                `json:"target_line,omitempty"`
+	TargetSymbol       string             `json:"target_symbol,omitempty"`
+	DefectArchetype    string             `json:"defect_archetype,omitempty"`
 	History            []HealingStepEvent `json:"history"`
 }
 

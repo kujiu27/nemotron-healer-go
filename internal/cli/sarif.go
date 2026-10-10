@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/kujiu27/nemotron-healer-go/internal/engine"
@@ -55,14 +56,31 @@ type SarifReport struct {
 // ExportSarif serializes the healing session defect & outcome to standard SARIF 2.1.0 JSON
 func ExportSarif(session *engine.HealingSession, outputPath string) error {
 	ruleID := "NH-DEFECT"
+	ruleDesc := "Autonomous Code Self-Healing Defect Diagnostic"
+	if session.DefectArchetype != "" {
+		ruleID = "NH-" + strings.ToUpper(session.DefectArchetype)
+		ruleDesc = fmt.Sprintf("Autonomous Diagnostic: %s", session.DefectArchetype)
+	}
 	level := "warning"
 	msgText := "Defect identified and resolved autonomously by Nemotron-Healer"
 	if session.PatchDigest != "" {
-		msgText = fmt.Sprintf("Defect resolved autonomously by Nemotron-Healer (Audit Digest: %s)", session.PatchDigest)
+		msgText = fmt.Sprintf("Defect [%s] resolved autonomously by Nemotron-Healer (Audit Digest: %s)", session.DefectArchetype, session.PatchDigest)
 	}
 	if !session.IsResolved {
 		level = "error"
 		msgText = "Defect unresolved: " + session.LastError
+	}
+
+	var locations []SarifLocation
+	if session.TargetFile != "" {
+		loc := SarifLocation{}
+		loc.PhysicalLocation.ArtifactLocation.URI = filepath.ToSlash(session.TargetFile)
+		if session.TargetLine > 0 {
+			loc.PhysicalLocation.Region.StartLine = session.TargetLine
+		} else {
+			loc.PhysicalLocation.Region.StartLine = 1
+		}
+		locations = append(locations, loc)
 	}
 
 	report := SarifReport{
@@ -103,7 +121,7 @@ func ExportSarif(session *engine.HealingSession, outputPath string) error {
 								ShortDescription: struct {
 									Text string `json:"text"`
 								}{
-									Text: "Autonomous Code Self-Healing Defect Diagnostic",
+									Text: ruleDesc,
 								},
 							},
 						},
@@ -111,8 +129,9 @@ func ExportSarif(session *engine.HealingSession, outputPath string) error {
 				},
 				Results: []SarifResult{
 					{
-						RuleID: ruleID,
-						Level:  level,
+						RuleID:    ruleID,
+						Level:     level,
+						Locations: locations,
 						Message: struct {
 							Text string `json:"text"`
 						}{
