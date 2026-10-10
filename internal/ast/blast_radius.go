@@ -80,6 +80,8 @@ func (g *CodeGraph) BuildGraph() error {
 	tsFuncRegex := regexp.MustCompile(`^(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z0-9_]+)\s*\(`)
 	tsClassRegex := regexp.MustCompile(`^(?:export\s+)?class\s+([a-zA-Z0-9_]+)\b`)
 	tsArrowRegex := regexp.MustCompile(`^(?:export\s+)?const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(`)
+	rustFuncRegex := regexp.MustCompile(`^(?:pub(?:\([^)]+\))?\s+)?(?:async\s+)?fn\s+([a-zA-Z0-9_]+)\b`)
+	rustTypeRegex := regexp.MustCompile(`^(?:pub(?:\([^)]+\))?\s+)?(?:struct|enum|trait)\s+([a-zA-Z0-9_]+)\b`)
 
 	callRegex := regexp.MustCompile(`\b([a-zA-Z0-9_]+)\s*\(`)
 
@@ -105,7 +107,7 @@ func (g *CodeGraph) BuildGraph() error {
 		}
 
 		ext := filepath.Ext(path)
-		if ext != ".py" && ext != ".go" && ext != ".ts" && ext != ".js" {
+		if ext != ".py" && ext != ".go" && ext != ".ts" && ext != ".js" && ext != ".rs" {
 			return nil
 		}
 
@@ -165,6 +167,14 @@ func (g *CodeGraph) BuildGraph() error {
 					name = m[1]
 					kind = "function"
 				} else if m := tsArrowRegex.FindStringSubmatch(trimmed); len(m) > 1 {
+					name = m[1]
+					kind = "function"
+				}
+			} else if ext == ".rs" {
+				if m := rustTypeRegex.FindStringSubmatch(trimmed); len(m) > 1 {
+					name = m[1]
+					kind = "type"
+				} else if m := rustFuncRegex.FindStringSubmatch(trimmed); len(m) > 1 {
 					name = m[1]
 					kind = "function"
 				}

@@ -122,3 +122,44 @@ func TestBuildGraph_LongLineFileSurvivesScannerBuffer(t *testing.T) {
 		t.Fatalf("expected bundle.js::processLargePayload extracted after long line, symbols: %+v", graph.Symbols)
 	}
 }
+
+func TestRustASTExtraction(t *testing.T) {
+	tmpDir := t.TempDir()
+	rustCode := `pub struct Worker {
+    id: u32,
+}
+
+impl Worker {
+    pub fn process(&self) -> bool {
+        execute_task()
+    }
+}
+
+pub fn execute_task() -> bool {
+    true
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "lib.rs"), []byte(rustCode), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	graph := NewCodeGraph(tmpDir)
+	if err := graph.BuildGraph(); err != nil {
+		t.Fatalf("build graph failed: %v", err)
+	}
+
+	if _, ok := graph.Symbols["lib.rs::Worker"]; !ok {
+		t.Fatalf("expected lib.rs::Worker extracted, got: %+v", graph.Symbols)
+	}
+	if _, ok := graph.Symbols["lib.rs::process"]; !ok {
+		t.Fatalf("expected lib.rs::process extracted, got: %+v", graph.Symbols)
+	}
+	if _, ok := graph.Symbols["lib.rs::execute_task"]; !ok {
+		t.Fatalf("expected lib.rs::execute_task extracted, got: %+v", graph.Symbols)
+	}
+
+	report := graph.AnalyzeBlastRadius("lib.rs", "execute_task")
+	if len(report.AffectedFiles) == 0 {
+		t.Fatalf("expected at least 1 affected file, got 0")
+	}
+}
