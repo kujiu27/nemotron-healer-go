@@ -67,6 +67,10 @@ func TestFinalizeSuccessfulHealing_AuditParity(t *testing.T) {
 	if !agent.Session.IsResolved {
 		t.Errorf("expected Session.IsResolved = true")
 	}
+	if agent.Session.CurrentTurn != 1 {
+		t.Errorf("expected Session.CurrentTurn = 1, got %d", agent.Session.CurrentTurn)
+	}
+
 
 	// 2. Cryptographic Patch Digest must be SHA-256
 	if !strings.HasPrefix(agent.Session.PatchDigest, "sha256:") || len(agent.Session.PatchDigest) != 71 {
