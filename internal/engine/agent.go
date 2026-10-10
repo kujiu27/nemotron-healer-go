@@ -516,6 +516,9 @@ func (a *Agent) finalizeSuccessfulHealing(
 	resolutionMechanism string,
 ) string {
 	a.Session.IsResolved = true
+	if a.Session.CurrentTurn < turn {
+		a.Session.CurrentTurn = turn
+	}
 	if a.startTime.IsZero() {
 		a.startTime = time.Now().Add(-100 * time.Millisecond)
 	}
@@ -702,10 +705,10 @@ func (a *Agent) finalizeSuccessfulHealing(
 	// Step Summary Hook for GitHub Actions Native CI/CD
 	a.writeStepSummary(auditReport)
 
-	turnReport := turn
 	if a.Session.CurrentTurn < turn {
 		a.Session.CurrentTurn = turn
 	}
+	turnReport := a.Session.CurrentTurn
 	falsifyPassed := false
 	if falsifyRes != nil {
 		falsifyPassed = falsifyRes.Passed
