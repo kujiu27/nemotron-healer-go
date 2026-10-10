@@ -123,8 +123,9 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 			reward      float64
 			diffPatch   string
 			targetFile  string
-			searchDepth int
-			falsifyRes  *falsify.FalsificationResult
+			searchDepth  int
+			falsifyRes   *falsify.FalsificationResult
+			thoughtChain string
 		}
 		var branchResults []branchResult
 
@@ -239,7 +240,7 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 				bestDiff := diffPatch
 				bestDepth := 1
 				finalNode := child
-
+				bestThought := extractThoughtChain(rawResp)
 				// Depth-2 Iterative Refinement if base passed but adv failed
 				mu.Lock()
 				withinBudget := nodesCreated < budgetNodes
@@ -296,6 +297,9 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 									bestDepth = 2
 									finalNode = child2
 									bestFalsify = f2
+									if t2 := extractThoughtChain(refineResp); t2 != "" {
+										bestThought = t2
+									}
 								}
 							}
 						}
@@ -304,14 +308,15 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 
 				mu.Lock()
 				branchResults = append(branchResults, branchResult{
-					childID:     cID,
-					childNode:   finalNode,
-					hypName:     h.Name,
-					reward:      bestReward,
-					diffPatch:   bestDiff,
-					targetFile:  targetFile,
-					searchDepth: bestDepth,
-					falsifyRes:  bestFalsify,
+					childID:      cID,
+					childNode:    finalNode,
+					hypName:      h.Name,
+					reward:       bestReward,
+					diffPatch:    bestDiff,
+					targetFile:   targetFile,
+					searchDepth:  bestDepth,
+					falsifyRes:   bestFalsify,
+					thoughtChain: bestThought,
 				})
 				mu.Unlock()
 			}(i, hyp, childID)
@@ -352,7 +357,7 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 					archetype,
 					blastReport,
 					1,
-					"",
+					winningBranch.thoughtChain,
 					arenaNotes,
 					fmt.Sprintf("DHS Parallel Search (Branch: %s, Depth: %d, Reward: %.3f)", winningBranch.childID, winningBranch.searchDepth, winningBranch.reward),
 				)
@@ -488,11 +493,10 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 				archetype,
 				blastReport,
 				1,
-				"",
+				extractThoughtChain(rawResp),
 				arenaNotes,
 				fmt.Sprintf("DHS Sequential Search (Branch: %s, Depth: 1, Reward: %.3f)", childID, reward),
 			)
-
 			return &MCTSSearchResult{
 				Resolved:        true,
 				SelectedNode:    child,
@@ -563,11 +567,10 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 								archetype,
 								blastReport,
 								1,
-								"",
+								extractThoughtChain(refineResp),
 								arenaNotes,
 								fmt.Sprintf("DHS Depth-2 Sequential (Branch: %s, Reward: %.3f)", depth2ID, reward2),
 							)
-
 							return &MCTSSearchResult{
 								Resolved:        true,
 								SelectedNode:    child2,
@@ -611,6 +614,14 @@ func extractDiffBlock(text string) string {
 	if strings.Contains(text, "--- a/") && strings.Contains(text, "+++ b/") {
 		idx := strings.Index(text, "--- a/")
 		return strings.TrimSpace(text[idx:])
+	}
+	return ""
+}
+
+func extractThoughtChain(rawResp string) string {
+	re := regexp.MustCompile(`(?s)<thought>(.*?)</thought>`)
+	if m := re.FindStringSubmatch(rawResp); len(m) > 1 {
+		return strings.TrimSpace(m[1])
 	}
 	return ""
 }

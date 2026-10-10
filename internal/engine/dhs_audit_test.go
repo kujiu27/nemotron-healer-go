@@ -163,3 +163,17 @@ func TestFinalizeSuccessfulHealing_NilFalsify(t *testing.T) {
 		t.Errorf("expected non-empty branch name")
 	}
 }
+
+func TestExtractThoughtChain(t *testing.T) {
+	rawWithTag := "<thought>\nAnalyzing root cause: deadlock in mutex ordering.\nPlan: invert lock sequence.\n</thought>\n```diff\n--- a/main.go\n+++ b/main.go\n@@ -1 +1 @@\n```"
+	thought := extractThoughtChain(rawWithTag)
+	if !strings.Contains(thought, "deadlock in mutex ordering") {
+		t.Errorf("expected extracted thought, got: %q", thought)
+	}
+
+	rawWithoutTag := "```diff\n--- a/main.go\n+++ b/main.go\n@@ -1 +1 @@\n```"
+	thoughtNone := extractThoughtChain(rawWithoutTag)
+	if thoughtNone != "" {
+		t.Errorf("expected empty thought, got: %q", thoughtNone)
+	}
+}
