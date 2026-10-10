@@ -199,6 +199,11 @@ func (c *CheckpointManager) CreateGitPRBranchWithAudit(branchName, commitMsg, au
 }
 
 func copyFile(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -211,6 +216,8 @@ func copyFile(src, dst string) error {
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, in)
-	return err
+	if _, err = io.Copy(out, in); err != nil {
+		return err
+	}
+	return os.Chmod(dst, info.Mode().Perm())
 }
