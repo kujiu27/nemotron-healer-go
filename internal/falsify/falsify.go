@@ -92,9 +92,17 @@ RULES:
 		}, nil
 	}
 
-	// Write temp test file in workspace
+	// Write temp test file colocated in the target file's directory so Go package
+	// names match and Python imports resolve without root pollution
+	targetDir := filepath.Dir(targetFile)
 	testFileName := lang.TestFileName
-	testFilePath := filepath.Join(f.WorkDir, testFileName)
+	var testFilePath string
+	if targetDir == "." || targetDir == "" {
+		testFilePath = filepath.Join(f.WorkDir, testFileName)
+	} else {
+		testFilePath = filepath.Join(f.WorkDir, targetDir, testFileName)
+		_ = os.MkdirAll(filepath.Dir(testFilePath), 0755)
+	}
 	if err := os.WriteFile(testFilePath, []byte(testCode), 0644); err != nil {
 		return &FalsificationResult{
 			Passed:           false,
@@ -106,7 +114,7 @@ RULES:
 	defer os.Remove(testFilePath)
 
 	// Execute adversarial test using the workspace's test runner
-	testCmd := f.buildTestCmd(lang, testFileName)
+	testCmd := f.buildTestCmd(lang, testFileName, targetDir)
 	res, err := f.Sandbox.Run(testCmd)
 	if err != nil || !res.IsSuccess {
 		output := res.Stdout + "\n" + res.Stderr
@@ -200,15 +208,32 @@ func detectLanguage(targetFile, testCmd string) LangConfig {
 	}
 }
 
-func (f *Falsifier) buildTestCmd(lang LangConfig, testFileName string) string {
+func (f *Falsifier) buildTestCmd(lang LangConfig, testFileName string, targetDir ...string) string {
+	dir := "."
+	if len(targetDir) > 0 && targetDir[0] != "" && targetDir[0] != "." {
+		dir = targetDir[0]
+	}
 	if lang.Name == "Go" {
-		return "go test -v -run TestAdversarialFalsify ."
+		targetPkg := "."
+		if dir != "." {
+			targetPkg = "./" + filepath.ToSlash(dir)
+		}
+		return fmt.Sprintf("go test -v -run TestAdversarialFalsify %s", targetPkg)
+	}
+	targetPath := testFileName
+	if dir != "." {
+		targetPath = filepath.ToSlash(filepath.Join(dir, testFileName))
 	}
 	if strings.Contains(f.TestCommand, "pytest") {
 		tokens := strings.Fields(f.TestCommand)
-		return fmt.Sprintf("%s %s", tokens[0], testFileName)
+		for i, t := range tokens {
+			if t == "-m" && i+1 < len(tokens) && tokens[i+1] == "pytest" {
+				return fmt.Sprintf("%s -m pytest %s", tokens[0], targetPath)
+			}
+		}
+		return fmt.Sprintf("%s %s", tokens[0], targetPath)
 	}
-	return fmt.Sprintf("%s %s", f.TestCommand, testFileName)
+	return fmt.Sprintf("%s %s", f.TestCommand, targetPath)
 }
 
 func extractTestCode(resp string, lang LangConfig) string {
