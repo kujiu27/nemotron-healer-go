@@ -1,7 +1,7 @@
-.PHONY: all build test bench check eval-mock clean cross
+.PHONY: all build test bench check eval-mock demo clean cross
 
 BINARY_NAME=nemotron-healer
-VERSION=0.7.6
+VERSION=0.7.7
 
 all: test build
 
@@ -20,6 +20,8 @@ bench:
 # Writes NO receipts — this is a wiring demo, not evidence.
 eval-mock:
 	@bash scripts/run_eval_mock.sh
+demo: build
+	@bash demo/run_pitch_demo.sh
 cross:
 	@mkdir -p dist
 	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/$(BINARY_NAME)_darwin_arm64 ./cmd/$(BINARY_NAME)

@@ -17,28 +17,55 @@ echo -e "${BLUE}  ⚡ NEMOTRON-HEALER: Autonomous Code Self-Healing & Verificati
 echo -e "${PURPLE}  Powered by NVIDIA Nemotron on Nebius Token Factory & Tavily Search API${NC}"
 echo -e "${PURPLE}========================================================================${NC}\n"
 sleep 1
+MOCK_ARG=""
+if [ "${1:-}" = "--mock" ] || [ -z "${NEBIUS_API_KEY:-}" ] || [ -z "${TAVILY_API_KEY:-}" ]; then
+  MOCK_ARG="--mock"
+  echo -e "${YELLOW}⚡ Offline Demo Mode: Running with built-in labeled mock (zero API keys required).${NC}\n"
+fi
 
-echo -e "${YELLOW}[SCENARIO] Production Incident: CI Test Suite Failed on Multi-Module Service!${NC}"
-echo -e "Executing test command: pytest test_cascade.py (isolated workspace copy)\n"
-sleep 1
+# Probe whether pytest is runnable in this environment
+PYTEST_CMD=""
+if command -v pytest >/dev/null 2>&1 && pytest --version >/dev/null 2>&1; then
+  PYTEST_CMD="pytest"
+elif python3 -m pytest --version >/dev/null 2>&1; then
+  PYTEST_CMD="python3 -m pytest"
+fi
 
-# Heal an ISOLATED copy of the sample — never the tracked repo tree.
-# Mirror of eval.go's .orig-restore semantics: the .orig (broken) file
-# becomes the working file; answer files are not shipped.
 DEMO_DIR=$(mktemp -d /tmp/nemotron-demo-XXXX)
 trap 'rm -rf "$DEMO_DIR"' EXIT
-abs_src=$(cd samples/hard_concurrency_cascade && pwd)
-(cd samples/hard_concurrency_cascade && /usr/bin/find . -type f ! -name '*.orig' | while read -r f; do
-   mkdir -p "$DEMO_DIR/$(dirname "$f")"
-   if [ -f "$abs_src/$f.orig" ]; then cp "$abs_src/$f.orig" "$DEMO_DIR/$f"; else cp "$abs_src/$f" "$DEMO_DIR/$f"; fi
- done)
-cd "$DEMO_DIR"
 
-# Show the red failure
-python3 -m pytest test_cascade.py || true
-echo -e "\n${RED}✘ FATAL: 2 failed, 1 passed. Concurrency race condition & re-entrancy deadlock detected!${NC}\n"
-sleep 2
+HEAL_CMD=""
+if [ -n "$PYTEST_CMD" ]; then
+  echo -e "${YELLOW}[SCENARIO] Production Incident: CI Test Suite Failed on Multi-Module Service!${NC}"
+  echo -e "Executing test command: $PYTEST_CMD test_cascade.py (isolated workspace copy)\n"
+  sleep 1
 
+  abs_src=$(cd samples/hard_concurrency_cascade && pwd)
+  (cd samples/hard_concurrency_cascade && /usr/bin/find . -type f ! -name '*.orig' | while read -r f; do
+     mkdir -p "$DEMO_DIR/$(dirname "$f")"
+     if [ -f "$abs_src/$f.orig" ]; then cp "$abs_src/$f.orig" "$DEMO_DIR/$f"; else cp "$abs_src/$f" "$DEMO_DIR/$f"; fi
+   done)
+  cd "$DEMO_DIR"
+
+  # Show the red failure
+  $PYTEST_CMD test_cascade.py || true
+  echo -e "\n${RED}✘ FATAL: 2 failed, 1 passed. Concurrency race condition & re-entrancy deadlock detected!${NC}\n"
+  HEAL_CMD="$PYTEST_CMD"
+else
+  echo -e "${YELLOW}[SCENARIO] Zero-Dependency Pure-Go Mode: Real Upstream Bug in tidwall/gjson (#246)!${NC}"
+  echo -e "Executing test command: go test . -run TestEmptyValueQuery -count=1 (isolated workspace copy)\n"
+  sleep 1
+
+  cp -R samples/external_gjson/. "$DEMO_DIR/"
+  cd "$DEMO_DIR"
+
+  # Show the red failure
+  go test . -run TestEmptyValueQuery -count=1 || true
+  echo -e "\n${RED}✘ FATAL: test failed — array-path parser drops empty quoted string!${NC}\n"
+  HEAL_CMD="go test . -run TestEmptyValueQuery -count=1"
+fi
+
+sleep 1
 echo -e "${BLUE}▶ Launching Nemotron-Healer In-Situ Autonomous Repair Engine (Go Native)...${NC}"
 sleep 1
 
@@ -50,16 +77,10 @@ if [ ! -x "$HEALER" ]; then
   (cd "$REPO_ROOT" && go build -o bin/nemotron-healer ./cmd/nemotron-healer) || { echo -e "${RED}✘ Build failed. Is Go 1.26+ installed?${NC}"; exit 1; }
 fi
 
-if [ -z "${NEBIUS_API_KEY}" ] || [ -z "${TAVILY_API_KEY}" ]; then
-  echo -e "${RED}✘ NEBIUS_API_KEY and TAVILY_API_KEY must be exported for a real healing run.${NC}"
-  exit 1
-fi
-
-# Execute self-healing in the isolated copy (real run; abort on failure)
-"$HEALER" . --command "pytest" --turns 4 --no-tui || {
+# Execute self-healing in the isolated copy (abort on failure)
+"$HEALER" . --command "$HEAL_CMD" --turns 3 --no-tui $MOCK_ARG || {
   echo -e "\n${RED}✘ Healing run FAILED — demo aborted honestly. See diagnostics above.${NC}"
   exit 1
 }
-
 echo -e "\n${GREEN}✔ CI STATUS: GREEN! Auto-created fix branch and generated full PR Audit Report.${NC}"
 echo -e "${PURPLE}========================================================================${NC}"

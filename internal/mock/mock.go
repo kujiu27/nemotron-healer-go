@@ -56,20 +56,33 @@ func StartServer() *Server {
 				allContent += " " + m.Content
 			}
 			lower := strings.ToLower(allContent)
-			// Verified surgical patch for samples/external_gjson
-			reply := "```diff\n--- a/gjson.go\n+++ b/gjson.go\n@@ -761,7 +761,7 @@\n-\t\t\t\t\tif len(value) > 2 && value[0] == '\"' &&\n+\t\t\t\t\tif len(value) >= 2 && value[0] == '\"' &&\n \t\t\t\t\t\tvalue[len(value)-1] == '\"' {\n```\n[TARGET_FILE]gjson.go[/TARGET_FILE]"
+			isCascade := strings.Contains(allContent, "service.py") || strings.Contains(allContent, "cascade") || strings.Contains(allContent, "test_cascade.py") || strings.Contains(allContent, "BankingService")
 
-			// Grounding detection: in baseline ablation (DisableGrounding = true), docsContext is omitted.
-			// Without Tavily documentation, the baseline model emits an overfitted / incorrect patch.
-			isGrounded := strings.Contains(allContent, "GJSON path syntax supports empty string")
+			var reply string
+			if isCascade {
+				reply = "```diff\n--- a/service.py\n+++ b/service.py\n@@ -12,3 +12,4 @@\n     async def single_transfer(self, account_id: str, amount: float):\n-        return await self.engine.mutate_balance(account_id, -amount)\n+        async with self.engine.lock:\n+            return await self.engine.mutate_balance(account_id, -amount)\n```\n[TARGET_FILE]service.py[/TARGET_FILE]"
 
-			if strings.Contains(lower, "triage") || strings.Contains(allContent, "ERROR_LINE") || strings.Contains(allContent, "4-word") {
-				reply = "ERROR_LINE: len(value) > 2\nCAUSE: array-path parser rejects the empty quoted string\nQUERY: gjson empty string query operator"
-			} else if strings.Contains(lower, "adversarial") || strings.Contains(allContent, "Red-Teamer") || strings.Contains(lower, "stress") {
-				reply = "```go\npackage gjson\n\nimport \"testing\"\n\nfunc TestAdversarialEmptyQueryMock(t *testing.T) {\n\tif Get(`[\"a\",\"\"]`, `#(!=\"\")#`).Raw != `[\"a\"]` {\n\t\tt.Fatal(\"empty-string filter mismatch\")\n\t}\n}\n```"
-			} else if !isGrounded {
-				// Naive ungrounded baseline patch: attempts an incorrect condition that fails TestEmptyValueQuery
-				reply = "```diff\n--- a/gjson.go\n+++ b/gjson.go\n@@ -761,7 +761,7 @@\n-\t\t\t\t\tif len(value) > 2 && value[0] == '\"' &&\n+\t\t\t\t\tif len(value) > 5 && value[0] == '\"' &&\n \t\t\t\t\t\tvalue[len(value)-1] == '\"' {\n```\n[TARGET_FILE]gjson.go[/TARGET_FILE]"
+				if strings.Contains(lower, "triage") || strings.Contains(allContent, "ERROR_LINE") || strings.Contains(allContent, "4-word") {
+					reply = "ERROR_LINE: assert srv.engine.balance == 1000.0\nCAUSE: single_transfer mutates balance without acquiring transaction lock\nQUERY: python asyncio shared lock state synchronization"
+				} else if strings.Contains(lower, "adversarial") || strings.Contains(allContent, "Red-Teamer") || strings.Contains(lower, "stress") {
+					reply = "```python\nimport asyncio\nimport pytest\nfrom service import BankingService\n\ndef test_adversarial_concurrency_stress():\n    async def _run():\n        srv = BankingService(initial_balance=5000.0)\n        tasks = [srv.single_transfer(\"acc_stress\", 50.0) for _ in range(20)]\n        await asyncio.gather(*tasks)\n        assert srv.engine.balance == 4000.0\n    asyncio.run(_run())\n```"
+				}
+			} else {
+				// Default: verified surgical patch for samples/external_gjson
+				reply = "```diff\n--- a/gjson.go\n+++ b/gjson.go\n@@ -761,7 +761,7 @@\n-\t\t\t\t\tif len(value) > 2 && value[0] == '\"' &&\n+\t\t\t\t\tif len(value) >= 2 && value[0] == '\"' &&\n \t\t\t\t\t\tvalue[len(value)-1] == '\"' {\n```\n[TARGET_FILE]gjson.go[/TARGET_FILE]"
+
+				// Grounding detection: in baseline ablation (DisableGrounding = true), docsContext is omitted.
+				// Without Tavily documentation, the baseline model emits an overfitted / incorrect patch.
+				isGrounded := strings.Contains(allContent, "GJSON path syntax supports empty string")
+
+				if strings.Contains(lower, "triage") || strings.Contains(allContent, "ERROR_LINE") || strings.Contains(allContent, "4-word") {
+					reply = "ERROR_LINE: len(value) > 2\nCAUSE: array-path parser rejects the empty quoted string\nQUERY: gjson empty string query operator"
+				} else if strings.Contains(lower, "adversarial") || strings.Contains(allContent, "Red-Teamer") || strings.Contains(lower, "stress") {
+					reply = "```go\npackage gjson\n\nimport \"testing\"\n\nfunc TestAdversarialEmptyQueryMock(t *testing.T) {\n\tif Get(`[\"a\",\"\"]`, `#(!=\"\")#`).Raw != `[\"a\"]` {\n\t\tt.Fatal(\"empty-string filter mismatch\")\n\t}\n}\n```"
+				} else if !isGrounded {
+					// Naive ungrounded baseline patch: attempts an incorrect condition that fails TestEmptyValueQuery
+					reply = "```diff\n--- a/gjson.go\n+++ b/gjson.go\n@@ -761,7 +761,7 @@\n-\t\t\t\t\tif len(value) > 2 && value[0] == '\"' &&\n+\t\t\t\t\tif len(value) > 5 && value[0] == '\"' &&\n \t\t\t\t\t\tvalue[len(value)-1] == '\"' {\n```\n[TARGET_FILE]gjson.go[/TARGET_FILE]"
+				}
 			}
 			if chatReq.Stream {
 				w.Header().Set("Content-Type", "text/event-stream")
