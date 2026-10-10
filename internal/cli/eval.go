@@ -64,9 +64,15 @@ var evalCmd = &cobra.Command{
 				filepath.Join(".venv", "bin", "pytest"),
 				filepath.Join("venv", "bin", "pytest"),
 				filepath.Join("..", ".venv", "bin", "pytest"),
+				filepath.Join(".venv", "Scripts", "pytest.exe"),
+				filepath.Join("venv", "Scripts", "pytest.exe"),
+				filepath.Join("..", ".venv", "Scripts", "pytest.exe"),
 			}
 			if venvEnv := os.Getenv("VIRTUAL_ENV"); venvEnv != "" {
-				candidates = append([]string{filepath.Join(venvEnv, "bin", "pytest")}, candidates...)
+				candidates = append([]string{
+					filepath.Join(venvEnv, "bin", "pytest"),
+					filepath.Join(venvEnv, "Scripts", "pytest.exe"),
+				}, candidates...)
 			}
 			found := false
 			for _, cand := range candidates {
@@ -77,7 +83,13 @@ var evalCmd = &cobra.Command{
 				}
 			}
 			if !found {
-				defaultPytest = "python3 -m pytest"
+				if _, lookPy3 := exec.LookPath("python3"); lookPy3 == nil {
+					defaultPytest = "python3 -m pytest"
+				} else if _, lookPy := exec.LookPath("python"); lookPy == nil {
+					defaultPytest = "python -m pytest"
+				} else {
+					defaultPytest = "python3 -m pytest"
+				}
 			}
 		}
 
