@@ -53,7 +53,7 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 		if a.Nebius.FastModel != "" {
 			triage, ftP, ftC, ftErr := a.Nebius.FastTriage(ctx, initialFailingOutput)
 			if ftErr == nil && triage != nil {
-				a.addTokens(ftP, ftC)
+				a.addFastTokens(ftP, ftC)
 				if triage.RecommendedQuery != "" {
 					query = triage.RecommendedQuery
 				}

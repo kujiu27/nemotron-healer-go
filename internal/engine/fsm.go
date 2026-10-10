@@ -22,6 +22,8 @@ const (
 type TokenLedger struct {
 	PromptTokens      int     `json:"prompt_tokens"`
 	CompletionTokens  int     `json:"completion_tokens"`
+	FastPromptTokens  int     `json:"fast_prompt_tokens,omitempty"`
+	FastCompTokens    int     `json:"fast_comp_tokens,omitempty"`
 	TotalTokens       int     `json:"total_tokens"`
 	TTFTSeconds       float64 `json:"ttft_seconds"`
 	MeasuredTPS       float64 `json:"measured_tps"`
@@ -29,15 +31,21 @@ type TokenLedger struct {
 	SavingsPercentage float64 `json:"savings_percentage"`
 }
 
-// Nemotron-3-Ultra-550b-a55b Token Factory catalog prices (USD per 1M tokens).
+// Token Factory catalog pricing (USD per 1M tokens) verified against tokenfactory.nebius.com/model-catalog.md:
+// - nvidia/Nemotron-3-Ultra-550b-a55b (Reasoning Brain): $1.00 input, $3.00 output
+// - nvidia/Nemotron-3-Nano-30B-A3B (Tier-1 Fast Triage):  $0.06 input, $0.24 output
 const (
-	PricePromptPerMillion     = 1.00
-	PriceCompletionPerMillion = 3.00
+	PricePromptPerMillion         = 1.00
+	PriceCompletionPerMillion     = 3.00
+	PriceFastPromptPerMillion     = 0.06
+	PriceFastCompletionPerMillion = 0.24
 )
 
 func (l *TokenLedger) CalculateCost() {
-	l.TotalTokens = l.PromptTokens + l.CompletionTokens
-	cost := (float64(l.PromptTokens)*PricePromptPerMillion + float64(l.CompletionTokens)*PriceCompletionPerMillion) / 1_000_000.0
+	l.TotalTokens = l.PromptTokens + l.CompletionTokens + l.FastPromptTokens + l.FastCompTokens
+	ultraCost := (float64(l.PromptTokens)*PricePromptPerMillion + float64(l.CompletionTokens)*PriceCompletionPerMillion) / 1_000_000.0
+	nanoCost := (float64(l.FastPromptTokens)*PriceFastPromptPerMillion + float64(l.FastCompTokens)*PriceFastCompletionPerMillion) / 1_000_000.0
+	cost := ultraCost + nanoCost
 	l.EstimatedCostUSD = cost
 	// Reference point only: 30min engineer triage @ $50/hr.
 	humanCost := 25.0
