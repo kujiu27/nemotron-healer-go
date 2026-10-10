@@ -202,6 +202,9 @@ jobs:
       # a judge ever runs the real thing.
       - name: Run make eval-mock
         run: make eval-mock
+      # Smoke-test demo pitch runner to ensure zero bit-rot on judge first-touch surface
+      - name: Run make demo (first-touch judge demo smoke)
+        run: make demo
 
   vulncheck:
     name: govulncheck (called-path CVEs)
