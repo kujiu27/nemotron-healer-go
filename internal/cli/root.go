@@ -22,7 +22,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.54"
+var Version = "v0.7.55"
 
 var (
 	testCmdFlag    string
@@ -351,7 +351,14 @@ var doctorCmd = &cobra.Command{
 		toolchains := []string{"git", "python3", "pytest", "go"}
 		toolchainMap := make(map[string]bool)
 		for _, tc := range toolchains {
-			if path, err := exec.LookPath(tc); err == nil {
+			path, err := exec.LookPath(tc)
+			if err != nil && tc == "python3" {
+				if pyPath, pyErr := exec.LookPath("python"); pyErr == nil {
+					path = pyPath
+					err = nil
+				}
+			}
+			if err == nil {
 				toolchainMap[tc] = true
 				fmt.Fprintf(human, "• Toolchain %-8s: Available (%s)\n", tc, path)
 			} else {
