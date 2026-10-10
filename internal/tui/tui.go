@@ -16,11 +16,25 @@ var (
 			Background(lipgloss.Color("#7D56F4")).
 			Padding(0, 1)
 
-	badgeStyle = lipgloss.NewStyle().
+	badgeActiveStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#50FA7B")).
+			MarginRight(1)
+
+	badgeSuccessStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#04B575")).
 			MarginRight(1)
 
+	badgeFailedStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#FF5555")).
+			MarginRight(1)
+
+	badgeIdleStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#6272A4")).
+			MarginRight(1)
 	infoStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#999999"))
 
@@ -90,7 +104,17 @@ func (m Model) View() string {
 	snap := m.Agent.SessionSnapshot()
 	status := fmt.Sprintf("State: %s | Turn: %d/%d | Duration: %.1fs",
 		snap.CurrentState, snap.CurrentTurn, snap.MaxTurns, snap.DurationSeconds)
-	b.WriteString(badgeStyle.Render("● ACTIVE") + infoStyle.Render(status) + "\n\n")
+
+	badgeText := badgeActiveStyle.Render("● ACTIVE")
+	switch snap.CurrentState {
+	case engine.StateSucceeded:
+		badgeText = badgeSuccessStyle.Render("✔ RESOLVED")
+	case engine.StateFailed:
+		badgeText = badgeFailedStyle.Render("✖ FAILED")
+	case engine.StateIdle:
+		badgeText = badgeIdleStyle.Render("○ IDLE")
+	}
+	b.WriteString(badgeText + infoStyle.Render(status) + "\n\n")
 
 	// Render last 8 event logs
 	b.WriteString(lipgloss.NewStyle().Bold(true).Render("Execution Pipeline Trace:\n"))
@@ -108,6 +132,13 @@ func (m Model) View() string {
 		"Tokens: %d in / %d out | TTFT: %.2fs | TPS: %.1f | Cost: $%.6f | Saved: %.1f%%",
 		ledger.PromptTokens, ledger.CompletionTokens, ledger.TTFTSeconds, ledger.MeasuredTPS, ledger.EstimatedCostUSD, ledger.SavingsPercentage,
 	)
+	if ledger.FastPromptTokens+ledger.FastCompTokens > 0 {
+		ledgerBox = fmt.Sprintf(
+			"Tokens: %d total (Ultra: %d/%d, Nano: %d/%d) | TTFT: %.2fs | TPS: %.1f | Cost: $%.6f | Saved: %.1f%%",
+			ledger.TotalTokens, ledger.PromptTokens, ledger.CompletionTokens, ledger.FastPromptTokens, ledger.FastCompTokens,
+			ledger.TTFTSeconds, ledger.MeasuredTPS, ledger.EstimatedCostUSD, ledger.SavingsPercentage,
+		)
+	}
 	b.WriteString("\n" + borderStyle.Render(ledgerBox) + "\n")
 
 	if m.Done {
