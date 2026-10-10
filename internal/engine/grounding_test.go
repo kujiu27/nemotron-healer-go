@@ -54,3 +54,25 @@ func TestBuildGroundingQuery(t *testing.T) {
 		t.Fatalf("expected Rust Option unwrap query, got: %s", q7)
 	}
 }
+
+func TestResolveGroundingDomains(t *testing.T) {
+	goDomains := ResolveGroundingDomains("pkg/service.go")
+	if len(goDomains) == 0 || goDomains[0] != "pkg.go.dev" {
+		t.Errorf("expected Go domains starting with pkg.go.dev, got: %v", goDomains)
+	}
+
+	rsDomains := ResolveGroundingDomains("src/main.rs")
+	if len(rsDomains) == 0 || rsDomains[0] != "docs.rs" {
+		t.Errorf("expected Rust domains starting with docs.rs, got: %v", rsDomains)
+	}
+
+	tsDomains := ResolveGroundingDomains("components/Button.tsx")
+	if len(tsDomains) == 0 || tsDomains[0] != "developer.mozilla.org" {
+		t.Errorf("expected TS domains starting with developer.mozilla.org, got: %v", tsDomains)
+	}
+
+	pyDomains := ResolveGroundingDomains("app/models.py")
+	if len(pyDomains) == 0 || pyDomains[0] != "docs.python.org" {
+		t.Errorf("expected Python domains starting with docs.python.org, got: %v", pyDomains)
+	}
+}

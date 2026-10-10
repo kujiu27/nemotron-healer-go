@@ -113,6 +113,21 @@ func BuildGroundingQuery(workDir, targetFile string, archetype ArchetypeAnalysis
 	return fmt.Sprintf("%s how to resolve %s in %s", lang, archetype.Archetype, filepath.Base(targetFile))
 }
 
+// ResolveGroundingDomains returns curated authoritative documentation domains for the target language.
+func ResolveGroundingDomains(targetFile string) []string {
+	ext := strings.ToLower(filepath.Ext(targetFile))
+	switch ext {
+	case ".go":
+		return []string{"pkg.go.dev", "go.dev", "github.com"}
+	case ".rs":
+		return []string{"docs.rs", "doc.rust-lang.org", "github.com", "crates.io"}
+	case ".ts", ".tsx", ".js", ".jsx":
+		return []string{"developer.mozilla.org", "nodejs.org", "typescriptlang.org", "github.com", "npmjs.com"}
+	default: // python
+		return []string{"docs.python.org", "docs.pydantic.dev", "github.com", "pypi.org"}
+	}
+}
+
 func detectLibraryVersion(workDir, lastError string) string {
 	lowerErr := strings.ToLower(lastError)
 

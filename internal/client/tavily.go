@@ -57,9 +57,13 @@ func NewTavilyClient() *TavilyClient {
 	}
 }
 
-func (t *TavilyClient) Search(ctx context.Context, query string, maxResults int) (*TavilySearchResponse, error) {
+func (t *TavilyClient) Search(ctx context.Context, query string, maxResults int, includeDomains ...string) (*TavilySearchResponse, error) {
+	cacheKey := query
+	if len(includeDomains) > 0 {
+		cacheKey = fmt.Sprintf("%s|%s", query, strings.Join(includeDomains, ","))
+	}
 	t.Mu.RLock()
-	if cached, ok := t.Cache[query]; ok {
+	if cached, ok := t.Cache[cacheKey]; ok {
 		t.Mu.RUnlock()
 		return cached, nil
 	}
@@ -70,6 +74,13 @@ func (t *TavilyClient) Search(ctx context.Context, query string, maxResults int)
 		return nil, nil
 	}
 
+	var domains []string
+	for _, d := range includeDomains {
+		if trimmed := strings.TrimSpace(d); trimmed != "" {
+			domains = append(domains, trimmed)
+		}
+	}
+
 	reqBody := TavilySearchRequest{
 		APIKey:            t.APIKey,
 		Query:             query,
@@ -77,6 +88,7 @@ func (t *TavilyClient) Search(ctx context.Context, query string, maxResults int)
 		IncludeAnswer:     true,
 		MaxResults:        maxResults,
 		IncludeRawContent: false,
+		IncludeDomains:    domains,
 	}
 
 	data, err := json.Marshal(reqBody)
@@ -109,7 +121,7 @@ func (t *TavilyClient) Search(ctx context.Context, query string, maxResults int)
 	}
 
 	t.Mu.Lock()
-	t.Cache[query] = &searchResp
+	t.Cache[cacheKey] = &searchResp
 	t.Mu.Unlock()
 
 	return &searchResp, nil
@@ -164,7 +176,7 @@ func (t *TavilyClient) Extract(ctx context.Context, url string) (string, error) 
 		return "", err
 	}
 	for _, r := range exResp.Results {
-		if r.URL == url && r.RawContent != "" {
+		if (r.URL == url || strings.TrimSuffix(r.URL, "/") == strings.TrimSuffix(url, "/") || len(exResp.Results) == 1) && r.RawContent != "" {
 			return r.RawContent, nil
 		}
 	}

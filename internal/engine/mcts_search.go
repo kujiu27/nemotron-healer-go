@@ -63,7 +63,8 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 				}
 			}
 		}
-		tavilyResp, _ := a.Tavily.Search(ctx, query, 3)
+		domains := ResolveGroundingDomains(targetHint)
+		tavilyResp, _ := a.Tavily.Search(ctx, query, 3, domains...)
 		docsCtx = a.Tavily.FormatContext(tavilyResp)
 		if tavilyResp != nil && len(tavilyResp.Results) > 0 {
 			a.lastTavilyResults = tavilyResp.Results

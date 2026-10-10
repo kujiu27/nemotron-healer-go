@@ -346,8 +346,9 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 				query = modelQuery
 				a.notify(StateSearchingKnowledge, fmt.Sprintf("Using Nemotron Nano triage query (rule-table fallback bypassed): '%s'", query), nil)
 			}
-			a.notify(StateSearchingKnowledge, fmt.Sprintf("Searching Tavily for official documentation: '%s'", query), nil)
-			tavilyResp, _ := a.Tavily.Search(ctx, query, 3)
+			domains := ResolveGroundingDomains(targetHint)
+			a.notify(StateSearchingKnowledge, fmt.Sprintf("Searching Tavily for official documentation: '%s' (domains: %s)", query, strings.Join(domains, ", ")), nil)
+			tavilyResp, _ := a.Tavily.Search(ctx, query, 3, domains...)
 			docsCtx = a.Tavily.FormatContext(tavilyResp)
 			if tavilyResp != nil && len(tavilyResp.Results) > 0 {
 				a.lastTavilyResults = tavilyResp.Results
