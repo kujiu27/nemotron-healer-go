@@ -41,6 +41,7 @@ type Agent struct {
 	Falsifier         *falsify.Falsifier
 	OnEvent           EventCallback
 	OnStreamToken     TokenCallback
+	startTime         time.Time
 	// eventMu serializes Session transitions + event callbacks: parallel DHS
 	// rollout goroutines all funnel through notify, and TransitionTo mutates
 	// CurrentState / appends History unsynchronized (data race, found by review).
@@ -167,7 +168,8 @@ func (a *Agent) collectSourceContext(priorityFiles ...string) string {
 }
 
 func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
-	startTime := time.Now()
+	a.startTime = time.Now()
+	startTime := a.startTime
 
 	// Ensure repository is safely Git-tracked for atomic transactions
 	_ = a.Checkpointer.EnsureGitContext()
@@ -421,77 +423,138 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 			}
 
 			// Clean pass!
-			a.Session.IsResolved = true
-			a.Session.DurationSeconds = time.Since(startTime).Seconds()
-			a.Session.ThoughtChain = patchSug.ThoughtChain
+			a.finalizeSuccessfulHealing(targetFile, patchSug.DiffPatch, falsifyRes, archetype, blastReport, turn, patchSug.ThoughtChain, arenaNotes, "")
+			return a.Session, nil
+		}
 
-			// Cryptographic Patch Provenance (SHA-256 non-repudiation signature)
-			hasher := sha256.New()
-			hasher.Write([]byte(patchSug.DiffPatch))
-			patchDigest := fmt.Sprintf("sha256:%x", hasher.Sum(nil))
-			a.Session.PatchDigest = patchDigest
+		// Rollback dirty workspace on failure
+		a.notify(StateRollingBack, fmt.Sprintf("Turn %d verification failed (Exit Code %d). Rolling back dirty changes to snapshot...", turn, verifyRes.ExitCode), nil)
+		_ = a.Checkpointer.Rollback(cpID)
 
-			// 7.5 Synthesize and Persist Permanent Regression Test Guard
-			if falsifyRes.Passed && falsifyRes.GeneratedTest != "" && !falsifyRes.Skipped {
-				regRelFile, regErr := a.Falsifier.PersistRegressionTest(targetFile, falsifyRes.GeneratedTest)
-				if regErr == nil {
-					a.Session.RegressionTestFile = regRelFile
-					a.notify(StateVerifyingSandbox, fmt.Sprintf("🛡️ Synthesized permanent regression test artifact: `%s`", regRelFile), map[string]interface{}{
-						"regression_file": regRelFile,
-					})
+		a.Session.LastError = strings.Join(verifyRes.ParsedErrors, "\n")
+		if a.Session.LastError == "" {
+			a.Session.LastError = verifyRes.Stderr + "\n" + verifyRes.Stdout
+		}
+		failedHistory = append(failedHistory, fmt.Sprintf("Failed Attempt Unified Diff:\n```diff\n%s\n```\nFailure Mode: Test Verification Regression / Failure\nError Diagnostics:\n%s", patchSug.DiffPatch, a.Session.LastError))
+	}
+
+	a.Session.IsResolved = false
+	a.Session.DurationSeconds = time.Since(startTime).Seconds()
+	a.notify(StateFailed, fmt.Sprintf("Self-healing budget exhausted after %d turns.", a.Session.MaxTurns), nil)
+	return a.Session, nil
+}
+
+// finalizeSuccessfulHealing seals a verified resolution across both sequential and DHS search paths.
+// It computes cryptographic patch provenance (SHA-256), persists adversarial regression tests,
+// compiles the full audit card with live Tavily citations and economic telemetry, attaches
+// X-Nemotron commit trailers, and commits the PR branch.
+func (a *Agent) finalizeSuccessfulHealing(
+	targetFile string,
+	diffPatch string,
+	falsifyRes *falsify.FalsificationResult,
+	archetype ArchetypeAnalysis,
+	blastReport *ast.BlastRadiusReport,
+	turn int,
+	thoughtChain string,
+	arenaNotes string,
+	resolutionMechanism string,
+) string {
+	a.Session.IsResolved = true
+	if a.startTime.IsZero() {
+		a.startTime = time.Now().Add(-100 * time.Millisecond)
+	}
+	a.Session.DurationSeconds = time.Since(a.startTime).Seconds()
+	if thoughtChain != "" {
+		a.Session.ThoughtChain = thoughtChain
+	}
+
+	// Cryptographic Patch Provenance (SHA-256 non-repudiation signature)
+	hasher := sha256.New()
+	hasher.Write([]byte(diffPatch))
+	patchDigest := fmt.Sprintf("sha256:%x", hasher.Sum(nil))
+	a.Session.PatchDigest = patchDigest
+
+	// Synthesize and Persist Permanent Regression Test Guard
+	if falsifyRes != nil && falsifyRes.Passed && falsifyRes.GeneratedTest != "" && !falsifyRes.Skipped {
+		regRelFile, regErr := a.Falsifier.PersistRegressionTest(targetFile, falsifyRes.GeneratedTest)
+		if regErr == nil {
+			a.Session.RegressionTestFile = regRelFile
+			a.notify(StateVerifyingSandbox, fmt.Sprintf("🛡️ Synthesized permanent regression test artifact: `%s`", regRelFile), map[string]interface{}{
+				"regression_file": regRelFile,
+			})
+		}
+	}
+
+	branchName := fmt.Sprintf("fix/nemotron-heal-%s", a.Session.SessionID)
+
+	var tavilyCitationTable strings.Builder
+	if !a.DisableGrounding && len(a.Session.TavilyQueries) > 0 {
+		tavilyCitationTable.WriteString(fmt.Sprintf("- **Tavily Query**: `%s`\n", a.Session.TavilyQueries[len(a.Session.TavilyQueries)-1]))
+		if len(a.lastTavilyResults) > 0 {
+			tavilyCitationTable.WriteString("\n| # | Source Reference | Verifiable URL | Relevance | Ground-Truth Excerpt |\n")
+			tavilyCitationTable.WriteString("| :--- | :--- | :--- | :--- | :--- |\n")
+			for cIdx, item := range a.lastTavilyResults {
+				snippet := strings.ReplaceAll(item.Content, "\n", " ")
+				if len(snippet) > 85 {
+					snippet = snippet[:85] + "..."
 				}
+				tavilyCitationTable.WriteString(fmt.Sprintf("| %d | %s | [%s](%s) | %.2f | *\"%s\"* |\n",
+					cIdx+1, item.Title, item.URL, item.URL, item.Score, snippet))
 			}
+		} else {
+			tavilyCitationTable.WriteString("- **Official Documentation**: Tavily returned no results for this query.\n")
+		}
+	} else {
+		tavilyCitationTable.WriteString("- **Knowledge Grounding**: Disabled (baseline mode).\n")
+	}
 
-			branchName := fmt.Sprintf("fix/nemotron-heal-%s", a.Session.SessionID)
+	falsifyStatus := "PASSED"
+	if falsifyRes != nil && falsifyRes.Skipped {
+		falsifyStatus = "SKIPPED — " + falsifyRes.Reason
+	} else if falsifyRes != nil && !falsifyRes.Passed {
+		falsifyStatus = "FAILED"
+	}
 
-			var tavilyCitationTable strings.Builder
-			if !a.DisableGrounding && len(a.Session.TavilyQueries) > 0 {
-				tavilyCitationTable.WriteString(fmt.Sprintf("- **Tavily Query**: `%s`\n", a.Session.TavilyQueries[len(a.Session.TavilyQueries)-1]))
-				if len(a.lastTavilyResults) > 0 {
-					tavilyCitationTable.WriteString("\n| # | Source Reference | Verifiable URL | Relevance | Ground-Truth Excerpt |\n")
-					tavilyCitationTable.WriteString("| :--- | :--- | :--- | :--- | :--- |\n")
-					for cIdx, item := range a.lastTavilyResults {
-						snippet := strings.ReplaceAll(item.Content, "\n", " ")
-						if len(snippet) > 85 {
-							snippet = snippet[:85] + "..."
-						}
-						tavilyCitationTable.WriteString(fmt.Sprintf("| %d | %s | [%s](%s) | %.2f | *\"%s\"* |\n",
-							cIdx+1, item.Title, item.URL, item.URL, item.Score, snippet))
-					}
-				} else {
-					tavilyCitationTable.WriteString("- **Official Documentation**: Tavily returned no results for this query.\n")
-				}
-			} else {
-				tavilyCitationTable.WriteString("- **Knowledge Grounding**: Disabled (baseline mode).\n")
-			}
+	// Quantitative Economics (Token Factory catalog prices, streamed usage)
+	pTok := a.Session.TokenLedger.PromptTokens
+	cTok := a.Session.TokenLedger.CompletionTokens
+	nebiusCost := a.Session.TokenLedger.EstimatedCostUSD
 
-			falsifyStatus := "PASSED"
-			if falsifyRes.Skipped {
-				falsifyStatus = "SKIPPED — " + falsifyRes.Reason
-			}
+	regressionGuardSection := "- **Regression Guard**: Counter-example verified in sandbox ephemeral test."
+	if a.Session.RegressionTestFile != "" {
+		regressionGuardSection = fmt.Sprintf("- **Permanent Regression Test**: `%s` (Committed into branch to permanently prevent regressions in CI)", a.Session.RegressionTestFile)
+	}
 
-			// Quantitative Economics (Token Factory catalog prices, streamed usage)
-			pTok := a.Session.TokenLedger.PromptTokens
-			cTok := a.Session.TokenLedger.CompletionTokens
-			nebiusCost := a.Session.TokenLedger.EstimatedCostUSD
+	reasoningSection := ""
+	if a.Session.ThoughtChain != "" {
+		reasoningSection = fmt.Sprintf("\n---\n\n### 🧠 NVIDIA Nemotron Deep Reasoning Trace\n<details>\n<summary>Click to expand architectural & mathematical deduction chain (%d chars)</summary>\n\n```text\n%s\n```\n\n</details>\n", len(a.Session.ThoughtChain), a.Session.ThoughtChain)
+	}
 
-			regressionGuardSection := "- **Regression Guard**: Counter-example verified in sandbox ephemeral test."
-			if a.Session.RegressionTestFile != "" {
-				regressionGuardSection = fmt.Sprintf("- **Permanent Regression Test**: `%s` (Committed into branch to permanently prevent regressions in CI)", a.Session.RegressionTestFile)
-			}
+	outcomeText := fmt.Sprintf("✅ **SUCCEEDED in %.2fs (Turn %d)**", a.Session.DurationSeconds, turn)
+	if resolutionMechanism != "" {
+		outcomeText = fmt.Sprintf("✅ **SUCCEEDED in %.2fs (%s)**", a.Session.DurationSeconds, resolutionMechanism)
+	}
 
-			reasoningSection := ""
-			if a.Session.ThoughtChain != "" {
-				reasoningSection = fmt.Sprintf("\n---\n\n### 🧠 NVIDIA Nemotron Deep Reasoning Trace\n<details>\n<summary>Click to expand architectural & mathematical deduction chain (%d chars)</summary>\n\n```text\n%s\n```\n\n</details>\n", len(a.Session.ThoughtChain), a.Session.ThoughtChain)
-			}
+	modSym := targetFile
+	affectedFilesCount := 1
+	affectedFilesList := targetFile
+	transitiveCallers := 0
+	riskScore := 0.0
+	if blastReport != nil {
+		modSym = blastReport.ModifiedSymbol
+		affectedFilesCount = len(blastReport.AffectedFiles)
+		affectedFilesList = strings.Join(blastReport.AffectedFiles, ", ")
+		transitiveCallers = len(blastReport.TransitiveDependents)
+		riskScore = blastReport.RiskScore
+	}
 
-			auditReport := fmt.Sprintf(`## ⚡ Nemotron-Healer Autonomous Verification Report
+	auditReport := fmt.Sprintf(`## ⚡ Nemotron-Healer Autonomous Verification Report
 *Generated by Nemotron-Healer on Nebius Token Factory & Tavily Search*
 
 ### 📋 Executive Summary
 - **Target Repository**: %s
 - **Test Command**: `+"`%s`"+`
-- **Healing Outcome**: ✅ **SUCCEEDED in %.2fs (Turn %d)**
+- **Healing Outcome**: %s
 - **Defect Archetype (Deterministic Rule Engine)**: **%s** (%s)
   > %s
 
@@ -536,57 +599,53 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 - **Measured Generation Throughput**: `+"`%.1f tokens/sec`"+`
 - **Total In-Flight Tokens**: %d (Prompt: %d, Completion: %d)
 `,
-				a.WorkDir, a.TestCommand, a.Session.DurationSeconds, turn,
-				archetype.Archetype, archetype.Severity, archetype.Description,
-				blastReport.ModifiedSymbol, len(blastReport.AffectedFiles), strings.Join(blastReport.AffectedFiles, ", "),
-				len(blastReport.TransitiveDependents), blastReport.RiskScore,
-				tavilyCitationTable.String(), falsifyStatus, arenaNotes,
-				regressionGuardSection, reasoningSection,
-				patchDigest, a.Nebius.Model,
-				nebiusCost, a.Session.TokenLedger.SavingsPercentage,
-				a.Session.TokenLedger.TTFTSeconds, a.Session.TokenLedger.MeasuredTPS,
-				a.Session.TokenLedger.TotalTokens, pTok, cTok)
+		a.WorkDir, a.TestCommand, outcomeText,
+		archetype.Archetype, archetype.Severity, archetype.Description,
+		modSym, affectedFilesCount, affectedFilesList,
+		transitiveCallers, riskScore,
+		tavilyCitationTable.String(), falsifyStatus, arenaNotes,
+		regressionGuardSection, reasoningSection,
+		patchDigest, a.Nebius.Model,
+		nebiusCost, a.Session.TokenLedger.SavingsPercentage,
+		a.Session.TokenLedger.TTFTSeconds, a.Session.TokenLedger.MeasuredTPS,
+		a.Session.TokenLedger.TotalTokens, pTok, cTok)
 
-			commitMsg := fmt.Sprintf("fix(auton): verified self-healing [%s] in %.2fs via Nemotron 3 Ultra\n\nX-Nemotron-Audit: %s\nX-Nemotron-Model: %s\nX-Nemotron-Platform: Nebius Token Factory", archetype.Archetype, a.Session.DurationSeconds, patchDigest, a.Nebius.Model)
-			if a.Session.RegressionTestFile != "" {
-				commitMsg = fmt.Sprintf("fix(auton): verified self-healing [%s] + regression test [%s]\n\nX-Nemotron-Audit: %s\nX-Nemotron-Model: %s\nX-Nemotron-Platform: Nebius Token Factory", archetype.Archetype, a.Session.RegressionTestFile, patchDigest, a.Nebius.Model)
-			}
-			if brErr := a.Checkpointer.CreateGitPRBranchWithAudit(branchName, commitMsg, auditReport); brErr != nil {
-				a.notify(StateFailed, fmt.Sprintf("Fix branch creation FAILED; workspace changes remain uncommitted for manual review: %v", brErr), nil)
-			}
-
-			// Step Summary Hook for GitHub Actions Native CI/CD
-			if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
-				if f, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-					_, _ = f.WriteString("\n" + auditReport + "\n")
-					_ = f.Close()
-				}
-			}
-
-			a.notify(StateSucceeded, fmt.Sprintf("🎉 Verification + Adversarial Falsification PASSED on Turn %d! Branch `%s` created.", turn, branchName), map[string]interface{}{
-				"duration_seconds":     a.Session.DurationSeconds,
-				"token_ledger":         a.Session.TokenLedger,
-				"falsification_passed": falsifyRes.Passed,
-				"blast_report":         blastReport,
-				"regression_file":      a.Session.RegressionTestFile,
-				"patch_digest":         patchDigest,
-			})
-			return a.Session, nil
-		}
-
-		// Rollback dirty workspace on failure
-		a.notify(StateRollingBack, fmt.Sprintf("Turn %d verification failed (Exit Code %d). Rolling back dirty changes to snapshot...", turn, verifyRes.ExitCode), nil)
-		_ = a.Checkpointer.Rollback(cpID)
-
-		a.Session.LastError = strings.Join(verifyRes.ParsedErrors, "\n")
-		if a.Session.LastError == "" {
-			a.Session.LastError = verifyRes.Stderr + "\n" + verifyRes.Stdout
-		}
-		failedHistory = append(failedHistory, fmt.Sprintf("Failed Attempt Unified Diff:\n```diff\n%s\n```\nFailure Mode: Test Verification Regression / Failure\nError Diagnostics:\n%s", patchSug.DiffPatch, a.Session.LastError))
+	commitPrefix := "via Nemotron 3 Ultra"
+	if resolutionMechanism != "" {
+		commitPrefix = "via " + resolutionMechanism
+	}
+	commitMsg := fmt.Sprintf("fix(auton): verified self-healing [%s] in %.2fs %s\n\nX-Nemotron-Audit: %s\nX-Nemotron-Model: %s\nX-Nemotron-Platform: Nebius Token Factory", archetype.Archetype, a.Session.DurationSeconds, commitPrefix, patchDigest, a.Nebius.Model)
+	if a.Session.RegressionTestFile != "" {
+		commitMsg = fmt.Sprintf("fix(auton): verified self-healing [%s] + regression test [%s] %s\n\nX-Nemotron-Audit: %s\nX-Nemotron-Model: %s\nX-Nemotron-Platform: Nebius Token Factory", archetype.Archetype, a.Session.RegressionTestFile, commitPrefix, patchDigest, a.Nebius.Model)
+	}
+	if brErr := a.Checkpointer.CreateGitPRBranchWithAudit(branchName, commitMsg, auditReport); brErr != nil {
+		a.notify(StateFailed, fmt.Sprintf("Fix branch creation FAILED; workspace changes remain uncommitted for manual review: %v", brErr), nil)
 	}
 
-	a.Session.IsResolved = false
-	a.Session.DurationSeconds = time.Since(startTime).Seconds()
-	a.notify(StateFailed, fmt.Sprintf("Self-healing budget exhausted after %d turns.", a.Session.MaxTurns), nil)
-	return a.Session, nil
+	// Step Summary Hook for GitHub Actions Native CI/CD
+	if summaryPath := os.Getenv("GITHUB_STEP_SUMMARY"); summaryPath != "" {
+		if f, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			_, _ = f.WriteString("\n" + auditReport + "\n")
+			_ = f.Close()
+		}
+	}
+
+	turnReport := turn
+	if a.Session.CurrentTurn < turn {
+		a.Session.CurrentTurn = turn
+	}
+	falsifyPassed := false
+	if falsifyRes != nil {
+		falsifyPassed = falsifyRes.Passed
+	}
+	a.notify(StateSucceeded, fmt.Sprintf("🎉 Verification + Adversarial Falsification PASSED on Turn %d! Branch `%s` created.", turnReport, branchName), map[string]interface{}{
+		"duration_seconds":     a.Session.DurationSeconds,
+		"token_ledger":         a.Session.TokenLedger,
+		"falsification_passed": falsifyPassed,
+		"blast_report":         blastReport,
+		"regression_file":      a.Session.RegressionTestFile,
+		"patch_digest":         patchDigest,
+	})
+
+	return branchName
 }

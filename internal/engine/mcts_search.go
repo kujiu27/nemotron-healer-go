@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kujiu27/nemotron-healer-go/internal/arena"
 	"github.com/kujiu27/nemotron-healer-go/internal/client"
 	"github.com/kujiu27/nemotron-healer-go/internal/falsify"
 	"github.com/kujiu27/nemotron-healer-go/internal/mcts"
@@ -46,9 +47,40 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 	blastReport := a.CodeGraph.AnalyzeBlastRadius(targetHint, targetSym)
 	archetype := ClassifyDefect(initialFailingOutput, codeCtx)
 
-	query := BuildGroundingQuery(a.WorkDir, targetHint, archetype, initialFailingOutput)
-	tavilyResp, _ := a.Tavily.Search(ctx, query, 3)
-	docsCtx := a.Tavily.FormatContext(tavilyResp)
+	docsCtx := ""
+	if !a.DisableGrounding {
+		query := BuildGroundingQuery(a.WorkDir, targetHint, archetype, initialFailingOutput)
+		if a.Nebius.FastModel != "" {
+			triage, ftP, ftC, ftErr := a.Nebius.FastTriage(ctx, initialFailingOutput)
+			if ftErr == nil && triage != nil {
+				a.addTokens(ftP, ftC)
+				if triage.RecommendedQuery != "" {
+					query = triage.RecommendedQuery
+				}
+			}
+		}
+		tavilyResp, _ := a.Tavily.Search(ctx, query, 3)
+		docsCtx = a.Tavily.FormatContext(tavilyResp)
+		if tavilyResp != nil && len(tavilyResp.Results) > 0 {
+			a.lastTavilyResults = tavilyResp.Results
+			top := tavilyResp.Results[0]
+			if excerpt, exErr := a.Tavily.Extract(ctx, top.URL); exErr == nil && excerpt != "" {
+				docsCtx += fmt.Sprintf("\n[FULL TEXT EXCERPT — %s]\n%s\n", top.URL, excerpt)
+			}
+		}
+		a.Session.TavilyQueries = append(a.Session.TavilyQueries, query)
+	}
+
+	arenaNotes := "Single-Agent Verifiable Falsification (DHS Guided)"
+	runArenaIfEnabled := func(targetFile string) {
+		if a.EnableArena {
+			a.notify(StateVerifyingSandbox, "Entering Red-Blue Adversarial Arena (Self-Play)...", nil)
+			gameArena := arena.NewArena(a.Nebius, a.Runner, a.Patcher, a.WorkDir, a.TestCommand)
+			rounds, eq, _ := gameArena.SelfPlay(ctx, targetFile, 2)
+			a.notify(StateVerifyingSandbox, fmt.Sprintf("Red-Blue Arena: Survived %d attack rounds (defense held all rounds: %v)", len(rounds), eq), nil)
+			arenaNotes = fmt.Sprintf("Survived %d Adversarial Attack-Defend Rounds (defense held all rounds: %v)", len(rounds), eq)
+		}
+	}
 
 	nodesCreated := 0
 
@@ -80,6 +112,7 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 			diffPatch   string
 			targetFile  string
 			searchDepth int
+			falsifyRes  *falsify.FalsificationResult
 		}
 		var branchResults []branchResult
 
@@ -148,10 +181,12 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 				verifyRes, _ := wtRunner.Run(a.TestCommand)
 				advPass := false
 				falsifyFailureOutput := ""
+				var bestFalsify *falsify.FalsificationResult
 
 				if verifyRes.IsSuccess {
 					falsifyRes, _ := wtFalsifier.StressTest(ctx, targetFile, diffPatch)
 					advPass = falsifyRes.Passed
+					bestFalsify = falsifyRes
 					if !advPass {
 						falsifyFailureOutput = falsifyRes.FailureOutput
 					}
@@ -205,8 +240,9 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 							if applied2 {
 								v2, _ := wtRunner.Run(a.TestCommand)
 								adv2 := false
+								var f2 *falsify.FalsificationResult
 								if v2.IsSuccess {
-									f2, _ := wtFalsifier.StressTest(ctx, targetFile, refineDiff)
+									f2, _ = wtFalsifier.StressTest(ctx, targetFile, refineDiff)
 									adv2 = f2.Passed
 								}
 
@@ -221,6 +257,7 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 									bestDiff = refineDiff
 									bestDepth = 2
 									finalNode = child2
+									bestFalsify = f2
 								}
 							}
 						}
@@ -236,6 +273,7 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 					diffPatch:   bestDiff,
 					targetFile:  targetFile,
 					searchDepth: bestDepth,
+					falsifyRes:  bestFalsify,
 				})
 				mu.Unlock()
 			}(i, hyp, childID)
@@ -260,12 +298,19 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 			// Apply winning patch in main workspace
 			appliedMain, _ := a.Patcher.ApplyPatch(winningBranch.diffPatch, winningBranch.targetFile)
 			if appliedMain {
-				a.Session.IsResolved = true
-				a.Session.DurationSeconds = time.Since(start).Seconds()
+				runArenaIfEnabled(winningBranch.targetFile)
 				a.Session.AppliedPatches = append(a.Session.AppliedPatches, winningBranch.diffPatch)
-
-				branchName := fmt.Sprintf("fix/nemotron-dhs-%s", a.Session.SessionID)
-				_ = a.Checkpointer.CreateGitPRBranch(branchName, fmt.Sprintf("fix(dhs): verified divergent-search repair [%s] (Reward: %.3f)", winningBranch.childID, winningBranch.reward))
+				a.finalizeSuccessfulHealing(
+					winningBranch.targetFile,
+					winningBranch.diffPatch,
+					winningBranch.falsifyRes,
+					archetype,
+					blastReport,
+					1,
+					"",
+					arenaNotes,
+					fmt.Sprintf("DHS Parallel Search (Branch: %s, Depth: %d, Reward: %.3f)", winningBranch.childID, winningBranch.searchDepth, winningBranch.reward),
+				)
 
 				return &MCTSSearchResult{
 					Resolved:        true,
@@ -350,9 +395,10 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 		advPass := false
 		falsifyFailureOutput := ""
 
+		var falsifyRes *falsify.FalsificationResult
 		if verifyRes.IsSuccess {
 			// Run Adversarial Falsification stress test
-			falsifyRes, _ := a.Falsifier.StressTest(ctx, targetFile, diffPatch)
+			falsifyRes, _ = a.Falsifier.StressTest(ctx, targetFile, diffPatch)
 			advPass = falsifyRes.Passed
 			if !advPass {
 				falsifyFailureOutput = falsifyRes.FailureOutput
@@ -376,12 +422,19 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 			a.notify(StateSucceeded, fmt.Sprintf("🎉 DHS converged on optimal branch [%s] (%s) with Reward: %.3f!",
 				childID, hyp.Name, reward), nil)
 
-			a.Session.IsResolved = true
-			a.Session.DurationSeconds = time.Since(start).Seconds()
+			runArenaIfEnabled(targetFile)
 			a.Session.AppliedPatches = append(a.Session.AppliedPatches, diffPatch)
-
-			branchName := fmt.Sprintf("fix/nemotron-dhs-%s", a.Session.SessionID)
-			_ = a.Checkpointer.CreateGitPRBranch(branchName, fmt.Sprintf("fix(dhs): verified repair via divergent-search branch [%s] (Reward: %.3f)", childID, reward))
+			a.finalizeSuccessfulHealing(
+				targetFile,
+				diffPatch,
+				falsifyRes,
+				archetype,
+				blastReport,
+				1,
+				"",
+				arenaNotes,
+				fmt.Sprintf("DHS Sequential Search (Branch: %s, Depth: 1, Reward: %.3f)", childID, reward),
+			)
 
 			return &MCTSSearchResult{
 				Resolved:        true,
@@ -417,8 +470,9 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 					if applied2 {
 						verifyRes2, _ := a.Runner.Run(a.TestCommand)
 						advPass2 := false
+						var f2 *falsify.FalsificationResult
 						if verifyRes2.IsSuccess {
-							f2, _ := a.Falsifier.StressTest(ctx, targetFile, refineDiff)
+							f2, _ = a.Falsifier.StressTest(ctx, targetFile, refineDiff)
 							advPass2 = f2.Passed
 						}
 
@@ -435,12 +489,19 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 
 						if reward2 >= 0.70 {
 							a.notify(StateSucceeded, fmt.Sprintf("🎉 DHS Depth-2 converged on optimal hardened branch [%s] with Reward: %.3f!", depth2ID, reward2), nil)
-							a.Session.IsResolved = true
-							a.Session.DurationSeconds = time.Since(start).Seconds()
+							runArenaIfEnabled(targetFile)
 							a.Session.AppliedPatches = append(a.Session.AppliedPatches, refineDiff)
-
-							branchName := fmt.Sprintf("fix/nemotron-mcts-%s", a.Session.SessionID)
-							_ = a.Checkpointer.CreateGitPRBranch(branchName, fmt.Sprintf("fix(mcts): verified depth-2 repair [%s] (Reward: %.3f)", depth2ID, reward2))
+							a.finalizeSuccessfulHealing(
+								targetFile,
+								refineDiff,
+								f2,
+								archetype,
+								blastReport,
+								1,
+								"",
+								arenaNotes,
+								fmt.Sprintf("DHS Depth-2 Sequential (Branch: %s, Reward: %.3f)", depth2ID, reward2),
+							)
 
 							return &MCTSSearchResult{
 								Resolved:        true,

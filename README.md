@@ -91,7 +91,7 @@ nemotron-healer . --command "go test ./..." --no-tui
 ### 4. Use as a GitHub Action
 ```yaml
 - name: Autonomous Self-Healing CI
-  uses: kujiu27/nemotron-healer-go@v0.7.3
+  uses: kujiu27/nemotron-healer-go@v0.7.4
   with:
     path: .                    # directory to heal (default: repo root)
     command: go test ./...     # the failing test command
