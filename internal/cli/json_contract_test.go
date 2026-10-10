@@ -47,6 +47,8 @@ func TestDoctorCmd_JSONPure(t *testing.T) {
 		FastModel         string          `json:"fast_model"`
 		ReasoningModel    string          `json:"reasoning_model"`
 		EndpointProbe     string          `json:"endpoint_probe"`
+		TavilyProbe       string          `json:"tavily_probe"`
+		TavilyRTTMS       int64           `json:"tavily_rtt_ms"`
 		Toolchains        map[string]bool `json:"toolchains"`
 	}
 
@@ -62,6 +64,9 @@ func TestDoctorCmd_JSONPure(t *testing.T) {
 	}
 	if res.Toolchains == nil || !res.Toolchains["git"] {
 		t.Errorf("toolchain git expected true")
+	}
+	if res.TavilyProbe == "" {
+		t.Errorf("expected tavily_probe to be populated")
 	}
 }
 

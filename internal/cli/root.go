@@ -22,7 +22,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.37"
+var Version = "v0.7.38"
 
 var (
 	testCmdFlag    string
@@ -300,14 +300,25 @@ var doctorCmd = &cobra.Command{
 		}
 
 		tavily := client.NewTavilyClient()
+		tavilyStatus := "Not configured (grounding disabled, baseline ungrounded mode)"
+		var tavilyRTT int64
 		if tavily.APIKey != "" {
-			tavilyLabel := "Configured (Online Grounding)"
-			if mockFlag {
-				tavilyLabel = "Configured (Mock Grounding)"
+			tStatus, tRTT, tErr := tavily.Probe(context.Background())
+			tavilyRTT = tRTT
+			if tErr == nil && tStatus == http.StatusOK {
+				label := "ONLINE"
+				if mockFlag {
+					label = "ONLINE (MOCK)"
+				}
+				tavilyStatus = fmt.Sprintf("[%s] Authenticated (RTT: %dms)", label, tRTT)
+			} else if tErr == nil {
+				tavilyStatus = fmt.Sprintf("[HTTP %d] Authentication Failed (RTT: %dms)", tStatus, tRTT)
+			} else {
+				tavilyStatus = fmt.Sprintf("[UNREACHABLE] Error: %v", tErr)
 			}
-			fmt.Fprintf(human, "• Tavily Search API:  %s\n", tavilyLabel)
+			fmt.Fprintf(human, "• Tavily Search API:  %s\n", tavilyStatus)
 		} else {
-			fmt.Fprintln(human, "• Tavily Search API:  Not configured (grounding disabled, baseline ungrounded mode)")
+			fmt.Fprintf(human, "• Tavily Search API:  %s\n", tavilyStatus)
 		}
 
 		// Toolchain checks
@@ -341,6 +352,8 @@ var doctorCmd = &cobra.Command{
 				"endpoint_probe":     probeLabel,
 				"endpoint_rtt_ms":    nebiusRTT,
 				"tavily_configured":  tavily.APIKey != "",
+				"tavily_probe":       tavilyStatus,
+				"tavily_rtt_ms":      tavilyRTT,
 				"toolchains":         toolchainMap,
 			}
 			data, _ := json.MarshalIndent(payload, "", "  ")
