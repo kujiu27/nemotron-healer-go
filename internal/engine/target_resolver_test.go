@@ -39,3 +39,23 @@ RuntimeError: Deadlock detected
 		t.Fatalf("expected symbol execute, got %s", loc.Symbol)
 	}
 }
+
+func TestResolveTargetLocation_EcosystemFallback(t *testing.T) {
+	// 1. Go ecosystem fallback
+	goDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(goDir, "go.mod"), []byte("module test\n"), 0644)
+	_ = os.WriteFile(filepath.Join(goDir, "server.go"), []byte("package main\n"), 0644)
+	goLoc := ResolveTargetLocation(goDir, "unrecognized error without file line references", nil)
+	if goLoc.FilePath != "server.go" {
+		t.Errorf("expected server.go for Go project, got %s", goLoc.FilePath)
+	}
+
+	// 2. Node/TS ecosystem fallback
+	nodeDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(nodeDir, "package.json"), []byte("{}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(nodeDir, "index.ts"), []byte("export const x = 1;\n"), 0644)
+	nodeLoc := ResolveTargetLocation(nodeDir, "syntax error", nil)
+	if nodeLoc.FilePath != "index.ts" {
+		t.Errorf("expected index.ts for Node project, got %s", nodeLoc.FilePath)
+	}
+}

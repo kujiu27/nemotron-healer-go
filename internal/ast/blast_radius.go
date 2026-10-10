@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -209,6 +210,10 @@ func (g *CodeGraph) BuildGraph() error {
 			}
 		}
 	}
+	for _, callers := range g.CallGraph {
+		sort.Strings(callers)
+	}
+
 
 	return err
 }
@@ -448,6 +453,10 @@ func (g *CodeGraph) AnalyzeBlastRadius(targetFile string, targetSymbolHint ...st
 	for f := range affectedFilesMap {
 		affectedFiles = append(affectedFiles, f)
 	}
+	sort.Strings(direct)
+	sort.Strings(transitiveList)
+	sort.Strings(affectedFiles)
+
 
 	total := float64(len(g.Symbols))
 	if total == 0 {
