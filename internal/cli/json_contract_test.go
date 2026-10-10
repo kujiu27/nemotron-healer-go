@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -67,6 +68,47 @@ func TestDoctorCmd_JSONPure(t *testing.T) {
 	}
 	if res.TavilyProbe == "" {
 		t.Errorf("expected tavily_probe to be populated")
+	}
+}
+
+func TestDoctorCmd_TavilyAuthFailClosed(t *testing.T) {
+	origMock := mockFlag
+	origJSON := jsonFlag
+	mockFlag = false
+	jsonFlag = true
+	defer func() {
+		mockFlag = origMock
+		jsonFlag = origJSON
+	}()
+
+	t.Setenv("NEBIUS_BASE_URL", "http://127.0.0.1:9")
+	t.Setenv("TAVILY_BASE_URL", "http://127.0.0.1:9")
+	t.Setenv("NEBIUS_API_KEY", "dummy-key")
+	t.Setenv("TAVILY_API_KEY", "bad-key")
+
+	out := captureStdout(func() {
+		_ = doctorCmd.RunE(doctorCmd, []string{})
+	})
+
+	var res struct {
+		Ready          bool     `json:"ready"`
+		FailureReasons []string `json:"failure_reasons"`
+	}
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("stdout not valid JSON: %v, raw:\n%s", err, out)
+	}
+	if res.Ready {
+		t.Errorf("expected ready=false when Tavily is unreachable")
+	}
+	foundTavily := false
+	for _, reason := range res.FailureReasons {
+		if strings.Contains(reason, "Tavily API") {
+			foundTavily = true
+			break
+		}
+	}
+	if !foundTavily {
+		t.Errorf("expected failure_reasons to include Tavily API error, got: %v", res.FailureReasons)
 	}
 }
 

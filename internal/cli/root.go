@@ -22,7 +22,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.38"
+var Version = "v0.7.39"
 
 var (
 	testCmdFlag    string
@@ -313,8 +313,12 @@ var doctorCmd = &cobra.Command{
 				tavilyStatus = fmt.Sprintf("[%s] Authenticated (RTT: %dms)", label, tRTT)
 			} else if tErr == nil {
 				tavilyStatus = fmt.Sprintf("[HTTP %d] Authentication Failed (RTT: %dms)", tStatus, tRTT)
+				ready = false
+				failureReasons = append(failureReasons, fmt.Sprintf("Tavily API rejected authentication (HTTP %d). Please check TAVILY_API_KEY.", tStatus))
 			} else {
 				tavilyStatus = fmt.Sprintf("[UNREACHABLE] Error: %v", tErr)
+				ready = false
+				failureReasons = append(failureReasons, fmt.Sprintf("Tavily API unreachable (%v). Check network or TAVILY_BASE_URL.", tErr))
 			}
 			fmt.Fprintf(human, "• Tavily Search API:  %s\n", tavilyStatus)
 		} else {

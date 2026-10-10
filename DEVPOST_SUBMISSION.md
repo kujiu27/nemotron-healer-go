@@ -63,7 +63,7 @@ ledger mapping every finding to its fix commit), then fixed everything it found:
   buggy tree fails, the upstream 17-line fix passes.
 - The GitHub Action chain runs end-to-end on a real runner in CI (`action-smoke` job)
   on every push — no release-binary dependency.
-- Release binaries auto-publish on tag pushes; `v0.7.38` assets are live.
+- Release binaries auto-publish on tag pushes; `v0.7.39` assets are live.
 - RED-state integrity gate: CI verifies every benchmark case still FAILS its own
   test command as shipped — no leaked answers, enforced on every push.
 
@@ -116,7 +116,7 @@ export TAVILY_API_KEY=...   # tavily.com
 nemotron-healer . --command "pytest" --no-tui
 ```
 
-Or as a one-line GitHub Action (`uses: kujiu27/nemotron-healer-go@v0.7.38`) — see README.
+Or as a one-line GitHub Action (`uses: kujiu27/nemotron-healer-go@v0.7.39`) — see README.
 
 ## Video
 
