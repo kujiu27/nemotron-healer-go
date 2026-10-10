@@ -97,34 +97,7 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 				sem <- struct{}{}
 				defer func() { <-sem }()
 
-				promptMessages := []client.ChatMessage{
-					{Role: "system", Content: "You are an autonomous code synthesis engine exploring a specific hypothesis branch. Output exact, surgical unified diff patches."},
-					{
-						Role: "user",
-						Content: fmt.Sprintf(`[HYPOTHESIS BRANCH]
-%s: %s
-
-[TARGET FILE]
-%s
-
-[DEFECT ARCHETYPE]
-%s
-
-[FAILING TRACE]
-%s
-
-[SOURCE CODE CONTEXT]
-%s
-
-[OFFICIAL DOCS]
-%s
-
-INSTRUCTIONS:
-1. Generate an exact unified diff patch implementing THIS hypothesis inside a `+"```diff"+` block starting with --- a/%s and +++ b/%s.
-2. Specify [TARGET_FILE]%s[/TARGET_FILE].`,
-							h.Name, h.Guidance, targetHint, archetype.Archetype, initialFailingOutput, codeCtx, docsCtx, targetHint, targetHint, targetHint),
-					},
-				}
+				promptMessages := buildHypothesisPrompt(h.Name, h.Guidance, targetHint, archetype.Archetype, initialFailingOutput, codeCtx, docsCtx)
 
 				rawResp, pTok, cTok, err := a.Nebius.StreamCompletion(ctx, promptMessages, nil)
 				mu.Lock()
@@ -133,14 +106,9 @@ INSTRUCTIONS:
 				nodesCreated++
 				mu.Unlock()
 
-				diffPatch := ""
-				targetFile := targetHint
+				diffPatch, targetFile := targetHint, targetHint
 				if err == nil {
-					diffPatch = extractDiffBlock(rawResp)
-					reTarget := regexp.MustCompile(`\[TARGET_FILE\](.*?)\[/TARGET_FILE\]`)
-					if m := reTarget.FindStringSubmatch(rawResp); len(m) > 1 {
-						targetFile = strings.TrimSpace(m[1])
-					}
+					diffPatch, targetFile = parseResponseDiffTarget(rawResp, targetHint)
 				}
 
 				child := mcts.NewNode(cID, root, diffPatch, targetFile, h.Name)
@@ -211,24 +179,7 @@ INSTRUCTIONS:
 				mu.Unlock()
 				if verifyRes.IsSuccess && !advPass && withinBudget {
 					depth2ID := fmt.Sprintf("%s.1", cID)
-					refinePrompt := []client.ChatMessage{
-						{Role: "system", Content: "You are an autonomous code synthesis engine in depth-2 refinement. Harden the previous candidate patch against the adversarial counter-example."},
-						{
-							Role: "user",
-							Content: fmt.Sprintf(`[PREVIOUS CANDIDATE PATCH]
-%s
-
-[BASE VERIFICATION]
-Passed base test suite successfully.
-
-[ADVERSARIAL COUNTER-EXAMPLE FAILURE]
-%s
-
-[TASK]
-Refine the patch to defend against this boundary counter-example while preserving base test correctness. Output the unified diff inside a `+"```diff"+` block.
-Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, targetFile),
-						},
-					}
+					refinePrompt := buildRefinePrompt(diffPatch, falsifyFailureOutput, targetFile)
 
 					refineResp, rpTok, rcTok, rErr := a.Nebius.StreamCompletion(ctx, refinePrompt, nil)
 					mu.Lock()
@@ -363,47 +314,15 @@ Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, target
 		}
 
 		// Prompt Nemotron 3 Ultra with specific hypothesis guidance
-		promptMessages := []client.ChatMessage{
-			{Role: "system", Content: "You are an autonomous code synthesis engine exploring a specific hypothesis branch. Output exact, surgical unified diff patches."},
-			{
-				Role: "user",
-				Content: fmt.Sprintf(`[HYPOTHESIS BRANCH]
-%s: %s
-
-[TARGET FILE]
-%s
-
-[DEFECT ARCHETYPE]
-%s
-
-[FAILING TRACE]
-%s
-
-[SOURCE CODE CONTEXT]
-%s
-
-[OFFICIAL DOCS]
-%s
-
-INSTRUCTIONS:
-1. Generate an exact unified diff patch implementing THIS hypothesis inside a `+"```diff"+` block starting with --- a/%s and +++ b/%s.
-2. Specify [TARGET_FILE]%s[/TARGET_FILE].`,
-					hyp.Name, hyp.Guidance, targetHint, archetype.Archetype, initialFailingOutput, codeCtx, docsCtx, targetHint, targetHint, targetHint),
-			},
-		}
+		promptMessages := buildHypothesisPrompt(hyp.Name, hyp.Guidance, targetHint, archetype.Archetype, initialFailingOutput, codeCtx, docsCtx)
 
 		rawResp, pTok, cTok, err := a.Nebius.StreamCompletion(ctx, promptMessages, a.OnStreamToken)
 		a.addTokens(pTok, cTok)
 		a.Session.TokenLedger.CalculateCost()
 
-		diffPatch := ""
-		targetFile := targetHint
+		diffPatch, targetFile := targetHint, targetHint
 		if err == nil {
-			diffPatch = extractDiffBlock(rawResp)
-			reTarget := regexp.MustCompile(`\[TARGET_FILE\](.*?)\[/TARGET_FILE\]`)
-			if m := reTarget.FindStringSubmatch(rawResp); len(m) > 1 {
-				targetFile = strings.TrimSpace(m[1])
-			}
+			diffPatch, targetFile = parseResponseDiffTarget(rawResp, targetHint)
 		}
 
 		child := mcts.NewNode(childID, root, diffPatch, targetFile, hyp.Name)
@@ -480,24 +399,7 @@ INSTRUCTIONS:
 			depth2ID := fmt.Sprintf("%s.1", childID)
 			a.notify(StateSynthesizingPatch, fmt.Sprintf("DHS Depth-2 Hardening [%s]: Refining candidate based on adversarial feedback...", depth2ID), nil)
 
-			refinePrompt := []client.ChatMessage{
-				{Role: "system", Content: "You are an autonomous code synthesis engine in depth-2 refinement. Harden the previous candidate patch against the adversarial counter-example."},
-				{
-					Role: "user",
-					Content: fmt.Sprintf(`[PREVIOUS CANDIDATE PATCH]
-%s
-
-[BASE VERIFICATION]
-Passed base test suite successfully.
-
-[ADVERSARIAL COUNTER-EXAMPLE FAILURE]
-%s
-
-[TASK]
-Refine the patch to defend against this boundary counter-example while preserving base test correctness. Output the unified diff inside a `+"```diff"+` block.
-Specify [TARGET_FILE]%s[/TARGET_FILE].`, diffPatch, falsifyFailureOutput, targetFile),
-				},
-			}
+			refinePrompt := buildRefinePrompt(diffPatch, falsifyFailureOutput, targetFile)
 
 			refineResp, rpTok, rcTok, rErr := a.Nebius.StreamCompletion(ctx, refinePrompt, a.OnStreamToken)
 			a.addTokens(rpTok, rcTok)
@@ -585,4 +487,72 @@ func extractDiffBlock(text string) string {
 		return strings.TrimSpace(text[idx:])
 	}
 	return ""
+}
+
+// buildHypothesisPrompt is shared by the parallel-worktree and sequential DHS
+// paths (previously two verbatim copies).
+func buildHypothesisPrompt(hypothesisName, hypothesisGuidance, targetHint string, archetypeName DefectArchetype, failingOutput, codeCtx, docsCtx string) []client.ChatMessage {
+	return []client.ChatMessage{
+		{Role: "system", Content: "You are an autonomous code synthesis engine exploring a specific hypothesis branch. Output exact, surgical unified diff patches."},
+		{
+			Role: "user",
+			Content: fmt.Sprintf(`[HYPOTHESIS BRANCH]
+%s: %s
+
+[TARGET FILE]
+%s
+
+[DEFECT ARCHETYPE]
+%s
+
+[FAILING TRACE]
+%s
+
+[SOURCE CODE CONTEXT]
+%s
+
+[OFFICIAL DOCS]
+%s
+
+INSTRUCTIONS:
+1. Generate an exact unified diff patch implementing THIS hypothesis inside a `+"```diff"+` block starting with --- a/%s and +++ b/%s.
+2. Specify [TARGET_FILE]%s[/TARGET_FILE].`,
+				hypothesisName, hypothesisGuidance, targetHint, string(archetypeName), failingOutput, codeCtx, docsCtx, targetHint, targetHint, targetHint),
+		},
+	}
+}
+
+// buildRefinePrompt is shared by both depth-2 refinement sites.
+func buildRefinePrompt(prevDiff, falsifyFailureOutput, targetFile string) []client.ChatMessage {
+	return []client.ChatMessage{
+		{Role: "system", Content: "You are an autonomous code synthesis engine in depth-2 refinement. Harden the previous candidate patch against the adversarial counter-example."},
+		{
+			Role: "user",
+			Content: fmt.Sprintf(`[PREVIOUS CANDIDATE PATCH]
+%s
+
+[BASE VERIFICATION]
+Passed base test suite successfully.
+
+[ADVERSARIAL COUNTER-EXAMPLE FAILURE]
+%s
+
+[TASK]
+Refine the patch to defend against this boundary counter-example while preserving base test correctness. Output the unified diff inside a `+"```diff"+` block.
+Specify [TARGET_FILE]%s[/TARGET_FILE].`, prevDiff, falsifyFailureOutput, targetFile),
+		},
+	}
+}
+
+var reTargetFileTag = regexp.MustCompile(`\[TARGET_FILE\](.*?)\[/TARGET_FILE\]`)
+
+// parseResponseDiffTarget extracts the diff block and the model-chosen target
+// file from a hypothesis response (falls back to targetHint).
+func parseResponseDiffTarget(rawResp, targetHint string) (string, string) {
+	diffPatch := extractDiffBlock(rawResp)
+	targetFile := targetHint
+	if m := reTargetFileTag.FindStringSubmatch(rawResp); len(m) > 1 {
+		targetFile = strings.TrimSpace(m[1])
+	}
+	return diffPatch, targetFile
 }
