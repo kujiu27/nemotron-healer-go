@@ -100,16 +100,17 @@ nemotron-healer samples/external_gjson --mock --command "go test . -run TestEmpt
 ### 4. Use as a GitHub Action
 ```yaml
 - name: Autonomous Self-Healing CI
-  uses: kujiu27/nemotron-healer-go@v0.7.80
+  uses: kujiu27/nemotron-healer-go@v0.7.81
   with:
     path: .                    # directory to heal (default: repo root)
-    command: go test ./...     # the failing test command
+    command: go test ./...     # failing test command (auto-detected if omitted)
     turns: '5'
     enable_arena: 'true'
+    nebius_api_key: ${{ secrets.NEBIUS_API_KEY }}  # or pass via env
+    tavily_api_key: ${{ secrets.TAVILY_API_KEY }}  # or pass via env
 ```
-Requires repo secrets `NEBIUS_API_KEY` (tokenfactory.nebius.com) and
-`TAVILY_API_KEY` (tavily.com). The composite action builds the healer from
-source — no release dependency — and comments the full audit card on the PR.
+Requires `NEBIUS_API_KEY` (tokenfactory.nebius.com) and
+`TAVILY_API_KEY` (tavily.com) via `with:` inputs or runner `env`.
 This exact action chain is smoke-tested on a real GitHub runner on every push
 (see the `action-smoke` job in CI).
 

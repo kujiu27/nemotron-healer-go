@@ -33,6 +33,30 @@ inputs:
     description: "Export diagnostic and healing results in standard SARIF 2.1.0 format to path"
     required: false
     default: ""
+  nebius_api_key:
+    description: "Nebius Token Factory API key (defaults to env NEBIUS_API_KEY)"
+    required: false
+    default: ""
+  tavily_api_key:
+    description: "Tavily Search API key (defaults to env TAVILY_API_KEY)"
+    required: false
+    default: ""
+  nebius_model:
+    description: "Override reasoning model ID (default: nvidia/Nemotron-3-Ultra-550b-a55b)"
+    required: false
+    default: ""
+  nebius_fast_model:
+    description: "Override fast triage model ID (default: nvidia/Nemotron-3-Nano-30B-A3B)"
+    required: false
+    default: ""
+  nebius_base_url:
+    description: "Override inference endpoint URL (default: https://api.tokenfactory.nebius.com/v1)"
+    required: false
+    default: ""
+  tavily_base_url:
+    description: "Override Tavily API endpoint URL (default: https://api.tavily.com)"
+    required: false
+    default: ""
   github_token:
     description: "GitHub token for creating PR comments"
     required: false
@@ -108,6 +132,12 @@ runs:
         NH_SEARCH: ${{ inputs.enable_search }}
         NH_MOCK: ${{ inputs.enable_mock }}
         NH_SARIF: ${{ inputs.sarif }}
+        NEBIUS_API_KEY: ${{ inputs.nebius_api_key || env.NEBIUS_API_KEY }}
+        TAVILY_API_KEY: ${{ inputs.tavily_api_key || env.TAVILY_API_KEY }}
+        NEBIUS_MODEL: ${{ inputs.nebius_model || env.NEBIUS_MODEL }}
+        NEBIUS_FAST_MODEL: ${{ inputs.nebius_fast_model || env.NEBIUS_FAST_MODEL }}
+        NEBIUS_BASE_URL: ${{ inputs.nebius_base_url || env.NEBIUS_BASE_URL }}
+        TAVILY_BASE_URL: ${{ inputs.tavily_base_url || env.TAVILY_BASE_URL }}
       run: |
         EXTRA_FLAGS=()
         if [[ "$NH_ARENA" == "true" ]]; then
