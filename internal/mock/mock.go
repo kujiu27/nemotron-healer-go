@@ -181,14 +181,18 @@ func StartServer() *Server {
 			_ = json.NewDecoder(r.Body).Decode(&chatReq)
 
 			allContent := ""
+			sysContent := ""
 			for _, m := range chatReq.Messages {
 				allContent += " " + m.Content
+				if m.Role == "system" {
+					sysContent += " " + m.Content
+				}
 			}
 			lower := strings.ToLower(allContent)
+			sysLower := strings.ToLower(sysContent)
 
-			isTriage := strings.Contains(lower, "triage") || strings.Contains(allContent, "ERROR_LINE") || strings.Contains(allContent, "4-word")
-			isAdversarial := strings.Contains(lower, "adversarial") || strings.Contains(allContent, "Red-Teamer") || strings.Contains(lower, "stress")
-
+			isTriage := strings.Contains(sysLower, "triage") || strings.Contains(lower, "pre-flight triage") || strings.Contains(allContent, "ERROR_LINE") || strings.Contains(allContent, "4-word")
+			isAdversarial := strings.Contains(sysLower, "adversarial") || strings.Contains(sysLower, "red-team") || strings.Contains(lower, "red-teamer")
 			var reply string
 
 			// Case matching based on codebase symbols and files in prompt
