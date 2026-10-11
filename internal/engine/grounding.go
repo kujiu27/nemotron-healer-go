@@ -92,20 +92,20 @@ func BuildGroundingQuery(workDir, targetFile string, archetype ArchetypeAnalysis
 		return fmt.Sprintf("%s %s breaking change migration guide official", lang, cleanBase)
 	}
 
-	// 6. Fallback: extract decisive error line
+	// 6. Fallback: extract decisive error line (skipping harness trailers like FAIL, exit status 1, =====)
 	lines := strings.Split(lastError, "\n")
 	decisiveLine := ""
 	for i := len(lines) - 1; i >= 0; i-- {
 		l := strings.TrimSpace(lines[i])
-		if l != "" && !strings.HasPrefix(l, "Traceback") && !strings.HasPrefix(l, "File ") {
-			if len(l) > 60 {
-				l = l[:60]
-			}
-			decisiveLine = l
-			break
+		if l == "" || isTestRunnerNoise(l) {
+			continue
 		}
+		if len(l) > 60 {
+			l = l[:60]
+		}
+		decisiveLine = l
+		break
 	}
-
 	if decisiveLine != "" {
 		return fmt.Sprintf("%s fix %s %s", lang, archetype.Archetype, decisiveLine)
 	}
@@ -164,4 +164,24 @@ func detectLibraryVersion(workDir, lastError string) string {
 	}
 
 	return ""
+}
+func isTestRunnerNoise(l string) bool {
+	if l == "FAIL" || l == "PASS" {
+		return true
+	}
+	if strings.HasPrefix(l, "Traceback") ||
+		strings.HasPrefix(l, "File ") ||
+		strings.HasPrefix(l, "FAIL\t") ||
+		strings.HasPrefix(l, "FAIL ") ||
+		strings.HasPrefix(l, "=== RUN") ||
+		strings.HasPrefix(l, "--- FAIL:") ||
+		strings.HasPrefix(l, "exit status ") ||
+		strings.HasPrefix(l, "test result:") ||
+		strings.HasPrefix(l, "error: test failed") {
+		return true
+	}
+	if strings.HasPrefix(l, "=") && strings.HasSuffix(l, "=") {
+		return true
+	}
+	return false
 }
