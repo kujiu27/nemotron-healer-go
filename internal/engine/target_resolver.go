@@ -118,16 +118,23 @@ func ResolveTargetLocation(workDir string, errorTrace string, graph *ast.CodeGra
 	// Scan candidates in reverse (innermost stack frame first)
 	// Prioritize non-test files
 	for i := len(candidates) - 1; i >= 0; i-- {
-		if !isTestFile(candidates[i].FilePath) {
-			return candidates[i]
+		c := candidates[i]
+		if c.Symbol == "" && graph != nil && c.LineNum > 0 {
+			c.Symbol = graph.FindSymbolAtLine(c.FilePath, c.LineNum)
+		}
+		if !isTestFile(c.FilePath) {
+			return c
 		}
 	}
 
 	// If only test files were in the trace, try callers or symbols referenced in graph
 	if len(candidates) > 0 {
-		return candidates[len(candidates)-1]
+		c := candidates[len(candidates)-1]
+		if c.Symbol == "" && graph != nil && c.LineNum > 0 {
+			c.Symbol = graph.FindSymbolAtLine(c.FilePath, c.LineNum)
+		}
+		return c
 	}
-
 	// Fallback to CodeGraph with deterministic alphabetical sort
 	if graph != nil && len(graph.FileSymbols) > 0 {
 		var sortedFiles []string

@@ -45,6 +45,53 @@ def transfer_money():
 	}
 }
 
+func TestFindSymbolAtLine(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "ast_line_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	goCode := `package service
+
+func ProcessOrder(id string) error {
+	return nil
+}
+
+type Engine struct{}
+
+func (e *Engine) RunTask(name string) {
+	_ = name
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "order.go"), []byte(goCode), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	graph := NewCodeGraph(tmpDir)
+	if err := graph.BuildGraph(); err != nil {
+		t.Fatalf("build graph failed: %v", err)
+	}
+
+	// Line 3 is inside ProcessOrder
+	sym1 := graph.FindSymbolAtLine("order.go", 3)
+	if sym1 != "ProcessOrder" {
+		t.Errorf("expected ProcessOrder at line 3, got %q", sym1)
+	}
+
+	// Line 10 is inside Engine.RunTask
+	sym2 := graph.FindSymbolAtLine("order.go", 10)
+	if sym2 != "Engine.RunTask" {
+		t.Errorf("expected Engine.RunTask at line 10, got %q", sym2)
+	}
+
+	// Line 1 is package declaration (outside any function)
+	sym0 := graph.FindSymbolAtLine("order.go", 1)
+	if sym0 != "" {
+		t.Errorf("expected empty symbol at line 1, got %q", sym0)
+	}
+}
+
 func TestFastAPISample(t *testing.T) {
 	sampleDir := filepath.Join("..", "..", "samples", "fastapi_async_deadlock")
 	if _, err := os.Stat(sampleDir); err != nil {
