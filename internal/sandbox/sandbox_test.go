@@ -811,3 +811,34 @@ func TestCreateGitPRBranch_BypassesPreCommitHookAndForcesAudit(t *testing.T) {
 		t.Errorf("Oops.rej still exists in workspace!")
 	}
 }
+
+func TestPatcher_CRLFFileWithLFDiff_AppliesAndPreservesCRLF(t *testing.T) {
+	tmpDir := t.TempDir()
+	targetFile := filepath.Join(tmpDir, "windows_style.py")
+	initialContent := "def greeting(name):\r\n    msg = f\"Hi {name}\"\r\n    return msg\r\n"
+	if err := os.WriteFile(targetFile, []byte(initialContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Standard LF diff from LLM
+	diff := "--- a/windows_style.py\n+++ b/windows_style.py\n@@ -1,3 +1,3 @@\n def greeting(name):\n-    msg = f\"Hi {name}\"\n+    msg = f\"Hello, {name}!\"\n     return msg\n"
+
+	patcher := NewPatcher(tmpDir)
+	applied, msg := patcher.ApplyPatch(diff, "windows_style.py")
+	if !applied {
+		t.Fatalf("expected patch on CRLF file to apply, got failure: %s", msg)
+	}
+
+	data, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	expected := "def greeting(name):\r\n    msg = f\"Hello, {name}!\"\r\n    return msg\r\n"
+	if content != expected {
+		t.Errorf("content mismatch:\nexpected %q\ngot %q", expected, content)
+	}
+	if !strings.Contains(content, "\r\n") {
+		t.Errorf("expected CRLF line endings to be preserved")
+	}
+}

@@ -225,6 +225,7 @@ func (p *Patcher) ApplyPatch(diffPatch string, targetFileHint ...string) (bool, 
 		cleanPatch = strings.TrimPrefix(cleanPatch, "```")
 	}
 	cleanPatch = strings.TrimSuffix(cleanPatch, "```")
+	cleanPatch = strings.ReplaceAll(cleanPatch, "\r\n", "\n")
 	cleanPatch = strings.TrimSpace(cleanPatch) + "\n"
 
 	// 1. Security Sanitization Gate across all modified files
@@ -287,6 +288,19 @@ func (p *Patcher) ApplyPatch(diffPatch string, targetFileHint ...string) (bool, 
 		CleanPatchArtifacts(p.WorkDir)
 	}
 
+	ensureLineEndingsPreserved := func() {
+		for fullPath, origData := range origMap {
+			if bytes.Contains(origData, []byte("\r\n")) {
+				if curData, err := os.ReadFile(fullPath); err == nil {
+					if !bytes.Contains(curData, []byte("\r\n")) {
+						crlfData := bytes.ReplaceAll(curData, []byte("\n"), []byte("\r\n"))
+						_ = os.WriteFile(fullPath, crlfData, 0644)
+					}
+				}
+			}
+		}
+	}
+
 	// Tier 1: git apply (atomic by default across all files)
 	for _, pFlag := range []string{"-p1", "-p0"} {
 		cmd := exec.Command("git", "apply", "--whitespace=fix", pFlag, tmpPatchFile.Name())
@@ -294,6 +308,7 @@ func (p *Patcher) ApplyPatch(diffPatch string, targetFileHint ...string) (bool, 
 		var errBuf bytes.Buffer
 		cmd.Stderr = &errBuf
 		if err := cmd.Run(); err == nil {
+			ensureLineEndingsPreserved()
 			CleanPatchArtifacts(p.WorkDir)
 			return true, fmt.Sprintf("Applied atomic patch via git apply %s across %s", pFlag, fileCountInfo)
 		}
@@ -307,6 +322,7 @@ func (p *Patcher) ApplyPatch(diffPatch string, targetFileHint ...string) (bool, 
 		var errBuf bytes.Buffer
 		cmd.Stderr = &errBuf
 		if err := cmd.Run(); err == nil {
+			ensureLineEndingsPreserved()
 			CleanPatchArtifacts(p.WorkDir)
 			return true, fmt.Sprintf("Applied patch via patch %s across %s", pFlag, fileCountInfo)
 		}
@@ -318,6 +334,7 @@ func (p *Patcher) ApplyPatch(diffPatch string, targetFileHint ...string) (bool, 
 	if len(modFiles) > 0 {
 		ok, msg := p.applyAtomicMultiFileHunks(modFiles, cleanPatch)
 		if ok {
+			ensureLineEndingsPreserved()
 			CleanPatchArtifacts(p.WorkDir)
 			return true, fmt.Sprintf("Applied patch via atomic fallback hunk replacer: %s", msg)
 		}
@@ -478,12 +495,16 @@ func parseHunks(diffPatch string) []diffHunk {
 // only matched when the hunks were contiguous in the file — multi-hunk diffs
 // (the common LLM shape) always failed the fallback.
 func replaceHunksInContent(content string, diffPatch string) (string, bool) {
-	hunks := parseHunks(diffPatch)
+	hasCRLF := strings.Contains(content, "\r\n")
+	normalizedContent := strings.ReplaceAll(content, "\r\n", "\n")
+	normalizedDiff := strings.ReplaceAll(diffPatch, "\r\n", "\n")
+
+	hunks := parseHunks(normalizedDiff)
 	if len(hunks) == 0 {
 		return "", false
 	}
 
-	newContent := content
+	newContent := normalizedContent
 	applied := 0
 	for _, h := range hunks {
 		if len(h.oldLines) == 0 && len(h.newLines) == 0 {
@@ -503,6 +524,9 @@ func replaceHunksInContent(content string, diffPatch string) (string, bool) {
 	}
 	if applied == 0 {
 		return "", false
+	}
+	if hasCRLF {
+		newContent = strings.ReplaceAll(newContent, "\n", "\r\n")
 	}
 	return newContent, true
 }
