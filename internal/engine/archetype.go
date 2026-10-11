@@ -34,6 +34,10 @@ func ClassifyDefect(trace string, sourceContext string) ArchetypeAnalysis {
 		strings.Contains(lowerTrace, "race") ||
 		strings.Contains(lowerTrace, "concurrent") ||
 		strings.Contains(lowerTrace, "deadlock") ||
+		strings.Contains(lowerTrace, "timed out") ||
+		strings.Contains(lowerTrace, "timeout") ||
+		strings.Contains(lowerTrace, "deadline exceeded") ||
+		strings.Contains(lowerTrace, "all goroutines are asleep") ||
 		strings.Contains(lowerTrace, "cannot borrow as mutable") ||
 		strings.Contains(lowerTrace, "poisonerror") ||
 		(strings.Contains(lowerSource, "asyncio.gather") && strings.Contains(lowerTrace, "assertionerror")) {

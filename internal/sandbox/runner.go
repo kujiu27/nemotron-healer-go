@@ -3,6 +3,7 @@ package sandbox
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -63,8 +64,19 @@ func (r *Runner) Run(cmdStr string) (*ExecutionResult, error) {
 	stdout := stdoutBuf.String()
 	stderr := stderrBuf.String()
 
-	errors := parseTracebacks(stdout, stderr)
+	if ctx.Err() == context.DeadlineExceeded {
+		timeoutMsg := fmt.Sprintf("Command timed out after %v: %s", r.Timeout, cmdStr)
+		if stderr == "" {
+			stderr = timeoutMsg
+		} else {
+			stderr += "\n" + timeoutMsg
+		}
+	}
 
+	errors := parseTracebacks(stdout, stderr)
+	if ctx.Err() == context.DeadlineExceeded && len(errors) == 0 {
+		errors = []string{fmt.Sprintf("Command timed out after %v: %s", r.Timeout, cmdStr)}
+	}
 	return &ExecutionResult{
 		Command:      cmdStr,
 		ExitCode:     exitCode,

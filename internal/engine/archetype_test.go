@@ -61,6 +61,21 @@ func TestClassifyDefect(t *testing.T) {
 			trace:    "assert x == 42",
 			expected: ArchetypeGeneralAssertion,
 		},
+		{
+			name:     "Go Test Timeout",
+			trace:    "panic: test timed out after 30s\ngoroutine 18 [chan receive]:",
+			expected: ArchetypeConcurrencyRace,
+		},
+		{
+			name:     "Command Timeout Injection",
+			trace:    "Command timed out after 60s: go test -race .",
+			expected: ArchetypeConcurrencyRace,
+		},
+		{
+			name:     "Goroutines Asleep Deadlock",
+			trace:    "fatal error: all goroutines are asleep - deadlock!",
+			expected: ArchetypeConcurrencyRace,
+		},
 	}
 
 	for _, tc := range cases {
