@@ -43,6 +43,12 @@ def transfer_money():
 	if len(report.AffectedFiles) == 0 {
 		t.Fatalf("expected at least 1 affected file, got 0")
 	}
+	if len(report.DirectDependents) == 0 {
+		t.Fatalf("expected transfer_money in DirectDependents of UserAccount.get_balance, got none")
+	}
+	if report.DirectDependents[0] != "account.py::transfer_money" {
+		t.Errorf("expected account.py::transfer_money as dependent, got %s", report.DirectDependents[0])
+	}
 }
 
 func TestFindSymbolAtLine(t *testing.T) {
@@ -89,6 +95,44 @@ func (e *Engine) RunTask(name string) {
 	sym0 := graph.FindSymbolAtLine("order.go", 1)
 	if sym0 != "" {
 		t.Errorf("expected empty symbol at line 1, got %q", sym0)
+	}
+}
+func TestCodeGraph_GoMethodResolution(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	goCode := `package service
+
+type Calculator struct{}
+
+func (c *Calculator) Add(a, b int) int {
+	return a + b
+}
+
+func Compute() int {
+	calc := &Calculator{}
+	return calc.Add(1, 2)
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "calc.go"), []byte(goCode), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	graph := NewCodeGraph(tmpDir)
+	if err := graph.BuildGraph(); err != nil {
+		t.Fatalf("build graph failed: %v", err)
+	}
+
+	if _, ok := graph.Symbols["calc.go::Calculator.Add"]; !ok {
+		t.Fatalf("expected calc.go::Calculator.Add symbol, got: %+v", graph.Symbols)
+	}
+
+	// Hint as bare method name "Add"
+	report := graph.AnalyzeBlastRadius("calc.go", "Add")
+	if len(report.DirectDependents) == 0 {
+		t.Fatalf("expected Compute in DirectDependents of Calculator.Add, got none")
+	}
+	if report.DirectDependents[0] != "calc.go::Compute" {
+		t.Errorf("expected calc.go::Compute as dependent, got %s", report.DirectDependents[0])
 	}
 }
 
