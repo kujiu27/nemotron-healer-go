@@ -590,6 +590,35 @@ func TestParseTracebacks(t *testing.T) {
 	if !strings.Contains(multiTraces[0], "TestOne") || !strings.Contains(multiTraces[1], "TestTwo") {
 		t.Errorf("expected separate TestOne and TestTwo, got %v", multiTraces)
 	}
+	// 7. Go build / compile failure
+	goBuildOut := "# testbad [testbad.test]\n./bad.go:3:14: undefined: undefinedSymbol\nFAIL\ttestbad [build failed]\nFAIL\n"
+	goBuildTraces := parseTracebacks(goBuildOut, "")
+	if len(goBuildTraces) == 0 {
+		t.Fatalf("expected Go build failure trace extracted, got 0")
+	}
+	if !strings.Contains(goBuildTraces[0], "undefined: undefinedSymbol") {
+		t.Errorf("expected undefinedSymbol in trace, got %q", goBuildTraces[0])
+	}
+
+	// 8. Rust compiler error
+	rustCompOut := "error[E0308]: mismatched types\n  --> src/lib.rs:14:5\n   |\n14 |     a - b\nerror: could not compile `mypkg` (lib test) due to 1 previous error\n"
+	rustCompTraces := parseTracebacks(rustCompOut, "")
+	if len(rustCompTraces) == 0 {
+		t.Fatalf("expected Rust compiler error trace extracted, got 0")
+	}
+	if !strings.Contains(rustCompTraces[0], "E0308") {
+		t.Errorf("expected E0308 in trace, got %q", rustCompTraces[0])
+	}
+
+	// 9. TypeScript compiler diagnostic
+	tsCompOut := "src/index.ts:15:7 - error TS2322: Type 'string' is not assignable to type 'number'.\n\n15 const x: number = 'abc';\n"
+	tsCompTraces := parseTracebacks(tsCompOut, "")
+	if len(tsCompTraces) == 0 {
+		t.Fatalf("expected TypeScript compiler error trace extracted, got 0")
+	}
+	if !strings.Contains(tsCompTraces[0], "TS2322") {
+		t.Errorf("expected TS2322 in trace, got %q", tsCompTraces[0])
+	}
 }
 
 func TestCreateGitPRBranch_BypassesGlobalGPGSign(t *testing.T) {
