@@ -92,3 +92,27 @@ func (c *MetricCache) Record(key string, val int) {
 		t.Errorf("expected symbol MetricCache.Record from line 8, got %q", loc.Symbol)
 	}
 }
+func TestResolveTargetLocation_RustTrace(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcDir := filepath.Join(tmpDir, "src")
+	testsDir := filepath.Join(tmpDir, "tests")
+	_ = os.MkdirAll(srcDir, 0755)
+	_ = os.MkdirAll(testsDir, 0755)
+
+	_ = os.WriteFile(filepath.Join(srcDir, "calc.rs"), []byte("pub fn add() {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(testsDir, "integration_test.rs"), []byte("#[test]\nfn test_it() {}\n"), 0644)
+
+	// Compiler error trace
+	compTrace := "error[E0308]: mismatched types\n  --> src/calc.rs:14:5\n   |\n14 |     a - b\n"
+	locComp := ResolveTargetLocation(tmpDir, compTrace, nil)
+	if locComp.FilePath != "src/calc.rs" || locComp.LineNum != 14 {
+		t.Errorf("expected src/calc.rs:14 for Rust compiler trace, got %s:%d", locComp.FilePath, locComp.LineNum)
+	}
+
+	// Panic trace with test caller: must prioritize non-test src/calc.rs over tests/integration_test.rs
+	panicTrace := "thread 'main' panicked at tests/integration_test.rs:10:5:\nassertion failed\n   at src/calc.rs:25:9\n"
+	locPanic := ResolveTargetLocation(tmpDir, panicTrace, nil)
+	if locPanic.FilePath != "src/calc.rs" || locPanic.LineNum != 25 {
+		t.Errorf("expected non-test src/calc.rs:25 prioritized over test, got %s:%d", locPanic.FilePath, locPanic.LineNum)
+	}
+}
