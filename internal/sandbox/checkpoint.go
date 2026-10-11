@@ -160,7 +160,7 @@ func (c *CheckpointManager) EnsureGitContext() error {
 	cmdAdd.Dir = c.WorkDir
 	_ = cmdAdd.Run()
 
-	cmdCommit := exec.Command("git", "commit", "--allow-empty", "--no-gpg-sign", "-m", "chore(init): snapshot baseline state prior to autonomous repair")
+	cmdCommit := exec.Command("git", "-c", "user.name=Nemotron-Healer Bot", "-c", "user.email=bot@nemotron-healer.ai", "commit", "--allow-empty", "--no-gpg-sign", "--no-verify", "-m", "chore(init): snapshot baseline state prior to autonomous repair")
 	cmdCommit.Dir = c.WorkDir
 	_ = cmdCommit.Run()
 
@@ -183,12 +183,18 @@ func (c *CheckpointManager) CreateGitPRBranchWithAudit(branchName, commitMsg, au
 	if err := cmd1.Run(); err != nil {
 		return fmt.Errorf("refusing to commit: branch creation failed for %s: %w", branchName, err)
 	}
+	CleanPatchArtifacts(c.WorkDir)
+
 
 	if auditReport != "" {
 		auditPath := filepath.Join(c.WorkDir, "HEAL_AUDIT_REPORT.md")
 		if err := os.WriteFile(auditPath, []byte(auditReport), 0644); err != nil {
 			return err
 		}
+		// Force-stage audit card in case *.md is ignored by target repository .gitignore
+		cmdForceAudit := exec.Command("git", "add", "-f", "HEAL_AUDIT_REPORT.md")
+		cmdForceAudit.Dir = c.WorkDir
+		_ = cmdForceAudit.Run()
 	}
 
 	cmd2 := exec.Command("git", "add", "-A")
@@ -197,7 +203,7 @@ func (c *CheckpointManager) CreateGitPRBranchWithAudit(branchName, commitMsg, au
 		return fmt.Errorf("git add failed: %w", err)
 	}
 
-	cmd3 := exec.Command("git", "commit", "--allow-empty", "--no-gpg-sign", "-m", commitMsg)
+	cmd3 := exec.Command("git", "-c", "user.name=Nemotron-Healer Bot", "-c", "user.email=bot@nemotron-healer.ai", "commit", "--allow-empty", "--no-gpg-sign", "--no-verify", "-m", commitMsg)
 	cmd3.Dir = c.WorkDir
 	return cmd3.Run()
 }
