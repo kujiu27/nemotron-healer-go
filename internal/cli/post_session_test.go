@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,6 +92,46 @@ func TestHandlePostSession_GitHubOutput(t *testing.T) {
 		if !bytes.Contains(data, []byte(sub)) {
 			t.Errorf("expected GITHUB_OUTPUT to contain %q, got:\n%s", sub, content)
 		}
+	}
+}
+func TestHandlePostSession_GitHubOutput_WithSarif(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "github_output.txt")
+	t.Setenv("GITHUB_OUTPUT", outputFile)
+
+	sarifPath := filepath.Join(tmpDir, "test-output.sarif")
+	origSarif := sarifFlag
+	sarifFlag = sarifPath
+	defer func() { sarifFlag = origSarif }()
+
+	session := &engine.HealingSession{
+		SessionID:       "sarif-session-123",
+		IsResolved:      true,
+		DurationSeconds: 1.23,
+		CurrentTurn:     1,
+		MaxTurns:        3,
+		AppliedPatches:  []string{"--- a/code.go\n+++ b/code.go\n"},
+		PatchDigest:     "sha256:sarif123",
+		DefectArchetype: "SecurityDefect",
+	}
+
+	agent := &engine.Agent{
+		Nebius: &client.NebiusClient{Model: "nvidia/Nemotron-3-Ultra-550b-a55b"},
+	}
+
+	var humanBuf bytes.Buffer
+	err := handlePostSession(session, agent, tmpDir, "main", &humanBuf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(outputFile)
+	if err != nil {
+		t.Fatalf("failed to read GITHUB_OUTPUT: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, fmt.Sprintf("sarif_file=%s", sarifPath)) {
+		t.Errorf("expected GITHUB_OUTPUT to contain sarif_file=%s, got:\n%s", sarifPath, content)
 	}
 }
 
