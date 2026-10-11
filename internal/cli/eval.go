@@ -198,6 +198,10 @@ var evalCmd = &cobra.Command{
 			for idx, c := range cases {
 				fmt.Fprintf(human, "[%d/%d] Sandboxing & Evaluating %s (%s)...\n", idx+1, len(cases), c.ID, c.Name)
 
+				if ok, reason := checkCaseToolchain(c.Command); !ok {
+					fmt.Fprintf(human, "  ⏩ Skipping %s: %s\n", c.ID, reason)
+					continue
+				}
 				// Step 1: Create clean isolated temporary sandboxes (one per arm)
 				tmpDir, err := createIsolatedSandbox(c.Path)
 				if err != nil {
@@ -454,6 +458,27 @@ func createIsolatedSandbox(srcRelPath string) (string, error) {
 		}
 	}
 	return tmpDir, err
+}
+func checkCaseToolchain(testCmd string) (bool, string) {
+	lower := strings.ToLower(testCmd)
+	if strings.Contains(lower, "pytest") {
+		if strings.HasPrefix(testCmd, "python") {
+			parts := strings.Fields(testCmd)
+			if len(parts) >= 3 && parts[1] == "-m" && parts[2] == "pytest" {
+				pyBin := parts[0]
+				cmd := exec.Command(pyBin, "-m", "pytest", "--version")
+				if err := cmd.Run(); err != nil {
+					return false, fmt.Sprintf("pytest module not runnable via %s", pyBin)
+				}
+				return true, ""
+			}
+		}
+		cmd := exec.Command("pytest", "--version")
+		if err := cmd.Run(); err != nil {
+			return false, "pytest command not runnable in environment"
+		}
+	}
+	return true, ""
 }
 
 func copyFileDirect(src, dst string) error {
