@@ -95,7 +95,7 @@ jobs:
           enable_arena: 'false'
 
       - name: Assert action ran and failed honestly (no API key in CI)
-        if: steps.act.outcome != 'failure'
+        if: always() && steps.act.outcome != 'failure'
         run: |
           echo "Expected the healer to exit non-zero without API keys, got: ${{ steps.act.outcome }}"
           exit 1
