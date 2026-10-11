@@ -54,6 +54,28 @@ func TestBuildGroundingQuery(t *testing.T) {
 		t.Fatalf("expected Rust Option unwrap query, got: %s", q7)
 	}
 }
+func TestBuildGroundingQuery_FiltersHarnessTrailers(t *testing.T) {
+	// Go trace ending in exit status and FAIL package line
+	goTrace := "=== RUN   TestCalc\n    calc_test.go:20: unexpected zero result\n--- FAIL: TestCalc (0.00s)\nFAIL\nexit status 1\nFAIL\tgithub.com/example/calc\t0.012s"
+	arch := ArchetypeAnalysis{Archetype: ArchetypeGeneralAssertion}
+	qGo := BuildGroundingQuery(".", "calc.go", arch, goTrace)
+	if strings.Contains(qGo, "exit status") || strings.Contains(qGo, "FAIL\t") {
+		t.Errorf("grounding query leaked harness trailer lines: %q", qGo)
+	}
+	if !strings.Contains(qGo, "unexpected zero result") {
+		t.Errorf("expected grounding query to extract decisive assertion line, got: %q", qGo)
+	}
+
+	// Python trace ending in pytest summary footer
+	pyTrace := "def test_fail():\n>       assert 1 == 2\nE       AssertionError\n\ntest_f.py:2: AssertionError\n================ 1 failed in 0.05s ================"
+	qPy := BuildGroundingQuery(".", "app.py", arch, pyTrace)
+	if strings.Contains(qPy, "1 failed in") || strings.Contains(qPy, "====") {
+		t.Errorf("grounding query leaked pytest footer: %q", qPy)
+	}
+	if !strings.Contains(qPy, "AssertionError") {
+		t.Errorf("expected grounding query to extract AssertionError, got: %q", qPy)
+	}
+}
 
 func TestResolveGroundingDomains(t *testing.T) {
 	goDomains := ResolveGroundingDomains("pkg/service.go")
