@@ -142,3 +142,46 @@ func TestExportSarif_SpecialCharArchetypeSanitization(t *testing.T) {
 		t.Errorf("expected level error for unresolved session, got %s", report.Runs[0].Results[0].Level)
 	}
 }
+
+func TestExportSarif_BlastAffectedLocations(t *testing.T) {
+	tmpDir := t.TempDir()
+	sarifPath := filepath.Join(tmpDir, "report_blast.sarif")
+
+	session := &engine.HealingSession{
+		SessionID:          "blast-test",
+		IsResolved:         true,
+		DurationSeconds:    1.0,
+		TargetFile:         "pkg/engine.go",
+		TargetLine:         42,
+		BlastAffectedFiles: []string{"pkg/engine.go", "pkg/caller.go", "cmd/main.go"},
+	}
+
+	err := ExportSarif(session, sarifPath)
+	if err != nil {
+		t.Fatalf("ExportSarif failed: %v", err)
+	}
+
+	data, err := os.ReadFile(sarifPath)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+
+	var report SarifReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+
+	res := report.Runs[0].Results[0]
+	if len(res.Locations) != 3 {
+		t.Fatalf("expected 3 locations (primary target + 2 affected files), got %d", len(res.Locations))
+	}
+	if res.Locations[0].PhysicalLocation.ArtifactLocation.URI != "pkg/engine.go" {
+		t.Errorf("expected primary location pkg/engine.go, got %s", res.Locations[0].PhysicalLocation.ArtifactLocation.URI)
+	}
+	if res.Locations[1].PhysicalLocation.ArtifactLocation.URI != "pkg/caller.go" {
+		t.Errorf("expected secondary location pkg/caller.go, got %s", res.Locations[1].PhysicalLocation.ArtifactLocation.URI)
+	}
+	if res.Locations[2].PhysicalLocation.ArtifactLocation.URI != "cmd/main.go" {
+		t.Errorf("expected secondary location cmd/main.go, got %s", res.Locations[2].PhysicalLocation.ArtifactLocation.URI)
+	}
+}

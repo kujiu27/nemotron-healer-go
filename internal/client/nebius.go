@@ -315,7 +315,7 @@ func (c *NebiusClient) StreamCompletionWithTemp(ctx context.Context, messages []
 }
 
 // DiagnoseAndPatch asks Nemotron to analyze the failure and output a surgical unified diff.
-func (c *NebiusClient) DiagnoseAndPatch(ctx context.Context, testCmd, stdout, stderr, codeContext, docsContext, archetypeContext string, failedHistory []string, onToken func(string)) (*PatchSuggestion, int, int, error) {
+func (c *NebiusClient) DiagnoseAndPatch(ctx context.Context, testCmd, stdout, stderr, codeContext, docsContext, archetypeContext, blastRadiusContext string, failedHistory []string, onToken func(string)) (*PatchSuggestion, int, int, error) {
 	var failureFeedback string
 	if len(failedHistory) > 0 {
 		var fb strings.Builder
@@ -326,6 +326,11 @@ func (c *NebiusClient) DiagnoseAndPatch(ctx context.Context, testCmd, stdout, st
 		}
 		fb.WriteString("INSTRUCTION: Analyze why the previous attempts failed. Formulate a fundamentally different, sound architectural repair.\n")
 		failureFeedback = fb.String()
+	}
+
+	blastSection := ""
+	if blastRadiusContext != "" {
+		blastSection = fmt.Sprintf("\n[AST SYMBOL BLAST RADIUS & CALLER CONSTRAINTS]\n%s\n", blastRadiusContext)
 	}
 
 	prompt := fmt.Sprintf(`You are an autonomous senior Principal Engineer on Nebius Token Factory.
@@ -339,7 +344,7 @@ Fix the broken codebase by generating a surgical Unified Diff patch.
 
 [DETERMINISTIC DEFECT CLASSIFICATION & CONSTRAINTS (ARCHETYPE RULE ENGINE)]
 %s
-%s
+%s%s
 [SOURCE CODE CONTEXT]
 %s
 
@@ -349,11 +354,12 @@ Fix the broken codebase by generating a surgical Unified Diff patch.
 INSTRUCTIONS:
 1. Provide a concise root cause analysis matching the defect archetype.
 2. Output the exact relative target file path in [TARGET_FILE]path/to/file[/TARGET_FILE]. If modifying multiple files, output multiple [TARGET_FILE]path[/TARGET_FILE] tags or specify them directly in the multi-file unified diff headers.
-3. Output the exact, valid atomic unified diff patch in a `+"```diff"+` block starting with:
+3. Preserve backward compatibility and interface contracts for all identified callers and downstream dependents in the AST blast radius. Do not modify function signatures or return types unexpectedly.
+4. Output the exact, valid atomic unified diff patch in a `+"```diff"+` block starting with:
 --- a/path/to/file
 +++ b/path/to/file
 @@ ... @@
-Do NOT omit the unified diff block.`, testCmd, stderr+"\n"+stdout, archetypeContext, failureFeedback, codeContext, docsContext)
+Do NOT omit the unified diff block.`, testCmd, stderr+"\n"+stdout, archetypeContext, failureFeedback, blastSection, codeContext, docsContext)
 
 	messages := []ChatMessage{
 		{Role: "system", Content: "You are an autonomous software repair agent. You generate precise unified diff patches that compile and pass tests."},

@@ -46,10 +46,14 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 	a.Session.TargetLine = loc.LineNum
 	a.Session.TargetSymbol = loc.Symbol
 	targetSym := loc.Symbol
-	codeCtx := a.collectSourceContext(targetHint)
 	blastReport := a.CodeGraph.AnalyzeBlastRadius(targetHint, targetSym)
+	a.Session.BlastRiskScore = blastReport.RiskScore
+	a.Session.BlastAffectedFiles = blastReport.AffectedFiles
+	priorityFiles := append([]string{targetHint}, blastReport.AffectedFiles...)
+	codeCtx := a.collectSourceContext(priorityFiles...)
 	archetype := ClassifyDefect(initialFailingOutput, codeCtx)
 	a.Session.DefectArchetype = string(archetype.Archetype)
+	blastCtx := blastReport.FormatPromptContext()
 
 	docsCtx := ""
 	if !a.DisableGrounding {
@@ -144,7 +148,7 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 				sem <- struct{}{}
 				defer func() { <-sem }()
 
-				promptMessages := buildHypothesisPrompt(h.Name, h.Guidance, targetHint, archetype.Archetype, initialFailingOutput, codeCtx, docsCtx)
+				promptMessages := buildHypothesisPrompt(h.Name, h.Guidance, targetHint, archetype.Archetype, blastCtx, initialFailingOutput, codeCtx, docsCtx)
 
 				rawResp, pTok, cTok, err := a.Nebius.StreamCompletion(ctx, promptMessages, nil)
 				mu.Lock()
@@ -423,7 +427,7 @@ func (a *Agent) RunMCTSSearch(ctx context.Context, initialFailingOutput string, 
 		}
 
 		// Prompt Nemotron 3 Ultra with specific hypothesis guidance
-		promptMessages := buildHypothesisPrompt(hyp.Name, hyp.Guidance, targetHint, archetype.Archetype, initialFailingOutput, codeCtx, docsCtx)
+		promptMessages := buildHypothesisPrompt(hyp.Name, hyp.Guidance, targetHint, archetype.Archetype, blastCtx, initialFailingOutput, codeCtx, docsCtx)
 
 		rawResp, pTok, cTok, err := a.Nebius.StreamCompletion(ctx, promptMessages, a.OnStreamToken)
 		if err != nil && isAuthError(err) {
@@ -664,7 +668,11 @@ func extractThoughtChain(rawResp string) string {
 
 // buildHypothesisPrompt is shared by the parallel-worktree and sequential DHS
 // paths (previously two verbatim copies).
-func buildHypothesisPrompt(hypothesisName, hypothesisGuidance, targetHint string, archetypeName DefectArchetype, failingOutput, codeCtx, docsCtx string) []client.ChatMessage {
+func buildHypothesisPrompt(hypothesisName, hypothesisGuidance, targetHint string, archetypeName DefectArchetype, blastCtx, failingOutput, codeCtx, docsCtx string) []client.ChatMessage {
+	blastBlock := ""
+	if blastCtx != "" {
+		blastBlock = fmt.Sprintf("\n[AST SYMBOL BLAST RADIUS & CALLER CONSTRAINTS]\n%s\n", blastCtx)
+	}
 	return []client.ChatMessage{
 		{Role: "system", Content: "You are an autonomous code synthesis engine exploring a specific hypothesis branch. Output exact, surgical unified diff patches."},
 		{
@@ -677,7 +685,7 @@ func buildHypothesisPrompt(hypothesisName, hypothesisGuidance, targetHint string
 
 [DEFECT ARCHETYPE]
 %s
-
+%s
 [FAILING TRACE]
 %s
 
@@ -689,8 +697,9 @@ func buildHypothesisPrompt(hypothesisName, hypothesisGuidance, targetHint string
 
 INSTRUCTIONS:
 1. Generate an exact unified diff patch implementing THIS hypothesis inside a `+"```diff"+` block starting with --- a/%s and +++ b/%s.
-2. Specify [TARGET_FILE]%s[/TARGET_FILE].`,
-				hypothesisName, hypothesisGuidance, targetHint, string(archetypeName), failingOutput, codeCtx, docsCtx, targetHint, targetHint, targetHint),
+2. Specify [TARGET_FILE]%s[/TARGET_FILE].
+3. Preserve backward compatibility and interface invariants for all callers in the AST blast radius.`,
+				hypothesisName, hypothesisGuidance, targetHint, string(archetypeName), blastBlock, failingOutput, codeCtx, docsCtx, targetHint, targetHint, targetHint),
 		},
 	}
 }

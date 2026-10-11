@@ -519,6 +519,37 @@ func (g *CodeGraph) AnalyzeBlastRadius(targetFile string, targetSymbolHint ...st
 	}
 }
 
+// FormatPromptContext formats the blast radius and dependent callers into a structured constraint block for LLM synthesis prompts.
+func (r *BlastRadiusReport) FormatPromptContext() string {
+	if r == nil {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("- Target Symbol: `%s` in `%s`\n", r.ModifiedSymbol, r.SourceFile))
+	riskLevel := "LOW"
+	if r.RiskScore >= 0.7 {
+		riskLevel = "HIGH"
+	} else if r.RiskScore >= 0.3 {
+		riskLevel = "MEDIUM"
+	}
+	sb.WriteString(fmt.Sprintf("- Blast Risk Level: %s (Risk Score: %.2f / 1.00)\n", riskLevel, r.RiskScore))
+	if len(r.AffectedFiles) > 1 {
+		sb.WriteString(fmt.Sprintf("- Affected Files: %s\n", strings.Join(r.AffectedFiles, ", ")))
+	}
+	if len(r.DirectDependents) > 0 {
+		directDisplay := r.DirectDependents
+		if len(directDisplay) > 5 {
+			directDisplay = append(directDisplay[:5], fmt.Sprintf("... (+%d more)", len(r.DirectDependents)-5))
+		}
+		sb.WriteString(fmt.Sprintf("- Direct Callers / Dependents: %s\n", strings.Join(directDisplay, ", ")))
+	}
+	if len(r.TransitiveDependents) > 0 {
+		sb.WriteString(fmt.Sprintf("- Total Downstream Impact: %d transitive callers across repository\n", len(r.TransitiveDependents)))
+	}
+	sb.WriteString("- Interface Invariant: Your patch MUST maintain backward compatibility with all callers above. Do NOT alter exported function signatures, parameter counts/types, or return types unless all call-sites are atomically updated.")
+	return sb.String()
+}
+
 // FindSymbolAtLine locates the most specific symbol in relFilePath enclosing lineNum.
 func (g *CodeGraph) FindSymbolAtLine(relFilePath string, lineNum int) string {
 	if g == nil || lineNum <= 0 {

@@ -158,23 +158,34 @@ func (a *Agent) collectSourceContext(priorityFiles ...string) string {
 	}
 
 	_ = filepath.Walk(a.WorkDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || totalBytes >= maxTotalBytes {
+		if err != nil || totalBytes >= maxTotalBytes {
 			return nil
 		}
 		rel, _ := filepath.Rel(a.WorkDir, path)
-		slashRel := filepath.ToSlash(rel)
-		lower := strings.ToLower(slashRel)
-		if strings.HasPrefix(slashRel, ".") ||
-			strings.Contains(lower, "venv") ||
-			strings.Contains(lower, "node_modules") ||
-			strings.Contains(lower, "__pycache__") ||
-			strings.Contains(lower, "dist/") ||
-			strings.Contains(lower, "bin/") ||
-			strings.Contains(lower, ".git") {
+		if rel == "." {
 			return nil
 		}
-		ext := filepath.Ext(path)
-		if ext == ".py" || ext == ".go" || ext == ".ts" || ext == ".js" || ext == ".toml" || ext == ".json" || ext == ".sql" {
+		slashRel := filepath.ToSlash(rel)
+		lower := strings.ToLower(slashRel)
+		if (strings.HasPrefix(slashRel, ".") && slashRel != ".") || strings.Contains(slashRel, "/.") ||
+			strings.Contains(lower, "venv") || strings.Contains(lower, "node_modules") ||
+			strings.Contains(lower, "__pycache__") ||
+			strings.HasPrefix(lower, "target/") || lower == "target" || strings.Contains(lower, "/target/") ||
+			strings.HasPrefix(lower, "dist/") || lower == "dist" || strings.Contains(lower, "/dist/") ||
+			strings.HasPrefix(lower, "build/") || lower == "build" || strings.Contains(lower, "/build/") ||
+			strings.HasPrefix(lower, "bin/") || lower == "bin" || strings.Contains(lower, "/bin/") ||
+			strings.Contains(lower, ".git") {
+			if info != nil && info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if info != nil && info.IsDir() {
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(path))
+		switch ext {
+		case ".py", ".go", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".rs", ".toml", ".json", ".sql", ".yaml", ".yml":
 			appendFile(rel)
 		}
 		return nil
@@ -284,12 +295,18 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		a.Session.TargetFile = loc.FilePath
 		a.Session.TargetLine = loc.LineNum
 		a.Session.TargetSymbol = loc.Symbol
-		codeCtx := a.collectSourceContext(targetHint)
 		blastReport := a.CodeGraph.AnalyzeBlastRadius(targetHint, loc.Symbol)
+		a.Session.BlastRiskScore = blastReport.RiskScore
+		a.Session.BlastAffectedFiles = blastReport.AffectedFiles
 		a.notify(StateDiagnosing, fmt.Sprintf("Computed AST Blast Radius for `%s` (file: `%s`): %d affected files, %d callers (Risk Score: %.2f)",
 			blastReport.ModifiedSymbol, targetHint, len(blastReport.AffectedFiles), len(blastReport.TransitiveDependents), blastReport.RiskScore), map[string]interface{}{
 			"blast_report": blastReport,
 		})
+
+		// Prioritize targetHint followed by all affected files from AST blast radius
+		priorityFiles := append([]string{targetHint}, blastReport.AffectedFiles...)
+		codeCtx := a.collectSourceContext(priorityFiles...)
+		blastRadiusContext := blastReport.FormatPromptContext()
 
 		// 3. Deterministic Defect Archetype Classification (Rule Engine)
 		archetype := ClassifyDefect(a.Session.LastError, codeCtx)
@@ -376,7 +393,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 
 		// 5. Synthesizing Patch via Nemotron 3 Ultra
 		a.notify(StateSynthesizingPatch, fmt.Sprintf("Synthesizing Unified Diff patch with NVIDIA Nemotron (%s)...", a.Nebius.Model), nil)
-		patchSug, pTokens, cTokens, err := a.Nebius.DiagnoseAndPatch(ctx, a.TestCommand, initRes.Stdout, a.Session.LastError, codeCtx, docsCtx, archetypeContext, failedHistory, a.OnStreamToken)
+		patchSug, pTokens, cTokens, err := a.Nebius.DiagnoseAndPatch(ctx, a.TestCommand, initRes.Stdout, a.Session.LastError, codeCtx, docsCtx, archetypeContext, blastRadiusContext, failedHistory, a.OnStreamToken)
 		// Ledger telemetry
 		a.addTokens(pTokens, cTokens)
 		ttft, tps, _ := a.Nebius.Telemetry()

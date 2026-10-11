@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -125,4 +126,44 @@ func TestNebiusClient_TelemetryConcurrency(t *testing.T) {
 
 	<-done
 	<-done
+}
+
+func TestDiagnoseAndPatch_IncludesBlastRadiusConstraints(t *testing.T) {
+	var capturedPrompt string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		for _, m := range req.Messages {
+			if m.Role == "user" {
+				capturedPrompt = m.Content
+			}
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"```diff\\n--- a/file.go\\n+++ b/file.go\\n@@ -1 +1 @@\\n-old\\n+new\\n```\"}}]}\n\ndata: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	client := &NebiusClient{
+		BaseURL: server.URL,
+		Model:   "nvidia/Nemotron-3-Ultra-550b-a55b",
+		HTTP:    server.Client(),
+	}
+
+	blastCtx := "- Target Symbol: `file.go::Foo`\n- Blast Risk Level: HIGH (Risk Score: 0.85 / 1.00)\n- Direct Callers: main.go::Run"
+	sug, _, _, err := client.DiagnoseAndPatch(context.Background(), "go test .", "out", "err", "ctx", "docs", "arch", blastCtx, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sug == nil || sug.DiffPatch == "" {
+		t.Fatalf("expected patch suggestion")
+	}
+	if !strings.Contains(capturedPrompt, "[AST SYMBOL BLAST RADIUS & CALLER CONSTRAINTS]") {
+		t.Errorf("expected prompt to contain blast radius header, got:\n%s", capturedPrompt)
+	}
+	if !strings.Contains(capturedPrompt, "file.go::Foo") {
+		t.Errorf("expected prompt to contain target symbol, got:\n%s", capturedPrompt)
+	}
+	if !strings.Contains(capturedPrompt, "main.go::Run") {
+		t.Errorf("expected prompt to contain caller, got:\n%s", capturedPrompt)
+	}
 }
