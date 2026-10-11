@@ -18,10 +18,11 @@ type TargetLocation struct {
 }
 
 var (
-	pyTraceRegex = regexp.MustCompile(`File\s+"([^"]+)",\s+line\s+(\d+)(?:,\s+in\s+([a-zA-Z0-9_]+))?`)
-	pyShortRegex = regexp.MustCompile(`([a-zA-Z0-9_\-./\\]+\.py):(\d+)(?::\s*(?:in\s+([a-zA-Z0-9_]+))?)?`)
-	goTraceRegex = regexp.MustCompile(`([a-zA-Z0-9_\-./\\]+\.go):(\d+):`)
-	tsTraceRegex = regexp.MustCompile(`(?:at\s+(?:async\s+)?([a-zA-Z0-9_.]+)\s+\()?([a-zA-Z0-9_\-./\\]+\.(?:ts|js|tsx|jsx)):(\d+):(\d+)\)?`)
+	pyTraceRegex   = regexp.MustCompile(`File\s+"([^"]+)",\s+line\s+(\d+)(?:,\s+in\s+([a-zA-Z0-9_]+))?`)
+	pyShortRegex   = regexp.MustCompile(`([a-zA-Z0-9_\-./\\]+\.py):(\d+)(?::\s*(?:in\s+([a-zA-Z0-9_]+))?)?`)
+	goTraceRegex   = regexp.MustCompile(`([a-zA-Z0-9_\-./\\]+\.go):(\d+):`)
+	tsTraceRegex   = regexp.MustCompile(`(?:at\s+(?:async\s+)?([a-zA-Z0-9_.]+)\s+\()?([a-zA-Z0-9_\-./\\]+\.(?:ts|js|tsx|jsx)):(\d+):(\d+)\)?`)
+	rustTraceRegex = regexp.MustCompile(`([a-zA-Z0-9_\-./\\]+\.rs):(\d+)(?::(\d+))?`)
 )
 
 func isTestFile(path string) bool {
@@ -30,6 +31,7 @@ func isTestFile(path string) bool {
 	return strings.HasPrefix(base, "test_") ||
 		strings.HasSuffix(base, "_test.py") ||
 		strings.HasSuffix(base, "_test.go") ||
+		strings.HasSuffix(base, "_test.rs") ||
 		strings.HasSuffix(base, ".test.ts") ||
 		strings.HasSuffix(base, ".test.js") ||
 		strings.HasSuffix(base, ".spec.ts") ||
@@ -112,6 +114,14 @@ func ResolveTargetLocation(workDir string, errorTrace string, graph *ast.CodeGra
 		if existsInWorkDir(rel) {
 			line, _ := strconv.Atoi(m[3])
 			candidates = append(candidates, TargetLocation{FilePath: rel, LineNum: line, Symbol: m[1]})
+		}
+	}
+	// 5. Rust trace regex (compiler error `--> src/calc.rs:14:5` or panic `panicked at src/lib.rs:42:10`)
+	for _, m := range rustTraceRegex.FindAllStringSubmatch(errorTrace, -1) {
+		rel := normalizeRel(m[1])
+		if existsInWorkDir(rel) {
+			line, _ := strconv.Atoi(m[2])
+			candidates = append(candidates, TargetLocation{FilePath: rel, LineNum: line})
 		}
 	}
 
