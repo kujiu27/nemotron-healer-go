@@ -212,7 +212,16 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 	a.notify(StateReproducing, fmt.Sprintf("Executing reproduction command: `%s`", a.TestCommand), nil)
 	initRes, err := a.Runner.Run(a.TestCommand)
 	if err != nil {
-		return nil, err
+		a.Session.IsResolved = false
+		a.Session.DurationSeconds = time.Since(startTime).Seconds()
+		a.Session.LastError = fmt.Sprintf("Reproduction command execution error: %v", err)
+		a.notify(StateFailed, a.Session.LastError, map[string]interface{}{
+			"error": err.Error(),
+		})
+		failReport := a.renderFailureAuditReport()
+		a.Session.AuditReport = failReport
+		a.writeStepSummary(failReport)
+		return a.Session, fmt.Errorf("reproduction command failed to execute: %w", err)
 	}
 
 	if initRes.IsSuccess {
