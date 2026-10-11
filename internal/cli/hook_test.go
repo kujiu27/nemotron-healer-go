@@ -64,6 +64,35 @@ func TestGitHookAutoHealFlag(t *testing.T) {
 	}
 }
 
+func TestGitHookCustomCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	gitDir := filepath.Join(tmpDir, ".git")
+	_ = os.MkdirAll(gitDir, 0755)
+
+	hookPath, err := InstallGitHookWithCmd(tmpDir, false, "pytest -m unit")
+	if err != nil {
+		t.Fatalf("InstallGitHookWithCmd failed: %v", err)
+	}
+
+	content, err := os.ReadFile(hookPath)
+	if err != nil {
+		t.Fatalf("failed reading hook file: %v", err)
+	}
+	if !strings.Contains(string(content), `nemotron-healer hook run . -c "pytest -m unit"`) {
+		t.Errorf("expected embedded custom command in hook script, got:\n%s", string(content))
+	}
+
+	// Test auto-heal combined with custom command
+	hookPath2, err := InstallGitHookWithCmd(tmpDir, true, "make test")
+	if err != nil {
+		t.Fatalf("InstallGitHookWithCmd combined failed: %v", err)
+	}
+	content2, _ := os.ReadFile(hookPath2)
+	if !strings.Contains(string(content2), `nemotron-healer hook run . -c "make test" --auto-heal`) {
+		t.Errorf("expected embedded command + auto-heal in hook script, got:\n%s", string(content2))
+	}
+}
+
 func TestGitHookInWorktree(t *testing.T) {
 	tmpDir := t.TempDir()
 

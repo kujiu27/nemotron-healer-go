@@ -37,7 +37,7 @@ var hookInstallCmd = &cobra.Command{
 			return err
 		}
 
-		hookPath, err := InstallGitHook(absDir, autoHealFlag)
+		hookPath, err := InstallGitHookWithCmd(absDir, autoHealFlag, testCmdFlag)
 		if err != nil {
 			return err
 		}
@@ -113,20 +113,26 @@ var hookRunCmd = &cobra.Command{
 			return err
 		}
 
-		testCmd, eco, err := engine.DetectTestCommand(absDir)
-		if err != nil {
-			if jsonFlag {
-				payload := map[string]interface{}{
-					"status":  "skipped",
-					"reason":  "no test command detected",
-					"success": true,
+		testCmd := testCmdFlag
+		eco := "Custom Test Command"
+		if testCmd == "" {
+			detectedCmd, detectedEco, err := engine.DetectTestCommand(absDir)
+			if err != nil {
+				if jsonFlag {
+					payload := map[string]interface{}{
+						"status":  "skipped",
+						"reason":  "no test command detected",
+						"success": true,
+					}
+					data, _ := json.MarshalIndent(payload, "", "  ")
+					fmt.Println(string(data))
+					return nil
 				}
-				data, _ := json.MarshalIndent(payload, "", "  ")
-				fmt.Println(string(data))
+				fmt.Printf("⚠️ No test command detected in %s; skipping pre-push check.\n", absDir)
 				return nil
 			}
-			fmt.Printf("⚠️ No test command detected in %s; skipping pre-push check.\n", absDir)
-			return nil
+			testCmd = detectedCmd
+			eco = detectedEco
 		}
 
 		humanOut := os.Stdout
@@ -246,8 +252,14 @@ func resolveGitHooksDir(repoDir string) (string, error) {
 	return "", fmt.Errorf("not a git repository (missing .git in %s)", repoDir)
 }
 
-// InstallGitHook creates the executable pre-push hook in the repository's hooks directory
+// InstallGitHook creates the executable pre-push hook in the repository's hooks directory.
 func InstallGitHook(repoDir string, autoHeal ...bool) (string, error) {
+	ah := len(autoHeal) > 0 && autoHeal[0]
+	return InstallGitHookWithCmd(repoDir, ah, "")
+}
+
+// InstallGitHookWithCmd creates the executable pre-push hook, optionally embedding custom test command and auto-heal.
+func InstallGitHookWithCmd(repoDir string, autoHeal bool, customCmd string) (string, error) {
 	hooksDir, err := resolveGitHooksDir(repoDir)
 	if err != nil {
 		return "", err
@@ -266,8 +278,11 @@ func InstallGitHook(repoDir string, autoHeal ...bool) (string, error) {
 		}
 	}
 	runCmd := "nemotron-healer hook run ."
-	if len(autoHeal) > 0 && autoHeal[0] {
-		runCmd = "nemotron-healer hook run . --auto-heal"
+	if strings.TrimSpace(customCmd) != "" {
+		runCmd = fmt.Sprintf("nemotron-healer hook run . -c %q", strings.TrimSpace(customCmd))
+	}
+	if autoHeal {
+		runCmd += " --auto-heal"
 	}
 	content := fmt.Sprintf(prePushScriptTemplate, runCmd)
 	if err := os.WriteFile(prePushPath, []byte(content), 0755); err != nil {
