@@ -106,28 +106,28 @@ runs:
         NH_MOCK: ${{ inputs.enable_mock }}
         NH_SARIF: ${{ inputs.sarif }}
       run: |
-        EXTRA_FLAGS=""
+        EXTRA_FLAGS=()
         if [[ "$NH_ARENA" == "true" ]]; then
-          EXTRA_FLAGS="$EXTRA_FLAGS --arena"
+          EXTRA_FLAGS+=(--arena)
         fi
         if [[ "$NH_SEARCH" == "true" ]]; then
-          EXTRA_FLAGS="$EXTRA_FLAGS --search"
+          EXTRA_FLAGS+=(--search)
         fi
         if [[ "$NH_MOCK" == "true" ]]; then
-          EXTRA_FLAGS="$EXTRA_FLAGS --mock"
+          EXTRA_FLAGS+=(--mock)
         fi
         if [[ -n "$NH_SARIF" ]]; then
-          EXTRA_FLAGS="$EXTRA_FLAGS --sarif $NH_SARIF"
+          EXTRA_FLAGS+=(--sarif "$NH_SARIF")
         fi
-        CMD_FLAGS=""
+        CMD_FLAGS=()
         if [[ -n "$NH_COMMAND" ]]; then
-          CMD_FLAGS="--command $NH_COMMAND"
+          CMD_FLAGS=(--command "$NH_COMMAND")
         fi
         HEALER_BIN="nemotron-healer"
         if [ -n "${BIN_DIR:-}" ] && [ -x "$BIN_DIR/nemotron-healer" ]; then
           HEALER_BIN="$BIN_DIR/nemotron-healer"
         fi
-        "$HEALER_BIN" "$NH_PATH" $CMD_FLAGS --turns "$NH_TURNS" $EXTRA_FLAGS --no-tui
+        "$HEALER_BIN" "$NH_PATH" "${CMD_FLAGS[@]}" --turns "$NH_TURNS" "${EXTRA_FLAGS[@]}" --no-tui
 
     - name: Publish PR Audit Report Comment
       if: always() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
