@@ -394,10 +394,10 @@ def reply_for(req):
     sys = " ".join(m.get("content", "") for m in msgs if m.get("role") == "system")
     user = " ".join(m.get("content", "") for m in msgs if m.get("role") == "user")
     all_content = sys + " " + user
-    lower = all_content.lower()
+    sys_lower = sys.lower()
 
-    is_triage = "triage" in lower or "error_line" in user or "4-word" in user
-    is_adv = "adversarial" in lower or "red-teamer" in sys or "stress" in lower
+    is_triage = "triage" in sys_lower or "error_line" in user or "4-word" in user
+    is_adv = "adversarial" in sys_lower or "red-team" in sys_lower
 
     matched = "ahb08"
     if "diffmatchpatch" in all_content or "difflinestostrings" in all_content or "linehash" in all_content:
