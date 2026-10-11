@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/kujiu27/nemotron-healer-go/internal/ast"
 )
 
 func TestResolveTargetLocation(t *testing.T) {
@@ -57,5 +59,36 @@ func TestResolveTargetLocation_EcosystemFallback(t *testing.T) {
 	nodeLoc := ResolveTargetLocation(nodeDir, "syntax error", nil)
 	if nodeLoc.FilePath != "index.ts" {
 		t.Errorf("expected index.ts for Node project, got %s", nodeLoc.FilePath)
+	}
+}
+
+func TestResolveTargetLocation_GoLineToSymbol(t *testing.T) {
+	tmpDir := t.TempDir()
+	goCode := `package cache
+
+func Initialize() {
+}
+
+func (c *MetricCache) Record(key string, val int) {
+	// line 8
+	_ = key
+}
+`
+	_ = os.WriteFile(filepath.Join(tmpDir, "cache.go"), []byte(goCode), 0644)
+
+	graph := ast.NewCodeGraph(tmpDir)
+	_ = graph.BuildGraph()
+
+	trace := "cache.go:8: data race detected\ncache_test.go:12: test failed"
+	loc := ResolveTargetLocation(tmpDir, trace, graph)
+
+	if loc.FilePath != "cache.go" {
+		t.Errorf("expected cache.go, got %s", loc.FilePath)
+	}
+	if loc.LineNum != 8 {
+		t.Errorf("expected line 8, got %d", loc.LineNum)
+	}
+	if loc.Symbol != "MetricCache.Record" {
+		t.Errorf("expected symbol MetricCache.Record from line 8, got %q", loc.Symbol)
 	}
 }

@@ -504,3 +504,33 @@ func (g *CodeGraph) AnalyzeBlastRadius(targetFile string, targetSymbolHint ...st
 		RiskScore:            math.Round(score*100) / 100,
 	}
 }
+
+// FindSymbolAtLine locates the most specific symbol in relFilePath enclosing lineNum.
+func (g *CodeGraph) FindSymbolAtLine(relFilePath string, lineNum int) string {
+	if g == nil || lineNum <= 0 {
+		return ""
+	}
+	syms, ok := g.FileSymbols[relFilePath]
+	if !ok || len(syms) == 0 {
+		return ""
+	}
+	best := ""
+	smallestSpan := int(^uint(0) >> 1)
+	for _, symKey := range syms {
+		node, exists := g.Symbols[symKey]
+		if !exists {
+			continue
+		}
+		if node.LineStart <= lineNum && (node.LineEnd >= lineNum || node.LineEnd == 0) {
+			span := node.LineEnd - node.LineStart
+			if node.LineEnd == 0 {
+				span = 1000000
+			}
+			if span < smallestSpan {
+				smallestSpan = span
+				best = node.Name
+			}
+		}
+	}
+	return best
+}
