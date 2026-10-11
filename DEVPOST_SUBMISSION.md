@@ -117,7 +117,7 @@ export TAVILY_API_KEY=...   # tavily.com
 nemotron-healer . --command "pytest" --no-tui
 ```
 
-Or as a one-line GitHub Action (`uses: kujiu27/nemotron-healer-go@v0.7.99`) — see README.
+Or as a one-line GitHub Action (`uses: kujiu27/nemotron-healer-go@v0.7.100`) — see README.
 
 ## Video
 
