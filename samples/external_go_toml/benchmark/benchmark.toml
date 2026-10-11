@@ -1,0 +1,16 @@
+# Minimal benchmark document fixture to satisfy TestUnmarshalRichDocIntoNamedKeyMap.
+title = "benchmark sample document"
+
+[owner]
+name = "benchmark runner"
+active = true
+rate = 1.25
+
+[servers]
+[servers.alpha]
+ip = "10.0.0.1"
+role = "frontend"
+
+[servers.beta]
+ip = "10.0.0.2"
+role = "backend"

@@ -323,7 +323,7 @@ func (a *Agent) Run(ctx context.Context) (*HealingSession, error) {
 		// 3.5 Pre-flight Triage via Tier-1 FastModel (Heterogeneous Dual-Model Architecture)
 		modelQuery := ""
 		if a.Nebius.FastModel != "" && !a.DisableGrounding {
-			triage, ftP, ftC, ftErr := a.Nebius.FastTriage(ctx, a.Session.LastError)
+			triage, ftP, ftC, ftErr := a.Nebius.FastTriage(ctx, a.Session.LastError, fmt.Sprintf("target_file: %s", targetHint), fmt.Sprintf("test_command: %s", a.TestCommand))
 			if ftErr == nil && triage != nil {
 				a.addFastTokens(ftP, ftC)
 				if triage.HypothesizedRootCause != "" {
