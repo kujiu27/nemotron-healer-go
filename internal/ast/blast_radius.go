@@ -414,8 +414,22 @@ func (g *CodeGraph) resolveSymbol(calledName, currentFile string) string {
 	if _, ok := g.Symbols[sameFileKey]; ok {
 		return sameFileKey
 	}
+	// Check same file methods/types (e.g. currentFile::UserAccount.get_balance matches get_balance)
+	for _, key := range g.FileSymbols[currentFile] {
+		sym := g.Symbols[key]
+		if sym != nil && (sym.Name == calledName || strings.HasSuffix(sym.Name, "."+calledName)) {
+			return key
+		}
+	}
+	// Check global exact matches
 	for key, sym := range g.Symbols {
 		if sym.Name == calledName {
+			return key
+		}
+	}
+	// Check global method/type suffix matches (e.g. otherFile::MetricCache.Record matches Record)
+	for key, sym := range g.Symbols {
+		if strings.HasSuffix(sym.Name, "."+calledName) {
 			return key
 		}
 	}
@@ -436,7 +450,7 @@ func (g *CodeGraph) AnalyzeBlastRadius(targetFile string, targetSymbolHint ...st
 		expectedKey := targetFile + "::" + hint
 		found := false
 		for _, sym := range symbolsInFile {
-			if sym == expectedKey || strings.HasSuffix(sym, "::"+hint) {
+			if sym == expectedKey || strings.HasSuffix(sym, "::"+hint) || strings.HasSuffix(sym, "."+hint) {
 				targetSym = sym
 				found = true
 				break
