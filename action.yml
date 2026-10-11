@@ -1,6 +1,9 @@
 name: "Nemotron-Healer Autonomous Self-Healing CI"
 description: "Zero-dependency autonomous code self-healing action powered by NVIDIA Nemotron on Nebius Token Factory & Tavily Search"
 author: "kujiu27"
+branding:
+  icon: "zap"
+  color: "purple"
 inputs:
   command:
     description: "The test command to execute and verify (default: auto-detected by zero-config ecosystem sniffer: go test, pytest, cargo test, npm test)"
