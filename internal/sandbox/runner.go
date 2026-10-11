@@ -6,8 +6,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
+)
+
+var (
+	goCompileRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-./\\]+\.go:\d+(?::\d+)?:`)
+	tsCompileRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-./\\]+\.(?:ts|tsx|js|jsx):\d+:\d+\s+-\s+error\s+TS\d+:`)
 )
 
 type ExecutionResult struct {
@@ -96,23 +102,33 @@ func parseTracebacks(stdout, stderr string) []string {
 	inTrace := false
 	var currentTrace []string
 
-	isStart := func(trimmed string) bool {
-		return strings.HasPrefix(trimmed, "Traceback (most recent call last):") ||
+	isStart := func(line, trimmed string) bool {
+		if strings.HasPrefix(trimmed, "Traceback (most recent call last):") ||
 			strings.HasPrefix(trimmed, "FAIL:") ||
 			strings.HasPrefix(trimmed, "--- FAIL:") ||
 			strings.HasPrefix(trimmed, "ERROR:") ||
+			strings.HasPrefix(trimmed, "error:") ||
+			strings.HasPrefix(trimmed, "error[") ||
 			strings.Contains(trimmed, "FAILED") ||
 			strings.Contains(trimmed, "panic:") ||
 			strings.Contains(trimmed, "panicked at") ||
 			strings.Contains(trimmed, "WARNING: DATA RACE") ||
 			strings.HasPrefix(trimmed, "● ") ||
-			strings.HasPrefix(trimmed, "AssertionError:")
+			strings.HasPrefix(trimmed, "AssertionError:") {
+			return true
+		}
+		// Unindented compiler error diagnostics (e.g. ./server.go:42:10: or src/index.ts:15:7 - error TS...)
+		// Guard against indented test output lines like "    sample_test.go:10: assert failed"
+		if len(line) > 0 && line[0] != ' ' && line[0] != '\t' {
+			return goCompileRegex.MatchString(trimmed) || tsCompileRegex.MatchString(trimmed)
+		}
+		return false
 	}
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 
-		if isStart(trimmed) {
+		if isStart(line, trimmed) {
 			if inTrace && len(currentTrace) > 0 {
 				traces = append(traces, strings.Join(currentTrace, "\n"))
 			}
@@ -135,7 +151,8 @@ func parseTracebacks(stdout, stderr string) []string {
 				strings.Contains(line, "Exception:") ||
 				strings.HasPrefix(trimmed, "FAIL\t") ||
 				trimmed == "FAIL" ||
-				strings.Contains(trimmed, "test result: FAILED") {
+				strings.Contains(trimmed, "test result: FAILED") ||
+				strings.Contains(trimmed, "could not compile") {
 				traces = append(traces, strings.Join(currentTrace, "\n"))
 				inTrace = false
 				currentTrace = nil
