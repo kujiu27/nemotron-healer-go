@@ -152,11 +152,15 @@ func sanitizeEnvironment() []string {
 		"GOMEMLIMIT": true, "GOCACHE": true, "GOTMPDIR": true, "GOENV": true, "GODEBUG": true,
 		"NODE_PATH": true, "NODE_ENV": true, "CARGO_HOME": true, "RUSTUP_HOME": true,
 		"CI": true, "GITHUB_ACTIONS": true,
+		// Windows platform system invariants (case-insensitive lookup below)
+		"SYSTEMROOT": true, "WINDIR": true, "COMSPEC": true, "PATHEXT": true,
+		"TEMP": true, "TMP": true, "USERPROFILE": true, "LOCALAPPDATA": true, "APPDATA": true,
+		"PROGRAMFILES": true, "PROGRAMFILES(X86)": true, "COMMONPROGRAMFILES": true, "SYSTEMDRIVE": true,
 	}
 	var safeEnv []string
 	for _, entry := range os.Environ() {
 		parts := strings.SplitN(entry, "=", 2)
-		if len(parts) == 2 && allow[parts[0]] {
+		if len(parts) == 2 && allow[strings.ToUpper(parts[0])] {
 			safeEnv = append(safeEnv, entry)
 		}
 	}
