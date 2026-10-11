@@ -113,11 +113,25 @@ RULES:
 		if wErr := os.WriteFile(testFilePath, []byte(attackTestCode), 0644); wErr != nil {
 			return nil, false, fmt.Errorf("attack test write failed: %w", wErr)
 		}
-
-		testCmd := a.buildTestCmd(lang, testFileName, targetDir)
+		testPattern := "TestRedAttack"
+		if lang.Name == "Go" {
+			testPattern = extractArenaGoTestPattern(attackTestCode)
+		}
+		testCmd := a.buildTestCmd(lang, testFileName, targetDir, testPattern)
 		attackExec, _ := a.Runner.Run(testCmd)
 		_ = os.Remove(testFilePath)
 		if attackExec.IsSuccess {
+			attackOutput := attackExec.Stdout + "\n" + attackExec.Stderr
+			if isAttackZeroTestsRun(attackOutput, lang.Name) {
+				results = append(results, AdversarialRoundResult{
+					Round:              round,
+					RedAttackVector:    "Red synthesized test with no runnable test functions; treated as invalid attack.",
+					RedAttackCode:      attackTestCode,
+					AttackSucceeded:    false,
+					EquilibriumReached: true,
+				})
+				return results, true, nil
+			}
 			// The current code already survived Red's attack!
 			results = append(results, AdversarialRoundResult{
 				Round:              round,
@@ -266,8 +280,12 @@ func detectArenaLang(targetFile, testCmd string, round int) ArenaLangConfig {
 
 func (a *Arena) buildTestCmd(lang ArenaLangConfig, testFileName string, targetDir ...string) string {
 	dir := "."
+	testPattern := "TestRedAttack"
 	if len(targetDir) > 0 && targetDir[0] != "" && targetDir[0] != "." {
 		dir = targetDir[0]
+	}
+	if len(targetDir) > 1 && targetDir[1] != "" {
+		testPattern = targetDir[1]
 	}
 	if lang.Name == "Go" {
 		targetPkg := "."
@@ -278,7 +296,7 @@ func (a *Arena) buildTestCmd(lang ArenaLangConfig, testFileName string, targetDi
 		if strings.Contains(a.TestCommand, "-race") {
 			raceFlag = "-race "
 		}
-		return fmt.Sprintf("go test %s-v -run TestRedAttack %s", raceFlag, targetPkg)
+		return fmt.Sprintf("go test %s-v -run %s %s", raceFlag, testPattern, targetPkg)
 	}
 	if lang.Name == "Rust" {
 		testStem := strings.TrimSuffix(testFileName, ".rs")
@@ -359,4 +377,34 @@ func isAttackSyntaxOrImportError(output, lang string) bool {
 			strings.Contains(lower, "syntax error")
 	}
 	return false
+}
+func isAttackZeroTestsRun(output, lang string) bool {
+	lower := strings.ToLower(output)
+	if lang == "Go" {
+		return strings.Contains(lower, "[no tests to run]") ||
+			strings.Contains(lower, "testing: warning: no tests to run") ||
+			strings.Contains(lower, "no test files")
+	}
+	if lang == "Rust" {
+		return strings.Contains(lower, "running 0 tests")
+	}
+	return false
+}
+
+func extractArenaGoTestPattern(testCode string) string {
+	re := regexp.MustCompile(`func\s+(Test[A-Za-z0-9_]+)\s*\(`)
+	matches := re.FindAllStringSubmatch(testCode, -1)
+	if len(matches) == 0 {
+		return "TestRedAttack|TestAdversarial.*"
+	}
+	names := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if len(m) > 1 {
+			names = append(names, m[1])
+		}
+	}
+	if len(names) == 1 {
+		return "^" + names[0] + "$"
+	}
+	return "^(" + strings.Join(names, "|") + ")$"
 }
