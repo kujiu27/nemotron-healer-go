@@ -73,8 +73,8 @@ func PromptConfirmation(promptMsg string, reader *bufio.Reader) bool {
 	}
 	fmt.Print(promptMsg)
 	answer, err := reader.ReadString('\n')
-	if err != nil {
-		return false
+	if err != nil && len(answer) == 0 {
+		return true // default yes on EOF/closed stream
 	}
 	answer = strings.TrimSpace(strings.ToLower(answer))
 	return answer == "" || answer == "y" || answer == "yes"

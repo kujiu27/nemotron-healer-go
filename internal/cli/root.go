@@ -22,7 +22,7 @@ import (
 )
 
 // Version is overridden at build time via -X github.com/kujiu27/nemotron-healer-go/internal/cli.Version=...
-var Version = "v0.7.72"
+var Version = "v0.7.73"
 
 var (
 	testCmdFlag    string
@@ -195,7 +195,7 @@ func handlePostSession(session *engine.HealingSession, agent *engine.Agent, absD
 			fmt.Print(RenderPatchProvenance(session.PatchDigest, agent.Nebius.Model, "Nebius Token Factory"))
 		}
 
-		inCIEnv := os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != "" || ciFlag
+		inCIEnv := noTUIFlag || ciFlag || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != ""
 		if !inCIEnv && !autoAcceptFlag {
 			confirmMsg := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFB86C")).Render("\n? Stay on the verified fix branch (patch committed to it)? [Y/n]: ")
 			confirmed := PromptConfirmation(confirmMsg, nil)
