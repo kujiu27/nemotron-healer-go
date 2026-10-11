@@ -98,6 +98,14 @@ func ExportSarif(session *engine.HealingSession, outputPath string) error {
 		}
 		locations = append(locations, loc)
 	}
+	for _, aff := range session.BlastAffectedFiles {
+		if aff != "" && aff != session.TargetFile {
+			affLoc := SarifLocation{}
+			affLoc.PhysicalLocation.ArtifactLocation.URI = filepath.ToSlash(aff)
+			affLoc.PhysicalLocation.Region.StartLine = 1
+			locations = append(locations, affLoc)
+		}
+	}
 
 	report := SarifReport{
 		Schema:  "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",

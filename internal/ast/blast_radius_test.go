@@ -49,6 +49,16 @@ def transfer_money():
 	if report.DirectDependents[0] != "account.py::transfer_money" {
 		t.Errorf("expected account.py::transfer_money as dependent, got %s", report.DirectDependents[0])
 	}
+	promptCtx := report.FormatPromptContext()
+	if !strings.Contains(promptCtx, "UserAccount.get_balance") {
+		t.Errorf("expected prompt context to mention symbol, got: %s", promptCtx)
+	}
+	if !strings.Contains(promptCtx, "account.py::transfer_money") {
+		t.Errorf("expected prompt context to mention caller transfer_money, got: %s", promptCtx)
+	}
+	if !strings.Contains(promptCtx, "Interface Invariant") {
+		t.Errorf("expected prompt context to include Interface Invariant, got: %s", promptCtx)
+	}
 }
 
 func TestFindSymbolAtLine(t *testing.T) {

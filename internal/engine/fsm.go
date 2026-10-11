@@ -86,6 +86,8 @@ type HealingSession struct {
 	TargetLine         int                `json:"target_line,omitempty"`
 	TargetSymbol       string             `json:"target_symbol,omitempty"`
 	DefectArchetype    string             `json:"defect_archetype,omitempty"`
+	BlastRiskScore     float64            `json:"blast_risk_score,omitempty"`
+	BlastAffectedFiles []string           `json:"blast_affected_files,omitempty"`
 	AuditReport        string             `json:"audit_report,omitempty"`
 	History            []HealingStepEvent `json:"history"`
 }
