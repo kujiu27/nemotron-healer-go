@@ -3,6 +3,7 @@ package mock
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -93,5 +94,76 @@ func TestMockServer_CascadeDispatch(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "--- a/service.py") || !strings.Contains(string(body), "async with self.engine.lock:") {
 		t.Errorf("expected service.py patch for cascade, got %s", string(body))
+	}
+}
+
+func TestMockServer_AllBenchmarkCasesDispatch(t *testing.T) {
+	server := StartServer()
+	defer server.Close()
+
+	cases := []struct {
+		name      string
+		prompt    string
+		wantFile  string
+		wantPatch string
+	}{
+		{
+			name:      "AHB-01 account.py",
+			prompt:    "fix concurrency in BankLedger account.py",
+			wantFile:  "account.py",
+			wantPatch: "self._lock = threading.Lock()",
+		},
+		{
+			name:      "AHB-03 models.py",
+			prompt:    "migrate pydantic v1 to v2 in models.py",
+			wantFile:  "models.py",
+			wantPatch: "field_validator",
+		},
+		{
+			name:      "AHB-04 repo.py",
+			prompt:    "prevent SQL injection in UserRepository repo.py",
+			wantFile:  "repo.py",
+			wantPatch: "WHERE username = ?",
+		},
+		{
+			name:      "AHB-05 cache.go",
+			prompt:    "fix data race in MetricCache cache.go",
+			wantFile:  "cache.go",
+			wantPatch: "sync.RWMutex",
+		},
+		{
+			name:      "AHB-06 diff.go",
+			prompt:    "fix diffmatchpatch lineHash in diffLinesToStrings",
+			wantFile:  "diffmatchpatch/diff.go",
+			wantPatch: "lineHash := map[string]int{}",
+		},
+		{
+			name:      "AHB-07 unmarshaler.go",
+			prompt:    "prevent infinite recursion in addFields unmarshaler.go TestUnmarshalRecursiveEmbedded",
+			wantFile:  "unmarshaler.go",
+			wantPatch: "visited := map[reflect.Type]bool{}",
+		},
+		{
+			name:      "AHB-09 map_claims.go",
+			prompt:    "validate aud claim in parseClaimsString map_claims.go",
+			wantFile:  "map_claims.go",
+			wantPatch: "ErrInvalidType",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := []byte(fmt.Sprintf(`{"messages":[{"role":"user","content":%q}],"stream":false}`, tc.prompt))
+			resp, err := http.Post(server.URL+"/v1/chat/completions", "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("POST failed: %v", err)
+			}
+			defer resp.Body.Close()
+			respBytes, _ := io.ReadAll(resp.Body)
+			s := string(respBytes)
+			if !strings.Contains(s, tc.wantFile) || !strings.Contains(s, tc.wantPatch) {
+				t.Errorf("expected %s patch with %s, got:\n%s", tc.wantFile, tc.wantPatch, s)
+			}
+		})
 	}
 }

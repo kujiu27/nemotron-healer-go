@@ -39,7 +39,7 @@ run_json_mode() {
 run_eval_benchmark_mode() {
   echo "=== MOCK pipeline run [eval-ablation]: AHB-9 benchmark ablation ==="
   local rc=0
-  "$REPO/bin/nemotron-healer" eval --mock --case AHB-08 || rc=$?
+  "$REPO/bin/nemotron-healer" eval --mock || rc=$?
   echo "=== [eval-ablation] exit code: $rc ==="
   return $rc
 }
