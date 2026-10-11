@@ -24,4 +24,16 @@ func TestBuildTestCmdPreservesPytestModuleForm(t *testing.T) {
 	if got5 := a5.buildTestCmd(ArenaLangConfig{Name: "TypeScript/JavaScript"}, "red_attack_r1.test.ts", "src"); got5 != "npm test -- src/red_attack_r1.test.ts" {
 		t.Fatalf("npm test form broken: %q", got5)
 	}
+	aRace := &Arena{TestCommand: "go test -race ."}
+	if gotRace := aRace.buildTestCmd(ArenaLangConfig{Name: "Go"}, "x_test.go"); gotRace != "go test -race -v -run TestRedAttack ." {
+		t.Fatalf("go race form broken: %q", gotRace)
+	}
+	aCargoPkg := &Arena{TestCommand: "cargo test -p my-pkg"}
+	if gotCargoPkg := aCargoPkg.buildTestCmd(ArenaLangConfig{Name: "Rust"}, "arena_red_attack_r1_test.rs"); gotCargoPkg != "cargo test -p my-pkg --test arena_red_attack_r1_test" {
+		t.Fatalf("cargo pkg form broken: %q", gotCargoPkg)
+	}
+	aCargoSep := &Arena{TestCommand: "cargo test -p core -- --nocapture"}
+	if gotCargoSep := aCargoSep.buildTestCmd(ArenaLangConfig{Name: "Rust"}, "arena_red_attack_r1_test.rs"); gotCargoSep != "cargo test -p core --test arena_red_attack_r1_test -- --nocapture" {
+		t.Fatalf("cargo separator form broken: %q", gotCargoSep)
+	}
 }

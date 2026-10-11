@@ -236,10 +236,23 @@ func (f *Falsifier) buildTestCmd(lang LangConfig, testFileName string, targetDir
 		if dir != "." {
 			targetPkg = "./" + filepath.ToSlash(dir)
 		}
-		return fmt.Sprintf("go test -v -run TestAdversarialFalsify %s", targetPkg)
+		raceFlag := ""
+		if strings.Contains(f.TestCommand, "-race") {
+			raceFlag = "-race "
+		}
+		return fmt.Sprintf("go test %s-v -run TestAdversarialFalsify %s", raceFlag, targetPkg)
 	}
 	if lang.Name == "Rust" {
 		testStem := strings.TrimSuffix(testFileName, ".rs")
+		if strings.Contains(f.TestCommand, " -- ") {
+			parts := strings.SplitN(f.TestCommand, " -- ", 2)
+			return fmt.Sprintf("%s --test %s -- %s", parts[0], testStem, parts[1])
+		} else if strings.HasSuffix(f.TestCommand, " --") {
+			base := strings.TrimSuffix(f.TestCommand, " --")
+			return fmt.Sprintf("%s --test %s --", base, testStem)
+		} else if strings.HasPrefix(f.TestCommand, "cargo test") {
+			return fmt.Sprintf("%s --test %s", f.TestCommand, testStem)
+		}
 		return fmt.Sprintf("cargo test --test %s", testStem)
 	}
 	targetPath := testFileName

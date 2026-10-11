@@ -274,10 +274,23 @@ func (a *Arena) buildTestCmd(lang ArenaLangConfig, testFileName string, targetDi
 		if dir != "." {
 			targetPkg = "./" + filepath.ToSlash(dir)
 		}
-		return fmt.Sprintf("go test -v -run TestRedAttack %s", targetPkg)
+		raceFlag := ""
+		if strings.Contains(a.TestCommand, "-race") {
+			raceFlag = "-race "
+		}
+		return fmt.Sprintf("go test %s-v -run TestRedAttack %s", raceFlag, targetPkg)
 	}
 	if lang.Name == "Rust" {
 		testStem := strings.TrimSuffix(testFileName, ".rs")
+		if strings.Contains(a.TestCommand, " -- ") {
+			parts := strings.SplitN(a.TestCommand, " -- ", 2)
+			return fmt.Sprintf("%s --test %s -- %s", parts[0], testStem, parts[1])
+		} else if strings.HasSuffix(a.TestCommand, " --") {
+			base := strings.TrimSuffix(a.TestCommand, " --")
+			return fmt.Sprintf("%s --test %s --", base, testStem)
+		} else if strings.HasPrefix(a.TestCommand, "cargo test") {
+			return fmt.Sprintf("%s --test %s", a.TestCommand, testStem)
+		}
 		return fmt.Sprintf("cargo test --test %s", testStem)
 	}
 	targetPath := testFileName
