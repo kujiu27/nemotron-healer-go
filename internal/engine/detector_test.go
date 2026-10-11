@@ -124,6 +124,43 @@ func TestDetectTestCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("Detect Node.js project with pnpm / yarn / bun lockfiles", func(t *testing.T) {
+		for _, tc := range []struct {
+			lockfile string
+			expected string
+		}{
+			{"pnpm-lock.yaml", "pnpm test"},
+			{"yarn.lock", "yarn test"},
+			{"bun.lockb", "bun test"},
+		} {
+			tmpDir := t.TempDir()
+			_ = os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name":"app","scripts":{"test":"vitest"}}`), 0644)
+			_ = os.WriteFile(filepath.Join(tmpDir, tc.lockfile), []byte("lock content"), 0644)
+			cmd, _, err := DetectTestCommand(tmpDir)
+			if err != nil {
+				t.Fatalf("unexpected error for %s: %v", tc.lockfile, err)
+			}
+			if cmd != tc.expected {
+				t.Errorf("for lockfile %s, expected command %q, got %q", tc.lockfile, tc.expected, cmd)
+			}
+		}
+	})
+
+	t.Run("Detect Go workspace with go.work", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		_ = os.WriteFile(filepath.Join(tmpDir, "go.work"), []byte("go 1.22\nuse .\n"), 0644)
+		cmd, eco, err := DetectTestCommand(tmpDir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cmd != "go test ./..." {
+			t.Errorf("expected 'go test ./...', got %q", cmd)
+		}
+		if !strings.Contains(eco, "go.work") {
+			t.Errorf("expected go.work in ecosystem description, got %q", eco)
+		}
+	})
+
 	t.Run("Detect Makefile test target", func(t *testing.T) {
 		tmpDir, err := os.MkdirTemp("", "detect_make_*")
 		if err != nil {

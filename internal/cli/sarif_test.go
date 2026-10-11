@@ -185,3 +185,35 @@ func TestExportSarif_BlastAffectedLocations(t *testing.T) {
 		t.Errorf("expected secondary location cmd/main.go, got %s", res.Locations[2].PhysicalLocation.ArtifactLocation.URI)
 	}
 }
+
+func TestExportSarif_CleanScanEmitsEmptyResults(t *testing.T) {
+	tmpDir := t.TempDir()
+	sarifPath := filepath.Join(tmpDir, "clean.sarif")
+
+	session := &engine.HealingSession{
+		SessionID:       "clean-test",
+		IsResolved:      true,
+		CurrentTurn:     0,
+		AppliedPatches:  nil,
+		DurationSeconds: 0.1,
+	}
+
+	err := ExportSarif(session, sarifPath)
+	if err != nil {
+		t.Fatalf("ExportSarif failed: %v", err)
+	}
+
+	data, err := os.ReadFile(sarifPath)
+	if err != nil {
+		t.Fatalf("failed to read SARIF file: %v", err)
+	}
+
+	var report SarifReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+
+	if len(report.Runs[0].Results) != 0 {
+		t.Fatalf("expected 0 results for clean scan, got %d: %+v", len(report.Runs[0].Results), report.Runs[0].Results)
+	}
+}
