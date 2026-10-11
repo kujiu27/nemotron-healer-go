@@ -3,8 +3,9 @@ description: "Zero-dependency autonomous code self-healing action powered by NVI
 author: "kujiu27"
 inputs:
   command:
-    description: "The test command to execute and verify (e.g. 'pytest', 'go test ./...')"
-    required: true
+    description: "The test command to execute and verify (default: auto-detected by zero-config ecosystem sniffer: go test, pytest, cargo test, npm test)"
+    required: false
+    default: ""
   path:
     description: "Working directory to heal, relative to the repo root (e.g. a failing sample or sub-project)"
     required: false
@@ -55,6 +56,9 @@ outputs:
   patches_count:
     description: "Total number of verified patches applied"
     value: ${{ steps.heal.outputs.patches_count }}
+  sarif_file:
+    description: "Path to exported SARIF 2.1.0 security report if requested"
+    value: ${{ steps.heal.outputs.sarif_file }}
 
 runs:
   using: "composite"
@@ -114,10 +118,14 @@ runs:
         if [[ -n "$NH_SARIF" ]]; then
           EXTRA_FLAGS="$EXTRA_FLAGS --sarif $NH_SARIF"
         fi
-        nemotron-healer "$NH_PATH" --command "$NH_COMMAND" --turns "$NH_TURNS" $EXTRA_FLAGS --no-tui
+        CMD_FLAGS=""
+        if [[ -n "$NH_COMMAND" ]]; then
+          CMD_FLAGS="--command $NH_COMMAND"
+        fi
+        nemotron-healer "$NH_PATH" $CMD_FLAGS --turns "$NH_TURNS" $EXTRA_FLAGS --no-tui
 
     - name: Publish PR Audit Report Comment
-      if: always() && github.event_name == 'pull_request'
+      if: always() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}

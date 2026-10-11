@@ -131,6 +131,10 @@ jobs:
             echo "Action did not export patch_digest output"
             exit 1
           fi
+          if [ "${{ steps.act_success.outputs.sarif_file }}" != "heal-results.sarif" ]; then
+            echo "Action did not export sarif_file output (got: '${{ steps.act_success.outputs.sarif_file }}')"
+            exit 1
+          fi
           if [ ! -f "heal-results.sarif" ]; then
             echo "Expected heal-results.sarif to be exported, but file was not found!"
             exit 1
