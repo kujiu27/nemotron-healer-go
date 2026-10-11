@@ -6,8 +6,10 @@
 # must never touch the committed receipt).
 set -euo pipefail
 
+IS_MOCK=false
 MOCK_FLAG=""
-if [ "${EVAL_MOCK:-false}" = "true" ] || [ "${1:-}" = "--mock" ]; then
+if [ "${EVAL_MOCK:-false}" = "true" ] || [ "${1:-}" = "--mock" ] || [ "${2:-}" = "--mock" ] || [ "${3:-}" = "--mock" ]; then
+  IS_MOCK=true
   MOCK_FLAG="--mock"
   export NEBIUS_API_KEY="${NEBIUS_API_KEY:-mock}"
   export TAVILY_API_KEY="${TAVILY_API_KEY:-mock}"
@@ -18,10 +20,18 @@ fi
 
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 STAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-OUT="${EVAL_OUT:-docs/EVAL_RESULTS.md}"
-JSON_OUT="${EVAL_JSON:-docs/EVAL_RESULTS.json}"
-MD_OUT="${EVAL_MD:-docs/EVAL_SCORECARD.md}"
 
+if [ "$IS_MOCK" = "true" ]; then
+  OUT="${EVAL_OUT:-/tmp/nh-eval-mock/EVAL_RESULTS.md}"
+  JSON_OUT="${EVAL_JSON:-/tmp/nh-eval-mock/EVAL_RESULTS.json}"
+  MD_OUT="${EVAL_MD:-/tmp/nh-eval-mock/EVAL_SCORECARD.md}"
+  DEFAULT_REPEAT=1
+else
+  OUT="${EVAL_OUT:-docs/EVAL_RESULTS.md}"
+  JSON_OUT="${EVAL_JSON:-docs/EVAL_RESULTS.json}"
+  MD_OUT="${EVAL_MD:-docs/EVAL_SCORECARD.md}"
+  DEFAULT_REPEAT=3
+fi
 BIN=$(mktemp /tmp/nh-eval-bin-XXXX)
 trap 'rm -f "$BIN"' EXIT
 
@@ -41,9 +51,13 @@ mkdir -p "$(dirname "$OUT")" "$(dirname "$JSON_OUT")" "$(dirname "$MD_OUT")"
 
 {
   echo ""
-  echo "## Real API eval — ${STAMP} — commit ${COMMIT} — model $(grep -o 'Nemotron-3-Ultra[^"]*' internal/client/nebius.go | head -1)"
+  if [ "$IS_MOCK" = "true" ]; then
+    echo "## Mock verification eval (offline wire check) — ${STAMP} — commit ${COMMIT} — X-Nemotron-Healer: MOCK"
+  else
+    echo "## Real API eval — ${STAMP} — commit ${COMMIT} — model $(grep -o 'Nemotron-3-Ultra[^"]*' internal/client/nebius.go | head -1)"
+  fi
   echo '```'
-  "$BIN" eval --repeat "${REPEAT:-3}" $MOCK_FLAG $CASE_FLAG $SEARCH_FLAG --export-json "$JSON_OUT" --export-md "$MD_OUT" 2>&1
+  "$BIN" eval --repeat "${REPEAT:-$DEFAULT_REPEAT}" $MOCK_FLAG $CASE_FLAG $SEARCH_FLAG --export-json "$JSON_OUT" --export-md "$MD_OUT" 2>&1
   echo '```'
 } >> "$OUT"
 
