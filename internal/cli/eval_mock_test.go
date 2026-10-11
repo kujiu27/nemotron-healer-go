@@ -262,3 +262,56 @@ func TestEvalCmd_JSONPurity(t *testing.T) {
 		t.Errorf("expected benchmark AHB-9 in json payload, got %v", payload["benchmark"])
 	}
 }
+
+func TestEvalCmd_AblationGroundingDelta(t *testing.T) {
+	origMock := mockFlag
+	mockFlag = true
+	defer func() { mockFlag = origMock }()
+
+	cleanup := initMockServerIfEnabled()
+	defer cleanup()
+
+	origCase := caseFilterFlag
+	caseFilterFlag = "AHB-08"
+	defer func() { caseFilterFlag = origCase }()
+
+	origRepeat := repeatFlag
+	repeatFlag = 1
+	defer func() { repeatFlag = origRepeat }()
+
+	origAblation := ablationFlag
+	ablationFlag = true
+	defer func() { ablationFlag = origAblation }()
+
+	origJSON := jsonFlag
+	jsonFlag = true
+	defer func() { jsonFlag = origJSON }()
+
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := evalCmd.RunE(evalCmd, []string{})
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("evalCmd with --ablation failed: %v", err)
+	}
+
+	var buf [4096]byte
+	n, _ := r.Read(buf[:])
+	_ = r.Close()
+	stdoutStr := string(buf[:n])
+
+	var payload map[string]interface{}
+	if jErr := json.Unmarshal([]byte(stdoutStr), &payload); jErr != nil {
+		t.Fatalf("unmarshal error: %v, raw:\n%s", jErr, stdoutStr)
+	}
+
+	lift, ok := payload["empirical_lift"].(float64)
+	if !ok || lift <= 0 {
+		t.Errorf("expected empirical lift > 0 demonstrating grounding value, got: %v", payload["empirical_lift"])
+	}
+}

@@ -422,6 +422,18 @@ def reply_for(req):
         return entry["triage"]
     if is_adv:
         return entry["adv"]
+    if matched == "ahb08":
+        is_grounded = "gjson path syntax supports empty string" in all_content.lower()
+        if not is_grounded:
+            return """```diff
+--- a/gjson.go
++++ b/gjson.go
+@@ -761,3 +761,3 @@
+-					if len(value) > 2 && value[0] == '"' &&
++					if len(value) > 5 && value[0] == '"' &&
+ 						value[len(value)-1] == '"' {
+```
+[TARGET_FILE]gjson.go[/TARGET_FILE]"""
     return entry["patch"]
 
 

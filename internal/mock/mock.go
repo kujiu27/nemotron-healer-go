@@ -276,8 +276,8 @@ func StartServer() *Server {
 					reply = ahb08Triage
 				} else if isAdversarial {
 					reply = ahb08Adv
-				} else if !isGrounded && strings.Contains(allContent, "DisableGrounding") {
-					reply = "```diff\n--- a/gjson.go\n+++ b/gjson.go\n@@ -761,7 +761,7 @@\n-\t\t\t\t\tif len(value) > 2 && value[0] == '\"' &&\n+\t\t\t\t\tif len(value) > 5 && value[0] == '\"' &&\n \t\t\t\t\t\tvalue[len(value)-1] == '\"' {\n```\n[TARGET_FILE]gjson.go[/TARGET_FILE]"
+				} else if !isGrounded {
+					reply = "```diff\n--- a/gjson.go\n+++ b/gjson.go\n@@ -761,3 +761,3 @@\n-\t\t\t\t\tif len(value) > 2 && value[0] == '\"' &&\n+\t\t\t\t\tif len(value) > 5 && value[0] == '\"' &&\n \t\t\t\t\t\tvalue[len(value)-1] == '\"' {\n```\n[TARGET_FILE]gjson.go[/TARGET_FILE]"
 				} else {
 					reply = ahb08Patch
 				}
