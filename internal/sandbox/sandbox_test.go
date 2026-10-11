@@ -685,3 +685,129 @@ func TestCreateGitPRBranch_BypassesGlobalGPGSign(t *testing.T) {
 		t.Errorf("expected branch %s, got %s", branchName, strings.TrimSpace(string(out)))
 	}
 }
+
+func TestPatcher_NoRejectOrBackupFileLeaks(t *testing.T) {
+	tmpDir := t.TempDir()
+	targetFile := filepath.Join(tmpDir, "sample.py")
+	initialContent := "def calc(x):\n    val = x * 2\n    return val\n"
+	if err := os.WriteFile(targetFile, []byte(initialContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Diff where git apply will fail (not in a git repo or slight header nuance),
+	// patch(1) will fail or reject, but Tier 3 fallback hunk replacer succeeds!
+	diff := `--- a/sample.py
++++ b/sample.py
+@@ -1,3 +1,3 @@
+ def calc(x):
+-    val = x * 2
++    val = x * 10
+     return val
+`
+	patcher := NewPatcher(tmpDir)
+	applied, msg := patcher.ApplyPatch(diff, "sample.py")
+	if !applied {
+		t.Fatalf("expected patch to apply via fallback, failed: %s", msg)
+	}
+
+	// Ensure no .rej, .orig, or Oops.rej leaked in tmpDir
+	entries, err := os.ReadDir(tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasSuffix(name, ".rej") || strings.HasSuffix(name, ".orig") || name == "Oops.rej" {
+			t.Errorf("found leaked patch artifact in workspace: %s", name)
+		}
+	}
+
+	// Verify content was correctly updated
+	data, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := "def calc(x):\n    val = x * 10\n    return val\n"
+	if string(data) != expected {
+		t.Errorf("expected %q, got %q", expected, string(data))
+	}
+}
+
+func TestCreateGitPRBranch_BypassesPreCommitHookAndForcesAudit(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Init git repo
+	cmdInit := exec.Command("git", "init")
+	cmdInit.Dir = tmpDir
+	if err := cmdInit.Run(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a file and ignore HEAL_AUDIT_REPORT.md
+	gitignorePath := filepath.Join(tmpDir, ".gitignore")
+	_ = os.WriteFile(gitignorePath, []byte("HEAL_AUDIT_REPORT.md\n*.orig\n"), 0644)
+
+	mainFile := filepath.Join(tmpDir, "main.go")
+	_ = os.WriteFile(mainFile, []byte("package main\n"), 0644)
+
+	cmdAdd := exec.Command("git", "add", "-A")
+	cmdAdd.Dir = tmpDir
+	_ = cmdAdd.Run()
+
+	cmdCommit := exec.Command("git", "-c", "user.name=Tester", "-c", "user.email=test@test.com", "commit", "-m", "init")
+	cmdCommit.Dir = tmpDir
+	if err := cmdCommit.Run(); err != nil {
+		t.Fatalf("initial commit failed: %v", err)
+	}
+
+	// Install a failing pre-commit hook that exits 1
+	hooksDir := filepath.Join(tmpDir, ".git", "hooks")
+	_ = os.MkdirAll(hooksDir, 0755)
+	hookPath := filepath.Join(hooksDir, "pre-commit")
+	_ = os.WriteFile(hookPath, []byte("#!/bin/sh\nexit 1\n"), 0755)
+
+	// Plant a stray .rej file to simulate failed patch utility residue
+	strayRej := filepath.Join(tmpDir, "Oops.rej")
+	_ = os.WriteFile(strayRej, []byte("reject hunk\n"), 0644)
+
+	// Modify main.go for the fix
+	_ = os.WriteFile(mainFile, []byte("package main\n// healed\n"), 0644)
+
+	mgr := NewCheckpointManager(tmpDir)
+	branchName := "fix/test-precommit-bypass"
+	err := mgr.CreateGitPRBranchWithAudit(branchName, "fix(test): verified autonomous fix", "# Audit Card\n")
+	if err != nil {
+		t.Fatalf("CreateGitPRBranchWithAudit failed: %v", err)
+	}
+
+	// 1. Verify branch exists and is checked out
+	cHead := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cHead.Dir = tmpDir
+	out, err := cHead.Output()
+	if err != nil {
+		t.Fatalf("failed reading HEAD: %v", err)
+	}
+	if strings.TrimSpace(string(out)) != branchName {
+		t.Errorf("expected branch %s, got %s", branchName, strings.TrimSpace(string(out)))
+	}
+
+	// 2. Verify HEAL_AUDIT_REPORT.md was committed despite .gitignore
+	cShow := exec.Command("git", "ls-tree", "-r", "--name-only", "HEAD")
+	cShow.Dir = tmpDir
+	filesOut, err := cShow.Output()
+	if err != nil {
+		t.Fatalf("failed listing tree: %v", err)
+	}
+	treeFiles := string(filesOut)
+	if !strings.Contains(treeFiles, "HEAL_AUDIT_REPORT.md") {
+		t.Errorf("expected HEAL_AUDIT_REPORT.md to be committed, tree files:\n%s", treeFiles)
+	}
+
+	// 3. Verify Oops.rej was purged and NOT committed
+	if strings.Contains(treeFiles, "Oops.rej") {
+		t.Errorf("Oops.rej was committed into git branch!\n%s", treeFiles)
+	}
+	if _, err := os.Stat(strayRej); !os.IsNotExist(err) {
+		t.Errorf("Oops.rej still exists in workspace!")
+	}
+}
