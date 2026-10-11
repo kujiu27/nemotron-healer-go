@@ -435,9 +435,15 @@ type FastTriageResult struct {
 }
 
 // FastTriage calls the fast lightweight tier model (<150ms) to extract quick diagnostic insights and search query.
-func (c *NebiusClient) FastTriage(ctx context.Context, errorTrace string) (*FastTriageResult, int, int, error) {
+// Optional context (targetFile, testCmd) ensures reliable triage even on signal kills (SIGXCPU/SIGKILL) lacking stack traces.
+func (c *NebiusClient) FastTriage(ctx context.Context, errorTrace string, targetContext ...string) (*FastTriageResult, int, int, error) {
 	if c.FastModel == "" {
 		return nil, 0, 0, nil
+	}
+
+	contextHeader := ""
+	if len(targetContext) > 0 && targetContext[0] != "" {
+		contextHeader = fmt.Sprintf("\n[TARGET CODE CONTEXT]\n%s\n", strings.Join(targetContext, "\n"))
 	}
 
 	prompt := fmt.Sprintf(`You are a fast pre-flight code triage agent.
@@ -450,10 +456,9 @@ Respond in exact format:
 ERROR_LINE: <line>
 CAUSE: <sentence>
 QUERY: <query>
-
+%s
 [TRACE]
-%s`, errorTrace)
-
+%s`, contextHeader, errorTrace)
 	reqBody := ChatRequest{
 		Model:       c.FastModel,
 		Messages:    []ChatMessage{{Role: "user", Content: prompt}},

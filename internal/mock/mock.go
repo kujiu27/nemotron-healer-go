@@ -206,7 +206,7 @@ func StartServer() *Server {
 					reply = ahb06Patch
 				}
 
-			case strings.Contains(allContent, "unmarshaler.go") || strings.Contains(allContent, "TestUnmarshalRecursiveEmbedded") || strings.Contains(allContent, "addFields") || strings.Contains(allContent, "structPlan"):
+			case strings.Contains(allContent, "unmarshaler.go") || strings.Contains(allContent, "TestUnmarshalRecursiveEmbedded") || strings.Contains(allContent, "addFields") || strings.Contains(allContent, "structPlan") || strings.Contains(allContent, "go-toml") || strings.Contains(allContent, "pelletier"):
 				if isTriage {
 					reply = ahb07Triage
 				} else if isAdversarial {

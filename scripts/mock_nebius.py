@@ -402,7 +402,7 @@ def reply_for(req):
     matched = "ahb08"
     if "diffmatchpatch" in all_content or "difflinestostrings" in all_content or "linehash" in all_content:
         matched = "ahb06"
-    elif "unmarshaler.go" in all_content or "testunmarshalrecursiveembedded" in all_content or "addfields" in all_content:
+    elif "unmarshaler.go" in all_content or "testunmarshalrecursiveembedded" in all_content or "addfields" in all_content or "go-toml" in all_content or "pelletier" in all_content:
         matched = "ahb07"
     elif "map_claims.go" in all_content or "testmapclaims_getaudience" in all_content or "parseclaimsstring" in all_content:
         matched = "ahb09"
