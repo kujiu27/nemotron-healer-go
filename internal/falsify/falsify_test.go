@@ -107,3 +107,51 @@ func TestBuildTestCmd_SubpackageColocation(t *testing.T) {
 		t.Errorf("expected cargo flags preserved, got %q", cmdCargo)
 	}
 }
+func TestExtractGoTestPattern(t *testing.T) {
+	codeSingle := "package sample\nfunc TestAdversarialEmptyQueryMock(t *testing.T) {}\n"
+	if pat := extractGoTestPattern(codeSingle); pat != "^TestAdversarialEmptyQueryMock$" {
+		t.Errorf("expected ^TestAdversarialEmptyQueryMock$, got %q", pat)
+	}
+
+	codeMulti := "package sample\nfunc TestOne(t *testing.T) {}\nfunc TestTwo(t *testing.T) {}\n"
+	if pat := extractGoTestPattern(codeMulti); pat != "^(TestOne|TestTwo)$" {
+		t.Errorf("expected ^(TestOne|TestTwo)$, got %q", pat)
+	}
+
+	codeNone := "package sample\nfunc Helper() {}\n"
+	if pat := extractGoTestPattern(codeNone); pat != "TestAdversarial.*" {
+		t.Errorf("expected fallback pattern, got %q", pat)
+	}
+}
+
+func TestIsZeroTestsRun(t *testing.T) {
+	goZero1 := "testing: warning: no tests to run\nPASS\nok  sample 0.1s [no tests to run]\n"
+	if !isZeroTestsRun(goZero1, "Go") {
+		t.Errorf("expected Go [no tests to run] to be detected as zero tests run")
+	}
+
+	goZero2 := "testing: warning: no tests to run\nPASS\n"
+	if !isZeroTestsRun(goZero2, "Go") {
+		t.Errorf("expected Go warning to be detected as zero tests run")
+	}
+
+	goPass := "=== RUN   TestFoo\n--- PASS: TestFoo (0.00s)\nPASS\nok  sample 0.1s\n"
+	if isZeroTestsRun(goPass, "Go") {
+		t.Errorf("expected real Go test pass not to be detected as zero tests run")
+	}
+
+	rustZero := "running 0 tests\ntest result: ok. 0 passed; 0 failed; 0 ignored\n"
+	if !isZeroTestsRun(rustZero, "Rust") {
+		t.Errorf("expected Rust 0 tests to be detected as zero tests run")
+	}
+}
+
+func TestBuildTestCmd_DynamicPattern(t *testing.T) {
+	f := &Falsifier{TestCommand: "go test ./..."}
+	langGo := detectLanguage("pkg/auth/token.go", "go test ./...")
+
+	cmd := f.buildTestCmd(langGo, "adversarial_falsify_test.go", "pkg/auth", "^TestDynamic$")
+	if cmd != "go test -v -run ^TestDynamic$ ./pkg/auth" {
+		t.Errorf("expected dynamic test pattern in command, got %q", cmd)
+	}
+}

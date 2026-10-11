@@ -66,3 +66,20 @@ func TestIsAttackSyntaxOrImportError(t *testing.T) {
 		t.Errorf("assertion failure must not be treated as syntax error")
 	}
 }
+func TestArenaZeroTestsRunAndPatternExtraction(t *testing.T) {
+	code := "package diffmatchpatch\nfunc TestRedAttackCustomInvariant(t *testing.T) {}\n"
+	pat := extractArenaGoTestPattern(code)
+	if pat != "^TestRedAttackCustomInvariant$" {
+		t.Errorf("expected ^TestRedAttackCustomInvariant$, got %q", pat)
+	}
+
+	zeroOut := "testing: warning: no tests to run\nPASS [no tests to run]\n"
+	if !isAttackZeroTestsRun(zeroOut, "Go") {
+		t.Errorf("expected Go [no tests to run] to be detected as zero tests run")
+	}
+
+	passOut := "=== RUN   TestRedAttackCustomInvariant\n--- PASS: TestRedAttackCustomInvariant (0.00s)\nPASS\n"
+	if isAttackZeroTestsRun(passOut, "Go") {
+		t.Errorf("expected executed pass not to be detected as zero tests run")
+	}
+}

@@ -118,7 +118,11 @@ RULES:
 	defer os.Remove(testFilePath)
 
 	// Execute adversarial test using the workspace's test runner
-	testCmd := f.buildTestCmd(lang, testFileName, targetDir)
+	testPattern := "TestAdversarialFalsify"
+	if lang.Name == "Go" {
+		testPattern = extractGoTestPattern(testCode)
+	}
+	testCmd := f.buildTestCmd(lang, testFileName, targetDir, testPattern)
 	res, err := f.Sandbox.Run(testCmd)
 	if err != nil || !res.IsSuccess {
 		output := res.Stdout + "\n" + res.Stderr
@@ -139,6 +143,19 @@ RULES:
 
 		return &FalsificationResult{
 			Passed:           false,
+			GeneratedTest:    testCode,
+			FailureOutput:    output,
+			PromptTokens:     pTok,
+			CompletionTokens: cTok,
+		}, nil
+	}
+
+	output := res.Stdout + "\n" + res.Stderr
+	if isZeroTestsRun(output, lang.Name) {
+		return &FalsificationResult{
+			Passed:           false,
+			Skipped:          true,
+			Reason:           "adversarial test was not executed by test runner (0 tests matched filter)",
 			GeneratedTest:    testCode,
 			FailureOutput:    output,
 			PromptTokens:     pTok,
@@ -228,8 +245,12 @@ func detectLanguage(targetFile, testCmd string) LangConfig {
 
 func (f *Falsifier) buildTestCmd(lang LangConfig, testFileName string, targetDir ...string) string {
 	dir := "."
+	testPattern := "TestAdversarialFalsify"
 	if len(targetDir) > 0 && targetDir[0] != "" && targetDir[0] != "." {
 		dir = targetDir[0]
+	}
+	if len(targetDir) > 1 && targetDir[1] != "" {
+		testPattern = targetDir[1]
 	}
 	if lang.Name == "Go" {
 		targetPkg := "."
@@ -240,7 +261,7 @@ func (f *Falsifier) buildTestCmd(lang LangConfig, testFileName string, targetDir
 		if strings.Contains(f.TestCommand, "-race") {
 			raceFlag = "-race "
 		}
-		return fmt.Sprintf("go test %s-v -run TestAdversarialFalsify %s", raceFlag, targetPkg)
+		return fmt.Sprintf("go test %s-v -run %s %s", raceFlag, testPattern, targetPkg)
 	}
 	if lang.Name == "Rust" {
 		testStem := strings.TrimSuffix(testFileName, ".rs")
@@ -336,4 +357,34 @@ func (f *Falsifier) PersistRegressionTest(targetFile, testCode string) (string, 
 	}
 
 	return regRelFile, nil
+}
+func isZeroTestsRun(output, lang string) bool {
+	lower := strings.ToLower(output)
+	if lang == "Go" {
+		return strings.Contains(lower, "[no tests to run]") ||
+			strings.Contains(lower, "testing: warning: no tests to run") ||
+			strings.Contains(lower, "no test files")
+	}
+	if lang == "Rust" {
+		return strings.Contains(lower, "running 0 tests")
+	}
+	return false
+}
+
+func extractGoTestPattern(testCode string) string {
+	re := regexp.MustCompile(`func\s+(Test[A-Za-z0-9_]+)\s*\(`)
+	matches := re.FindAllStringSubmatch(testCode, -1)
+	if len(matches) == 0 {
+		return "TestAdversarial.*"
+	}
+	names := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if len(m) > 1 {
+			names = append(names, m[1])
+		}
+	}
+	if len(names) == 1 {
+		return "^" + names[0] + "$"
+	}
+	return "^(" + strings.Join(names, "|") + ")$"
 }
