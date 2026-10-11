@@ -92,4 +92,18 @@ func TestBuildTestCmd_SubpackageColocation(t *testing.T) {
 	if cmdNpm != "npm test -- src/adversarial_falsify.test.ts" {
 		t.Errorf("expected npm test separator, got %q", cmdNpm)
 	}
+
+	// 6. Go -race preservation
+	fRace := &Falsifier{TestCommand: "go test -race ."}
+	cmdRace := fRace.buildTestCmd(langGo, "adversarial_falsify_test.go", ".")
+	if cmdRace != "go test -race -v -run TestAdversarialFalsify ." {
+		t.Errorf("expected -race flag preserved, got %q", cmdRace)
+	}
+
+	// 7. Rust Cargo flags preservation
+	fCargoPkg := &Falsifier{TestCommand: "cargo test -p my-crate -- --nocapture"}
+	cmdCargo := fCargoPkg.buildTestCmd(langRust, "adversarial_falsify_test.rs", "src")
+	if cmdCargo != "cargo test -p my-crate --test adversarial_falsify_test -- --nocapture" {
+		t.Errorf("expected cargo flags preserved, got %q", cmdCargo)
+	}
 }
