@@ -75,9 +75,10 @@ runs:
         BIN_DIR="$(go env GOPATH)/bin"
         mkdir -p "$BIN_DIR"
         echo "$BIN_DIR" >> "$GITHUB_PATH"
+        echo "BIN_DIR=$BIN_DIR" >> "$GITHUB_ENV"
         if [ -d "$GITHUB_ACTION_PATH/cmd/nemotron-healer" ]; then
           echo "Building Nemotron-Healer directly from action path: $GITHUB_ACTION_PATH..."
-          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$BIN_DIR/nemotron-healer" "$GITHUB_ACTION_PATH/cmd/nemotron-healer"
+          (cd "$GITHUB_ACTION_PATH" && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$BIN_DIR/nemotron-healer" ./cmd/nemotron-healer)
         else
           REF="${{ github.action_ref }}"
           if [ -z "$REF" ]; then REF="main"; fi
@@ -85,7 +86,7 @@ runs:
           TMP_SRC="$(mktemp -d /tmp/nh-src-XXXX)"
           git clone --depth 1 --branch "${REF}" https://github.com/kujiu27/nemotron-healer-go.git "$TMP_SRC" \
             || git clone --depth 1 https://github.com/kujiu27/nemotron-healer-go.git "$TMP_SRC"
-          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$BIN_DIR/nemotron-healer" "$TMP_SRC/cmd/nemotron-healer"
+          (cd "$TMP_SRC" && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$BIN_DIR/nemotron-healer" ./cmd/nemotron-healer)
           rm -rf "$TMP_SRC"
         fi
         "$BIN_DIR/nemotron-healer" version
@@ -122,7 +123,11 @@ runs:
         if [[ -n "$NH_COMMAND" ]]; then
           CMD_FLAGS="--command $NH_COMMAND"
         fi
-        nemotron-healer "$NH_PATH" $CMD_FLAGS --turns "$NH_TURNS" $EXTRA_FLAGS --no-tui
+        HEALER_BIN="nemotron-healer"
+        if [ -n "${BIN_DIR:-}" ] && [ -x "$BIN_DIR/nemotron-healer" ]; then
+          HEALER_BIN="$BIN_DIR/nemotron-healer"
+        fi
+        "$HEALER_BIN" "$NH_PATH" $CMD_FLAGS --turns "$NH_TURNS" $EXTRA_FLAGS --no-tui
 
     - name: Publish PR Audit Report Comment
       if: always() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
