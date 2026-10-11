@@ -50,7 +50,8 @@ func (r *Runner) Run(cmdStr string) (*ExecutionResult, error) {
 	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
 	cmd.Dir = r.WorkDir
 	cmd.Env = sanitizeEnvironment()
-
+	cmd.WaitDelay = 1 * time.Second
+	setupProcessGroup(cmd)
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf

@@ -40,6 +40,28 @@ func TestRunnerTimeoutDiagnostic(t *testing.T) {
 	}
 }
 
+func TestRunnerProcessGroupCleanup(t *testing.T) {
+	// Execute a shell pipeline that forks a background subprocess
+	r := NewRunner(".", 150*time.Millisecond)
+	start := time.Now()
+	res, err := r.Run("sh -c 'sleep 5 & wait'")
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("unexpected runner error: %v", err)
+	}
+	if res.IsSuccess {
+		t.Fatalf("expected timeout failure")
+	}
+	// Verify that wait/delay did not hang for 5s (must abort within ~2s max including WaitDelay)
+	if elapsed > 2500*time.Millisecond {
+		t.Errorf("runner took %v, process group cleanup / WaitDelay failed to contain timeout", elapsed)
+	}
+	if !strings.Contains(res.Stderr, "Command timed out after") {
+		t.Errorf("expected timeout diagnostic in stderr, got: %s", res.Stderr)
+	}
+}
+
 func TestPatcherFuzzyHunk(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "patch_test_*")
 	if err != nil {
