@@ -150,13 +150,17 @@ func (c *CheckpointManager) EnsureGitContext() error {
 	cmdEmail := exec.Command("git", "config", "user.email", "bot@nemotron-healer.ai")
 	cmdEmail.Dir = c.WorkDir
 	_ = cmdEmail.Run()
+	// Disable GPG signing on auto-scaffolded baseline to prevent signing agent failures
+	cmdGpg := exec.Command("git", "config", "commit.gpgsign", "false")
+	cmdGpg.Dir = c.WorkDir
+	_ = cmdGpg.Run()
 
 	// Initial baseline snapshot commit
 	cmdAdd := exec.Command("git", "add", "-A")
 	cmdAdd.Dir = c.WorkDir
 	_ = cmdAdd.Run()
 
-	cmdCommit := exec.Command("git", "commit", "--allow-empty", "-m", "chore(init): snapshot baseline state prior to autonomous repair")
+	cmdCommit := exec.Command("git", "commit", "--allow-empty", "--no-gpg-sign", "-m", "chore(init): snapshot baseline state prior to autonomous repair")
 	cmdCommit.Dir = c.WorkDir
 	_ = cmdCommit.Run()
 
@@ -193,7 +197,7 @@ func (c *CheckpointManager) CreateGitPRBranchWithAudit(branchName, commitMsg, au
 		return fmt.Errorf("git add failed: %w", err)
 	}
 
-	cmd3 := exec.Command("git", "commit", "--allow-empty", "-m", commitMsg)
+	cmd3 := exec.Command("git", "commit", "--allow-empty", "--no-gpg-sign", "-m", commitMsg)
 	cmd3.Dir = c.WorkDir
 	return cmd3.Run()
 }

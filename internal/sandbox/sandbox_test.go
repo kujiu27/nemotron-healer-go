@@ -546,3 +546,46 @@ func TestParseTracebacks(t *testing.T) {
 		t.Errorf("expected separate TestOne and TestTwo, got %v", multiTraces)
 	}
 }
+
+func TestCreateGitPRBranch_BypassesGlobalGPGSign(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	cInit := exec.Command("git", "init")
+	cInit.Dir = tmpDir
+	if err := cInit.Run(); err != nil {
+		t.Skip("git init unavailable")
+	}
+
+	// Force GPG signing in this repo with an invalid gpg binary to simulate
+	// environments where commit.gpgsign is globally enabled without a gpg agent.
+	c1 := exec.Command("git", "config", "user.name", "Tester")
+	c1.Dir = tmpDir
+	_ = c1.Run()
+	c2 := exec.Command("git", "config", "user.email", "tester@test.com")
+	c2.Dir = tmpDir
+	_ = c2.Run()
+	c3 := exec.Command("git", "config", "commit.gpgsign", "true")
+	c3.Dir = tmpDir
+	_ = c3.Run()
+	c4 := exec.Command("git", "config", "gpg.program", "invalid-gpg-program-never-exists")
+	c4.Dir = tmpDir
+	_ = c4.Run()
+
+	mgr := NewCheckpointManager(tmpDir)
+	branchName := "fix/test-gpgsign-bypass"
+	err := mgr.CreateGitPRBranchWithAudit(branchName, "fix(test): commit without gpg sign", "# Audit Report\n")
+	if err != nil {
+		t.Fatalf("CreateGitPRBranchWithAudit failed when commit.gpgsign=true: %v", err)
+	}
+
+	// Verify branch was created and head commit exists
+	cHead := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cHead.Dir = tmpDir
+	out, err := cHead.Output()
+	if err != nil {
+		t.Fatalf("failed reading HEAD: %v", err)
+	}
+	if strings.TrimSpace(string(out)) != branchName {
+		t.Errorf("expected branch %s, got %s", branchName, strings.TrimSpace(string(out)))
+	}
+}
