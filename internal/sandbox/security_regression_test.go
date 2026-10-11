@@ -76,6 +76,29 @@ func TestSanitizeEnvironmentRetainsMemoryContainment(t *testing.T) {
 	}
 }
 
+func TestSanitizeEnvironmentCaseInsensitiveWindowsInvariants(t *testing.T) {
+	t.Setenv("SystemRoot", `C:\Windows`)
+	t.Setenv("ComSpec", `C:\Windows\system32\cmd.exe`)
+	t.Setenv("Path", `C:\Windows\system32;C:\Go\bin`)
+	t.Setenv("SECRET_API_KEY", "super-secret")
+
+	env := sanitizeEnvironment()
+	joined := strings.Join(env, "\n")
+
+	if !strings.Contains(joined, "SystemRoot=C:\\Windows") {
+		t.Errorf("SystemRoot must survive case-insensitively, got:\n%s", joined)
+	}
+	if !strings.Contains(joined, "ComSpec=C:\\Windows\\system32\\cmd.exe") {
+		t.Errorf("ComSpec must survive case-insensitively, got:\n%s", joined)
+	}
+	if !strings.Contains(joined, "Path=C:\\Windows\\system32;C:\\Go\\bin") {
+		t.Errorf("mixed-case Path must survive allowlist on Windows, got:\n%s", joined)
+	}
+	if strings.Contains(joined, "SECRET_API_KEY") {
+		t.Errorf("SECRET_API_KEY must be stripped by default-deny, got:\n%s", joined)
+	}
+}
+
 func TestCheckpointDirPrivate(t *testing.T) {
 	dir := t.TempDir()
 	cm := NewCheckpointManager(dir)
