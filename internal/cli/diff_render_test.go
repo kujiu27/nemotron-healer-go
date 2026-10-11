@@ -75,6 +75,9 @@ func TestPromptConfirmation(t *testing.T) {
 		{"N\n", false},
 		{"no\n", false},
 		{"cancel\n", false},
+		{"", true},       // EOF on empty input -> default true
+		{"y", true},      // EOF with y -> true
+		{"n", false},     // EOF with n -> false
 	}
 
 	for _, tt := range tests {
