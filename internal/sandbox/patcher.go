@@ -391,7 +391,8 @@ type diffHunk struct {
 func parseHunks(diffPatch string) []diffHunk {
 	var hunks []diffHunk
 	var cur *diffHunk
-	for _, dLine := range strings.Split(diffPatch, "\n") {
+	lines := strings.Split(diffPatch, "\n")
+	for i, dLine := range lines {
 		switch {
 		case strings.HasPrefix(dLine, "@@"):
 			hunks = append(hunks, diffHunk{})
@@ -412,6 +413,17 @@ func parseHunks(diffPatch string) []diffHunk {
 			l := strings.TrimPrefix(dLine, " ")
 			cur.oldLines = append(cur.oldLines, l)
 			cur.newLines = append(cur.newLines, l)
+		case dLine == "":
+			// Bare blank line inside a hunk: LLMs frequently emit blank context lines
+			// as bare "" without the leading space. Only include if not trailing EOF newline
+			// or immediately preceding a new file/hunk header.
+			if i < len(lines)-1 {
+				next := lines[i+1]
+				if !strings.HasPrefix(next, "@@") && !strings.HasPrefix(next, "---") && !strings.HasPrefix(next, "+++") {
+					cur.oldLines = append(cur.oldLines, "")
+					cur.newLines = append(cur.newLines, "")
+				}
+			}
 		}
 	}
 	return hunks

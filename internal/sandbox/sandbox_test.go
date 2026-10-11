@@ -74,6 +74,34 @@ func TestPatcherFuzzyHunk(t *testing.T) {
 		t.Fatalf("patch content mismatch: %s", string(newBytes))
 	}
 }
+func TestPatcherHunkWithBareBlankLines(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	targetFile := filepath.Join(tmpDir, "server.go")
+	// Original code with blank lines in context
+	originalCode := "package main\n\nfunc Run() {\n\n\tpanic(\"fail\")\n\n\treturn\n}\n"
+	if err := os.WriteFile(targetFile, []byte(originalCode), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Diff with bare blank lines (length 0, no leading space) inside the hunk
+	diff := "--- a/server.go\n+++ b/server.go\n@@ -1,7 +1,7 @@\n package main\n\n func Run() {\n\n-\tpanic(\"fail\")\n+\tprintln(\"ok\")\n\n \treturn\n }\n"
+
+	patcher := NewPatcher(tmpDir)
+	applied, msg := patcher.ApplyPatch(diff, "server.go")
+	if !applied {
+		t.Fatalf("expected patch with bare blank lines to apply, failed with msg: %s", msg)
+	}
+
+	newBytes, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := "package main\n\nfunc Run() {\n\n\tprintln(\"ok\")\n\n\treturn\n}\n"
+	if string(newBytes) != expected {
+		t.Fatalf("content mismatch:\nGot:\n%s\nExpected:\n%s", string(newBytes), expected)
+	}
+}
 
 func TestEnsureGitContextBareDirectory(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "bare_dir_test_*")
