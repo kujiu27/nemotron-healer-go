@@ -383,7 +383,7 @@ Do NOT omit the unified diff block.`, testCmd, stderr+"\n"+stdout, archetypeCont
 	}
 
 	if diffPatch == "" {
-		fmt.Printf("[DEBUG RAW LLM RESPONSE]\n%s\n[/DEBUG RAW LLM RESPONSE]\n", fullText)
+		fmt.Fprintf(os.Stderr, "[DEBUG RAW LLM RESPONSE]\n%s\n[/DEBUG RAW LLM RESPONSE]\n", fullText)
 	}
 
 	targetFiles := sandbox.ExtractModifiedFiles(diffPatch)

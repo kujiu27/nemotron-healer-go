@@ -205,13 +205,13 @@ var evalCmd = &cobra.Command{
 				// Step 1: Create clean isolated temporary sandboxes (one per arm)
 				tmpDir, err := createIsolatedSandbox(c.Path)
 				if err != nil {
-					fmt.Printf("  ⚠️ Could not sandbox %s: %v (skipping)\n", c.Path, err)
+					fmt.Fprintf(human, "  ⚠️ Could not sandbox %s: %v (skipping)\n", c.Path, err)
 					continue
 				}
 
 				baseDir, err := createIsolatedSandbox(c.Path)
 				if err != nil {
-					fmt.Printf("  ⚠️ Could not sandbox baseline %s: %v (skipping)\n", c.Path, err)
+					fmt.Fprintf(human, "  ⚠️ Could not sandbox baseline %s: %v (skipping)\n", c.Path, err)
 					os.RemoveAll(tmpDir)
 					continue
 				}
@@ -337,7 +337,7 @@ var evalCmd = &cobra.Command{
 				if wErr := os.WriteFile(exportJSONFlag, d, 0644); wErr != nil {
 					return fmt.Errorf("export JSON write failed: %w", wErr)
 				}
-				fmt.Printf("📄 Exported benchmark ablation JSON to `%s`\n", exportJSONFlag)
+				fmt.Fprintf(human, "📄 Exported benchmark ablation JSON to `%s`\n", exportJSONFlag)
 			}
 		}
 
@@ -383,7 +383,7 @@ var evalCmd = &cobra.Command{
 			if wErr := os.WriteFile(exportMDFlag, []byte(scorecardMD), 0644); wErr != nil {
 				return fmt.Errorf("export Markdown write failed: %w", wErr)
 			}
-			fmt.Printf("📝 Exported benchmark ablation Markdown scorecard to `%s`\n", exportMDFlag)
+			fmt.Fprintf(human, "📝 Exported benchmark ablation Markdown scorecard to `%s`\n", exportMDFlag)
 		}
 
 		// Publish scorecard to GitHub Actions Step Summary if in CI runner

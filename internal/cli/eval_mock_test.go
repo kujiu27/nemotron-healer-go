@@ -204,3 +204,61 @@ func TestCreateIsolatedSandbox_InitializesGitRepo(t *testing.T) {
 		t.Errorf("expected clean git tree in sandbox, got uncommitted files: %s", out)
 	}
 }
+
+func TestEvalCmd_JSONPurity(t *testing.T) {
+	origMock := mockFlag
+	mockFlag = true
+	defer func() { mockFlag = origMock }()
+
+	cleanup := initMockServerIfEnabled()
+	defer cleanup()
+
+	origCase := caseFilterFlag
+	caseFilterFlag = "AHB-08"
+	defer func() { caseFilterFlag = origCase }()
+
+	origRepeat := repeatFlag
+	repeatFlag = 1
+	defer func() { repeatFlag = origRepeat }()
+
+	origJSON := jsonFlag
+	jsonFlag = true
+	defer func() { jsonFlag = origJSON }()
+
+	tmpDir := t.TempDir()
+	jsonExport := filepath.Join(tmpDir, "export.json")
+	mdExport := filepath.Join(tmpDir, "export.md")
+	exportJSONFlag = jsonExport
+	exportMDFlag = mdExport
+	defer func() {
+		exportJSONFlag = ""
+		exportMDFlag = ""
+	}()
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := evalCmd.RunE(evalCmd, []string{})
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("evalCmd with --json failed: %v", err)
+	}
+
+	var buf [4096]byte
+	n, _ := r.Read(buf[:])
+	_ = r.Close()
+	stdoutStr := string(buf[:n])
+
+	var payload map[string]interface{}
+	if jErr := json.Unmarshal([]byte(stdoutStr), &payload); jErr != nil {
+		t.Fatalf("stdout was not pure JSON, unmarshal error: %v, raw stdout:\n%s", jErr, stdoutStr)
+	}
+	if payload["benchmark"] != "AHB-9" {
+		t.Errorf("expected benchmark AHB-9 in json payload, got %v", payload["benchmark"])
+	}
+}
