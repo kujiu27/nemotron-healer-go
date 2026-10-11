@@ -22,6 +22,23 @@ func TestRunnerExecution(t *testing.T) {
 		t.Fatalf("unexpected stdout: %q", res.Stdout)
 	}
 }
+func TestRunnerTimeoutDiagnostic(t *testing.T) {
+	// Fast 100ms timeout with 1s sleep command to verify timeout diagnosis injection
+	r := NewRunner(".", 100*time.Millisecond)
+	res, err := r.Run("sleep 1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.IsSuccess {
+		t.Fatalf("expected command to fail due to timeout")
+	}
+	if !strings.Contains(res.Stderr, "Command timed out after") {
+		t.Errorf("expected stderr to contain timeout diagnostic, got: %q", res.Stderr)
+	}
+	if len(res.ParsedErrors) == 0 || !strings.Contains(res.ParsedErrors[0], "Command timed out after") {
+		t.Errorf("expected ParsedErrors to contain timeout diagnostic, got: %v", res.ParsedErrors)
+	}
+}
 
 func TestPatcherFuzzyHunk(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "patch_test_*")
