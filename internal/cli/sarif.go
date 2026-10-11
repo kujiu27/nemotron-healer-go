@@ -139,32 +139,42 @@ func ExportSarif(session *engine.HealingSession, outputPath string) error {
 						Name:           "Nemotron-Healer",
 						Version:        strings.TrimPrefix(Version, "v"),
 						InformationURI: "https://github.com/kujiu27/nemotron-healer-go",
-						Rules: []SarifRule{
-							{
-								ID:      ruleID,
-								HelpURI: "https://github.com/kujiu27/nemotron-healer-go",
-								ShortDescription: struct {
-									Text string `json:"text"`
-								}{
-									Text: ruleDesc,
+						Rules: func() []SarifRule {
+							if session.IsResolved && len(session.AppliedPatches) == 0 && session.TargetFile == "" && len(session.BlastAffectedFiles) == 0 {
+								return []SarifRule{}
+							}
+							return []SarifRule{
+								{
+									ID:      ruleID,
+									HelpURI: "https://github.com/kujiu27/nemotron-healer-go",
+									ShortDescription: struct {
+										Text string `json:"text"`
+									}{
+										Text: ruleDesc,
+									},
 								},
+							}
+						}(),
+					},
+				},
+				Results: func() []SarifResult {
+					if session.IsResolved && len(session.AppliedPatches) == 0 && session.TargetFile == "" && len(session.BlastAffectedFiles) == 0 {
+						return []SarifResult{}
+					}
+					return []SarifResult{
+						{
+							RuleID:    ruleID,
+							RuleIndex: 0,
+							Level:     level,
+							Locations: locations,
+							Message: struct {
+								Text string `json:"text"`
+							}{
+								Text: msgText,
 							},
 						},
-					},
-				},
-				Results: []SarifResult{
-					{
-						RuleID:    ruleID,
-						RuleIndex: 0,
-						Level:     level,
-						Locations: locations,
-						Message: struct {
-							Text string `json:"text"`
-						}{
-							Text: msgText,
-						},
-					},
-				},
+					}
+				}(),
 			},
 		},
 	}

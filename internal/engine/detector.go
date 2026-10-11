@@ -21,6 +21,9 @@ func DetectTestCommand(workDir string) (command string, ecosystem string, err er
 	if fileExists(filepath.Join(absWorkDir, "go.mod")) {
 		return "go test ./...", "Go (go.mod)", nil
 	}
+	if fileExists(filepath.Join(absWorkDir, "go.work")) {
+		return "go test ./...", "Go (go.work)", nil
+	}
 	if hasGoTestFiles(absWorkDir) {
 		return "go test .", "Go (Package / Tests)", nil
 	}
@@ -87,6 +90,15 @@ func DetectTestCommand(workDir string) (command string, ecosystem string, err er
 			}
 			if json.Unmarshal(data, &pkg) == nil && pkg.Scripts != nil {
 				if _, ok := pkg.Scripts["test"]; ok {
+					if fileExists(filepath.Join(absWorkDir, "pnpm-lock.yaml")) {
+						return "pnpm test", "Node.js (pnpm)", nil
+					}
+					if fileExists(filepath.Join(absWorkDir, "yarn.lock")) {
+						return "yarn test", "Node.js (yarn)", nil
+					}
+					if fileExists(filepath.Join(absWorkDir, "bun.lockb")) || fileExists(filepath.Join(absWorkDir, "bun.lock")) {
+						return "bun test", "Node.js (bun)", nil
+					}
 					return "npm test", "Node.js (package.json test script)", nil
 				}
 			}
