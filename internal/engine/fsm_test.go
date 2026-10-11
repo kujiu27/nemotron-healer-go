@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"context"
 	"testing"
+	"time"
 )
 
 func TestTokenLedgerCalculation(t *testing.T) {
@@ -90,5 +92,36 @@ func TestTokenLedgerLifecycle_AddTokens(t *testing.T) {
 	}
 	if agent.Session.TokenLedger.EstimatedCostUSD <= 0 {
 		t.Errorf("expected non-zero estimated cost")
+	}
+}
+
+func TestAgentRun_ReproductionExecutionError_EmitsFailureTelemetry(t *testing.T) {
+	tmpDir := t.TempDir()
+	var states []HealingState
+	onEvent := func(ev HealingStepEvent) {
+		states = append(states, ev.State)
+	}
+
+	agent := NewAgent(tmpDir, "go test", 3, onEvent, nil)
+	agent.Runner.Timeout = 1 * time.Millisecond // Guarantee timeout / execution error on runner
+
+	session, err := agent.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected reproduction error due to runner timeout, got nil")
+	}
+	if session == nil {
+		t.Fatal("expected non-nil session returned on reproduction error")
+	}
+	if session.IsResolved {
+		t.Error("expected IsResolved=false on reproduction failure")
+	}
+	if session.CurrentState != StateFailed {
+		t.Errorf("expected CurrentState=StateFailed, got %s", session.CurrentState)
+	}
+	if session.AuditReport == "" {
+		t.Error("expected non-empty failure audit report")
+	}
+	if len(states) == 0 || states[len(states)-1] != StateFailed {
+		t.Errorf("expected final notification state StateFailed, got %v", states)
 	}
 }

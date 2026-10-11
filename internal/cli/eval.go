@@ -224,7 +224,9 @@ var evalCmd = &cobra.Command{
 					baseAgent.DisableGrounding = true
 					baseAgent.DisableStepSummary = true
 					baseSession, _ := baseAgent.Run(context.Background())
-					baselinePass = baseSession.IsResolved
+					if baseSession != nil {
+						baselinePass = baseSession.IsResolved
+					}
 				}
 
 				// Step 3: Run Full Nemotron-Healer System in the fresh isolated sandbox
@@ -233,9 +235,14 @@ var evalCmd = &cobra.Command{
 				agent.EnableArena = false // Fast verifiable evaluation
 				agent.EnableSearch = searchEvalFlag
 				agent.DisableStepSummary = true
-				session, _ := agent.Run(context.Background())
+				session, err := agent.Run(context.Background())
 				dur := time.Since(start).Seconds()
-
+				if session == nil {
+					session = &engine.HealingSession{
+						CurrentState: engine.StateFailed,
+						LastError:    fmt.Sprintf("%v", err),
+					}
+				}
 				results = append(results, EvalRunResult{
 					CaseID:       c.ID,
 					Name:         c.Name,
